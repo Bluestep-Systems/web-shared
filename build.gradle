@@ -1,5 +1,14 @@
 plugins {
     id 'java-library'
+    id 'maven-publish'
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+        }
+    }
 }
 
 group = 'dev.bluestep'
@@ -18,4 +27,5 @@ java {
 
 dependencies {
     api 'com.fasterxml.jackson.core:jackson-annotations:2.18.3'
+    api 'jakarta.validation:jakarta.validation-api:3.1.1'
 }
