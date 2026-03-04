@@ -1,0 +1,29 @@
+name: Publish to GitHub Packages
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Publish to GitHub Packages
+        env:
+          USERNAME: ${{ github.actor }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./gradlew publish
