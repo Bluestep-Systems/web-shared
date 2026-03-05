@@ -24,7 +24,7 @@ publishing {
 }
 
 group = 'dev.bluestep'
-version = '1.0.1'
+version = '1.1.0'
 
 repositories {
     mavenCentral()
@@ -40,4 +40,5 @@ java {
 dependencies {
     api 'com.fasterxml.jackson.core:jackson-annotations:2.18.3'
     api 'jakarta.validation:jakarta.validation-api:3.1.1'
+    api 'org.msgpack:jackson-dataformat-msgpack:0.9.8'
 }
