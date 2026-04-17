@@ -16,5 +16,6 @@ public record CreateTokenResponse(
 		String alias,
 		String[] scopes,
 		OffsetDateTime expiresAt,
+		OffsetDateTime lastAccessed,
 		byte[] flags
 ) {}

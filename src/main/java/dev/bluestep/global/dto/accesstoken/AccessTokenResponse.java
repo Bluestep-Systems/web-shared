@@ -9,5 +9,6 @@ public record AccessTokenResponse(
 		String alias,
 		String[] scopes,
 		OffsetDateTime expiresAt,
+		OffsetDateTime lastAccessed,
 		byte[] flags
 ) {}
