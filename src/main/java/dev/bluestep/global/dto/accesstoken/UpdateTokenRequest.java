@@ -10,7 +10,7 @@ import jakarta.validation.constraints.NotNull;
  * are replaced with the values in this body; {@code expiresAt} may be null (never expires).
  */
 public record UpdateTokenRequest(
-		@NotBlank String displayName,
+		@NotBlank String alias,
 		@NotNull String[] scopes,
 		OffsetDateTime expiresAt,
 		@NotNull byte[] flags
