@@ -2,6 +2,7 @@ package dev.bluestep.global.dto.accesstoken;
 
 import java.time.OffsetDateTime;
 
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 /**
@@ -9,6 +10,7 @@ import jakarta.validation.constraints.NotNull;
  * are replaced with the values in this body; {@code expiresAt} may be null (never expires).
  */
 public record UpdateTokenRequest(
+		@NotBlank String displayName,
 		@NotNull String[] scopes,
 		OffsetDateTime expiresAt,
 		@NotNull byte[] flags

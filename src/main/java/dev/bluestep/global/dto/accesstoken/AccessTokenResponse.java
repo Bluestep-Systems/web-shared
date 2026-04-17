@@ -6,6 +6,7 @@ public record AccessTokenResponse(
 		Long classid,
 		Long seqnum,
 		String encodedtoken,
+		String displayName,
 		String[] scopes,
 		OffsetDateTime expiresAt,
 		byte[] flags
