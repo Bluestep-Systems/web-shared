@@ -42,4 +42,21 @@ public enum BudgetSchedule {
 			case LIFETIME -> throw new IllegalStateException("LIFETIME has no window start");
 		};
 	}
+
+	/**
+	 * End of the window that begins at {@code windowStart} (exclusive upper bound),
+	 * or {@code null} for {@link #LIFETIME} (the window never closes). Kept beside
+	 * {@link #windowStart} so each period's start truncation and length live in one
+	 * place — adding a schedule means editing this one enum, and both switches are
+	 * exhaustive (compiler-checked).
+	 */
+	public OffsetDateTime windowEnd(OffsetDateTime windowStart) {
+		return switch (this) {
+			case HOURLY -> windowStart.plusHours(1);
+			case DAILY -> windowStart.plusDays(1);
+			case WEEKLY -> windowStart.plusWeeks(1);
+			case MONTHLY -> windowStart.plusMonths(1);
+			case LIFETIME -> null;
+		};
+	}
 }
