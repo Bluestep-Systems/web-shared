@@ -5,7 +5,8 @@ public enum AiDenialCode {
 	TENANT_BLOCKED(2),
 	USER_BLOCKED(3),
 	RATE_LIMIT_EXCEEDED(4),
-	SERVICE_DISABLED(5);
+	SERVICE_DISABLED(5),
+	TENANT_NOT_CONFIGURED(6);
 
 	private final int code;
 
