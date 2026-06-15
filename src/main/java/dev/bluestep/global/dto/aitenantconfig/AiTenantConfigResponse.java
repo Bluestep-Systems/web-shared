@@ -9,7 +9,7 @@ public record AiTenantConfigResponse(
 		String schemaName,
 		String organizationId,
 		String flag,
-		Integer maxTokenBudget,
+		Long maxSpendMicros,
 		Integer maxIterations,
 		BudgetSchedule budgetSchedule,
 		int utcOffsetMinutes,

@@ -16,12 +16,17 @@ import jakarta.validation.constraints.Positive;
  * absent values default to {@link BudgetSchedule#LIFETIME} and {@code 0} in the
  * service layer. {@code utcOffsetMinutes} is bounded by {@link java.time.ZoneOffset}'s
  * valid range ({@code -1080 .. 1080}).</p>
+ *
+ * <p>{@code maxSpendMicros} (cost ceiling in micro-USD over the window) is optional: omit it
+ * (null) to provision an <em>uncapped</em> scope — usage is still recorded and metered, just not
+ * gated on spend. When present it must be positive. {@code maxIterations} is the per-turn loop
+ * guard and is always required.</p>
  */
 public record AiTenantConfigRequest(
 		@NotBlank String schemaName,
 		String organizationId,
 		String flag,
-		@NotNull @Positive Integer maxTokenBudget,
+		@Positive Long maxSpendMicros,
 		@NotNull @Positive Integer maxIterations,
 		BudgetSchedule budgetSchedule,
 		@Min(-1080) @Max(1080) Integer utcOffsetMinutes,

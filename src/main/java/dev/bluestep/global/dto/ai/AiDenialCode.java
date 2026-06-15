@@ -6,7 +6,9 @@ public enum AiDenialCode {
 	USER_BLOCKED(3),
 	RATE_LIMIT_EXCEEDED(4),
 	SERVICE_DISABLED(5),
-	TENANT_NOT_CONFIGURED(6);
+	TENANT_NOT_CONFIGURED(6),
+	/** The requested provider/model has no ai_unit_rate pricing, so the call can't be metered — fail closed. */
+	MODEL_NOT_PRICED(7);
 
 	private final int code;
 
