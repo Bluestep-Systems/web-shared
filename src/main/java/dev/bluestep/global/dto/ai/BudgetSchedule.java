@@ -5,6 +5,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
+import java.util.Optional;
 
 /**
  * Budget-period granularity for an {@code ai_tenant_config} row. Pairs with a
@@ -44,19 +45,19 @@ public enum BudgetSchedule {
 	}
 
 	/**
-	 * End of the window that begins at {@code windowStart} (exclusive upper bound),
-	 * or {@code null} for {@link #LIFETIME} (the window never closes). Kept beside
+	 * End of the window that begins at {@code windowStart} (exclusive upper bound), or
+	 * empty for {@link #LIFETIME} (the window never closes). Kept beside
 	 * {@link #windowStart} so each period's start truncation and length live in one
 	 * place — adding a schedule means editing this one enum, and both switches are
 	 * exhaustive (compiler-checked).
 	 */
-	public OffsetDateTime windowEnd(OffsetDateTime windowStart) {
+	public Optional<OffsetDateTime> windowEnd(OffsetDateTime windowStart) {
 		return switch (this) {
-			case HOURLY -> windowStart.plusHours(1);
-			case DAILY -> windowStart.plusDays(1);
-			case WEEKLY -> windowStart.plusWeeks(1);
-			case MONTHLY -> windowStart.plusMonths(1);
-			case LIFETIME -> null;
+			case HOURLY -> Optional.of(windowStart.plusHours(1));
+			case DAILY -> Optional.of(windowStart.plusDays(1));
+			case WEEKLY -> Optional.of(windowStart.plusWeeks(1));
+			case MONTHLY -> Optional.of(windowStart.plusMonths(1));
+			case LIFETIME -> Optional.empty();
 		};
 	}
 }

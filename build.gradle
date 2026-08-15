@@ -1,6 +1,7 @@
 plugins {
     id 'java-library'
     id 'maven-publish'
+    id 'net.ltgt.errorprone' version '5.1.0'
 }
 
 publishing {
@@ -24,7 +25,9 @@ publishing {
 }
 
 group = 'dev.bluestep'
-version = '1.2.2'
+// 2.0.0: nullable record components became Optional<T>. Source- and binary-breaking for
+// consumers — the web monolith deliberately stays on 1.2.2 until it migrates separately.
+version = '2.0.0'
 
 repositories {
     mavenCentral()
@@ -37,8 +40,87 @@ java {
     }
 }
 
+// NullAway in JSpecify mode. `OnlyNullMarked` makes @NullMarked the single source of
+// truth: a package is analysed only once its package-info opts in, so new packages can
+// be adopted one at a time instead of all at once. Every dto package is already marked.
+//
+// Tests are deliberately excluded — test code legitimately passes null to exercise the
+// guards, and NullAway would flag each of those as an error.
+tasks.withType(JavaCompile).configureEach {
+    options.errorprone {
+        // NullAway is the only check we opt into; the rest of Error Prone's catalogue is
+        // a separate decision with its own remediation cost.
+        disableAllChecks = true
+        option('NullAway:OnlyNullMarked', 'true')
+        option('NullAway:JSpecifyMode', 'true')
+        error('NullAway')
+    }
+}
+
+tasks.named('compileTestJava') {
+    options.errorprone.enabled = false
+}
+
+test {
+    useJUnitPlatform()
+}
+
 dependencies {
-    api 'com.fasterxml.jackson.core:jackson-annotations:2.18.3'
+    errorprone 'com.google.errorprone:error_prone_core:2.50.0'
+    errorprone 'com.uber.nullaway:nullaway:0.13.8'
+
+    // `api`, not `compileOnly`: the annotations are part of this module's published
+    // contract, so consumers compiling against these DTOs see the same nullness.
+    api 'org.jspecify:jspecify:1.0.1'
+
+    // A BOM rather than three hand-pinned versions: the Jackson 2 artifacts have to move as
+    // a family, and pinning them individually is how they drift apart. 2.22.1 is the floor
+    // web-global runs (Boot 4 overrides its own managed version to reach it, for
+    // CVE-2026-54515) — matching it here means this module never publishes a POM asking for
+    // a version below what its consumers were deliberately raised to.
+    //
+    // Note this RAISES a consumer rather than only setting a floor: Gradle resolves
+    // highest-wins, so a consumer declaring an older Jackson BOM is pulled up to 2.22.1
+    // rather than winning. That is the intent for a security floor, but it means a consumer
+    // that deliberately pins Jackson 2 down for a compatibility reason cannot do so while
+    // depending on this module — they would need an explicit `resolutionStrategy.force`.
+    api platform('com.fasterxml.jackson:jackson-bom:2.22.1')
+    api 'com.fasterxml.jackson.core:jackson-annotations'
+    // Optional<T> record components only bind correctly when this module is registered on
+    // the ObjectMapper, and there are NO runtime guards behind it: these records have no
+    // compact constructors, so a mapper without the module binds literal null into
+    // components the type system says can never be null. OptionalWireContractTest pins both
+    // halves of that failure. Declaring it `api` means a consumer cannot end up with these
+    // DTOs and no Optional support.
+    //
+    // Do not rely on Boot auto-configuration to supply it: Boot 4 has no Jackson 2
+    // ObjectMapper auto-configuration at all (spring-boot-jackson auto-configures
+    // tools.jackson only), which is why web-global's MessagePackConfig registers the module
+    // by hand. Jackson 3 consumers do not need it — see OptionalWireContractJackson3Test.
+    api 'com.fasterxml.jackson.datatype:jackson-datatype-jdk8'
     api 'jakarta.validation:jakarta.validation-api:3.1.1'
-    api 'org.msgpack:jackson-dataformat-msgpack:0.9.8'
+    // NOT declared here. This module's source never references msgpack — it was a
+    // pass-through `api` dependency, which meant a DTO library both forced a wire format
+    // onto every consumer and silently owned its version in services that never declared
+    // it. It now belongs to the module that configures the converter (web-global's app).
+    // A consumer of these DTOs that speaks msgpack must declare the dataformat itself.
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    // 1.5.0+: earlier ArchUnit bundles an ASM that cannot read Java 25 class files (major
+    // 69). It fails silently — the import yields zero classes and every rule passes
+    // vacuously — which is what scanFoundTheDtoRecords() exists to catch.
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.5.0'
+    // Unversioned so the jackson-bom above governs: the wire-contract tests are only worth
+    // anything if they exercise the same Jackson the consumers actually run.
+    testImplementation 'com.fasterxml.jackson.core:jackson-databind'
+    // Jackson 3 (tools.jackson.*) is a separate family from the above, not an upgrade of it.
+    // web-global on Spring Boot 4 auto-configures a Jackson 3 mapper as its *primary* mapper
+    // while keeping a Jackson 2 island for msgpack, so these DTOs are serialized by both.
+    // OptionalWireContractJackson3Test pins that they produce an identical wire.
+    testImplementation 'tools.jackson.core:jackson-databind:3.1.5'
+    // Test-only: LegacyWireCompatTest pins the msgpack bytes the monolith exchanges with
+    // the AI gate. Proving that contract is this module's job even though shipping the
+    // dataformat is not.
+    testImplementation 'org.msgpack:jackson-dataformat-msgpack:0.9.12'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }

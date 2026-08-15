@@ -1,0 +1,49 @@
+name: Build
+
+# Publishing is triggered by a release, and `./gradlew publish` does not depend on `check` —
+# its task graph is compileJava -> jar -> generatePom -> publish, so without this workflow no
+# test in this repository runs anywhere except on a developer's machine. That matters more
+# here than in a service: the DTO contract tests are the only thing standing between a
+# nullable component and a silent wire change, and GitHub Packages versions are immutable, so
+# a bad publish cannot be corrected in place.
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # `build` rather than `test`: it runs check (tests + the ArchUnit nullness rules) and
+      # also assembles the jar, so a source change that compiles under test but breaks the
+      # published artifact fails here rather than at release time.
+      - name: Build
+        run: ./gradlew build --no-daemon
+
+      # Uploaded on failure only — the XML is what says which assertion broke, and a red CI
+      # run whose reason has to be reproduced locally is most of a debugging cycle wasted.
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: build/reports/tests/test/
+          retention-days: 7
