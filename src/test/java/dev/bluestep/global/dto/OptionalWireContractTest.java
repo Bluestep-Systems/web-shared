@@ -23,11 +23,20 @@ import dev.bluestep.global.dto.aitenantconfig.AiTenantConfigRequest;
  *
  * <p>The rule leans on one specific Jackson property: an {@code Optional<T>} component
  * binds to {@link Optional#empty()} for both an absent key and an explicit JSON null, so
- * replacing a nullable component with an {@code Optional} is invisible to clients. That
- * property comes from {@code jackson-datatype-jdk8} being registered on the mapper — it
- * is <em>not</em> Jackson core behaviour. {@link #withoutTheModuleNullsLeakIntoRecords()}
- * pins the failure mode we get if that module ever falls off the classpath, which is the
- * reason this module declares it as an {@code api} dependency.</p>
+ * replacing a nullable component with an {@code Optional} is invisible to clients.</p>
+ *
+ * <p>This class covers <b>Jackson 2</b> ({@code com.fasterxml.jackson.*}), where that
+ * property is <em>not</em> core behaviour — it comes from {@code jackson-datatype-jdk8}
+ * being registered on the mapper. {@link #withoutTheModuleNullsLeakIntoRecords()} pins the
+ * failure mode we get if that module ever falls off the classpath, which is the reason this
+ * module declares it as an {@code api} dependency. It is still load-bearing: web-global's
+ * msgpack converter hand-builds a Jackson 2 mapper, and the web monolith is entirely
+ * Jackson 2 until it migrates off web-shared 1.2.2.</p>
+ *
+ * <p>Jackson 3 ({@code tools.jackson.*}) folded the JDK8 datatypes into core and needs no
+ * module at all — see {@link OptionalWireContractJackson3Test}, which also pins that the two
+ * families emit an identical wire. Keep the two classes in step: a change to the shape of
+ * these DTOs has to hold on both.</p>
  */
 class OptionalWireContractTest {
 

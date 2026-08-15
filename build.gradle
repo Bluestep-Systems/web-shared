@@ -88,5 +88,10 @@ dependencies {
     // vacuously — which is what scanFoundTheDtoRecords() exists to catch.
     testImplementation 'com.tngtech.archunit:archunit-junit5:1.5.0'
     testImplementation 'com.fasterxml.jackson.core:jackson-databind:2.18.3'
+    // Jackson 3 (tools.jackson.*) is a separate family from the above, not an upgrade of it.
+    // web-global on Spring Boot 4 auto-configures a Jackson 3 mapper as its *primary* mapper
+    // while keeping a Jackson 2 island for msgpack, so these DTOs are serialized by both.
+    // OptionalWireContractJackson3Test pins that they produce an identical wire.
+    testImplementation 'tools.jackson.core:jackson-databind:3.1.5'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
