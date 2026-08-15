@@ -1,6 +1,7 @@
 plugins {
     id 'java-library'
     id 'maven-publish'
+    id 'net.ltgt.errorprone' version '5.1.0'
 }
 
 publishing {
@@ -24,7 +25,9 @@ publishing {
 }
 
 group = 'dev.bluestep'
-version = '1.2.2'
+// 2.0.0: nullable record components became Optional<T>. Source- and binary-breaking for
+// consumers — the web monolith deliberately stays on 1.2.2 until it migrates separately.
+version = '2.0.0'
 
 repositories {
     mavenCentral()
@@ -37,8 +40,53 @@ java {
     }
 }
 
+// NullAway in JSpecify mode. `OnlyNullMarked` makes @NullMarked the single source of
+// truth: a package is analysed only once its package-info opts in, so new packages can
+// be adopted one at a time instead of all at once. Every dto package is already marked.
+//
+// Tests are deliberately excluded — test code legitimately passes null to exercise the
+// guards, and NullAway would flag each of those as an error.
+tasks.withType(JavaCompile).configureEach {
+    options.errorprone {
+        // NullAway is the only check we opt into; the rest of Error Prone's catalogue is
+        // a separate decision with its own remediation cost.
+        disableAllChecks = true
+        option('NullAway:OnlyNullMarked', 'true')
+        option('NullAway:JSpecifyMode', 'true')
+        error('NullAway')
+    }
+}
+
+tasks.named('compileTestJava') {
+    options.errorprone.enabled = false
+}
+
+test {
+    useJUnitPlatform()
+}
+
 dependencies {
+    errorprone 'com.google.errorprone:error_prone_core:2.50.0'
+    errorprone 'com.uber.nullaway:nullaway:0.13.8'
+
+    // `api`, not `compileOnly`: the annotations are part of this module's published
+    // contract, so consumers compiling against these DTOs see the same nullness.
+    api 'org.jspecify:jspecify:1.0.1'
+
     api 'com.fasterxml.jackson.core:jackson-annotations:2.18.3'
+    // Optional<T> record components only bind correctly when this module is registered on
+    // the ObjectMapper. Spring Boot auto-registers it when present; declaring it `api`
+    // means a consumer cannot end up with these DTOs and no Optional support. The compact
+    // constructors still guard the case where a hand-rolled mapper skips registration.
+    api 'com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.18.3'
     api 'jakarta.validation:jakarta.validation-api:3.1.1'
     api 'org.msgpack:jackson-dataformat-msgpack:0.9.8'
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    // 1.5.0+: earlier ArchUnit bundles an ASM that cannot read Java 25 class files (major
+    // 69). It fails silently — the import yields zero classes and every rule passes
+    // vacuously — which is what scanFoundTheDtoRecords() exists to catch.
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.5.0'
+    testImplementation 'com.fasterxml.jackson.core:jackson-databind:2.18.3'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }

@@ -1,5 +1,7 @@
 package dev.bluestep.global.dto.ai;
 
+import java.util.Optional;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import jakarta.validation.constraints.NotBlank;
@@ -10,13 +12,14 @@ import jakarta.validation.constraints.NotBlank;
  * dimension is declared — every call costs and is checked against the same ceiling.
  * {@code provider}/{@code model} let the gate fail closed when a model has no
  * {@code ai_unit_rate} pricing (it can't be metered, so it can't be authorized).
+ * {@code flag} and {@code triggeringProcess} are empty when the caller does not
+ * narrow by them.
  */
 public record AiPreflightRequest(
 		@NotBlank @JsonProperty("s") String schemaName,
 		@NotBlank @JsonProperty("o") String organizationId,
 		@NotBlank @JsonProperty("u") String userId,
-		@JsonProperty("f") String flag,
-		@JsonProperty("t") String triggeringProcess,
+		@JsonProperty("f") Optional<String> flag,
+		@JsonProperty("t") Optional<String> triggeringProcess,
 		@NotBlank @JsonProperty("p") String provider,
-		@NotBlank @JsonProperty("m") String model) {
-}
+		@NotBlank @JsonProperty("m") String model) {}
