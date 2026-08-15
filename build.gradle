@@ -88,7 +88,11 @@ dependencies {
     // Jackson 3 consumers do not need it — see OptionalWireContractJackson3Test.
     api 'com.fasterxml.jackson.datatype:jackson-datatype-jdk8'
     api 'jakarta.validation:jakarta.validation-api:3.1.1'
-    api 'org.msgpack:jackson-dataformat-msgpack:0.9.8'
+    // NOT declared here. This module's source never references msgpack — it was a
+    // pass-through `api` dependency, which meant a DTO library both forced a wire format
+    // onto every consumer and silently owned its version in services that never declared
+    // it. It now belongs to the module that configures the converter (web-global's app).
+    // A consumer of these DTOs that speaks msgpack must declare the dataformat itself.
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
     // 1.5.0+: earlier ArchUnit bundles an ASM that cannot read Java 25 class files (major
@@ -103,5 +107,9 @@ dependencies {
     // while keeping a Jackson 2 island for msgpack, so these DTOs are serialized by both.
     // OptionalWireContractJackson3Test pins that they produce an identical wire.
     testImplementation 'tools.jackson.core:jackson-databind:3.1.5'
+    // Test-only: LegacyWireCompatTest pins the msgpack bytes the monolith exchanges with
+    // the AI gate. Proving that contract is this module's job even though shipping the
+    // dataformat is not.
+    testImplementation 'org.msgpack:jackson-dataformat-msgpack:0.9.12'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
