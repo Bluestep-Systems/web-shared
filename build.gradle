@@ -73,12 +73,20 @@ dependencies {
     // contract, so consumers compiling against these DTOs see the same nullness.
     api 'org.jspecify:jspecify:1.0.1'
 
-    api 'com.fasterxml.jackson.core:jackson-annotations:2.18.3'
+    // A BOM rather than three hand-pinned versions: the Jackson 2 artifacts have to move as
+    // a family, and pinning them individually is how they drift apart. 2.22.1 is the floor
+    // web-global runs (Boot 4 overrides its own managed version to reach it, for
+    // CVE-2026-54515) — matching it here means this module never publishes a POM asking for
+    // a version below what its consumers were deliberately raised to. A consumer with its
+    // own Jackson BOM still wins; this only sets the floor for one without.
+    api platform('com.fasterxml.jackson:jackson-bom:2.22.1')
+    api 'com.fasterxml.jackson.core:jackson-annotations'
     // Optional<T> record components only bind correctly when this module is registered on
     // the ObjectMapper. Spring Boot auto-registers it when present; declaring it `api`
     // means a consumer cannot end up with these DTOs and no Optional support. The compact
     // constructors still guard the case where a hand-rolled mapper skips registration.
-    api 'com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.18.3'
+    // Jackson 3 consumers do not need it — see OptionalWireContractJackson3Test.
+    api 'com.fasterxml.jackson.datatype:jackson-datatype-jdk8'
     api 'jakarta.validation:jakarta.validation-api:3.1.1'
     api 'org.msgpack:jackson-dataformat-msgpack:0.9.8'
 
@@ -87,7 +95,9 @@ dependencies {
     // 69). It fails silently — the import yields zero classes and every rule passes
     // vacuously — which is what scanFoundTheDtoRecords() exists to catch.
     testImplementation 'com.tngtech.archunit:archunit-junit5:1.5.0'
-    testImplementation 'com.fasterxml.jackson.core:jackson-databind:2.18.3'
+    // Unversioned so the jackson-bom above governs: the wire-contract tests are only worth
+    // anything if they exercise the same Jackson the consumers actually run.
+    testImplementation 'com.fasterxml.jackson.core:jackson-databind'
     // Jackson 3 (tools.jackson.*) is a separate family from the above, not an upgrade of it.
     // web-global on Spring Boot 4 auto-configures a Jackson 3 mapper as its *primary* mapper
     // while keeping a Jackson 2 island for msgpack, so these DTOs are serialized by both.
