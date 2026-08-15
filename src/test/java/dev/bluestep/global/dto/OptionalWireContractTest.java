@@ -115,6 +115,35 @@ class OptionalWireContractTest {
 	 * bind literal {@code null} into components the type system says can never be null, and
 	 * the error only surfaces later, when a value is actually present.
 	 */
+	/**
+	 * The write side of the same gap, and the one that actually bites on migration.
+	 *
+	 * <p>This is not hypothetical. The web monolith's {@code AiUsageGateClient} builds its
+	 * msgpack mapper as {@code new ObjectMapper(new MessagePackFactory())
+	 * .registerModule(new JavaTimeModule())} — {@code Jdk8Module} is absent, which is
+	 * correct for 1.2.2 and fatal for 2.0.0. Because {@code preflight} is fail-closed
+	 * ("callers must treat this as a hard block"), the throw pinned here would block every
+	 * AI turn rather than degrade quietly.</p>
+	 *
+	 * <p>It fails loudly rather than emitting {@code {"present":true}} for an Optional,
+	 * which is the one mercy: a consumer that forgets the module finds out immediately
+	 * instead of writing a corrupt wire. Any consumer of these DTOs on Jackson 2 must
+	 * register {@code Jdk8Module} on every mapper it hands them to, including
+	 * hand-built ones that Spring Boot never sees.</p>
+	 */
+	@Test
+	void withoutTheModuleSerializationFailsLoudly() {
+		ObjectMapper bare = new ObjectMapper();
+
+		InvalidDefinitionException thrown = assertThrows(InvalidDefinitionException.class,
+				() -> bare.writeValueAsString(new AiPreflightResponse(
+						true, "trk-1", Optional.empty(), Optional.of(4))),
+				"a mapper without Jdk8Module must refuse to write these DTOs, not invent a shape for them");
+
+		assertTrue(thrown.getMessage().contains("jackson-datatype-jdk8"),
+				"the failure should name the missing module, got: " + thrown.getMessage());
+	}
+
 	@Test
 	void withoutTheModuleNullsLeakIntoRecords() throws Exception {
 		ObjectMapper bare = new ObjectMapper();
