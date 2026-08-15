@@ -77,15 +77,26 @@ dependencies {
     // a family, and pinning them individually is how they drift apart. 2.22.1 is the floor
     // web-global runs (Boot 4 overrides its own managed version to reach it, for
     // CVE-2026-54515) — matching it here means this module never publishes a POM asking for
-    // a version below what its consumers were deliberately raised to. A consumer with its
-    // own Jackson BOM still wins; this only sets the floor for one without.
+    // a version below what its consumers were deliberately raised to.
+    //
+    // Note this RAISES a consumer rather than only setting a floor: Gradle resolves
+    // highest-wins, so a consumer declaring an older Jackson BOM is pulled up to 2.22.1
+    // rather than winning. That is the intent for a security floor, but it means a consumer
+    // that deliberately pins Jackson 2 down for a compatibility reason cannot do so while
+    // depending on this module — they would need an explicit `resolutionStrategy.force`.
     api platform('com.fasterxml.jackson:jackson-bom:2.22.1')
     api 'com.fasterxml.jackson.core:jackson-annotations'
     // Optional<T> record components only bind correctly when this module is registered on
-    // the ObjectMapper. Spring Boot auto-registers it when present; declaring it `api`
-    // means a consumer cannot end up with these DTOs and no Optional support. The compact
-    // constructors still guard the case where a hand-rolled mapper skips registration.
-    // Jackson 3 consumers do not need it — see OptionalWireContractJackson3Test.
+    // the ObjectMapper, and there are NO runtime guards behind it: these records have no
+    // compact constructors, so a mapper without the module binds literal null into
+    // components the type system says can never be null. OptionalWireContractTest pins both
+    // halves of that failure. Declaring it `api` means a consumer cannot end up with these
+    // DTOs and no Optional support.
+    //
+    // Do not rely on Boot auto-configuration to supply it: Boot 4 has no Jackson 2
+    // ObjectMapper auto-configuration at all (spring-boot-jackson auto-configures
+    // tools.jackson only), which is why web-global's MessagePackConfig registers the module
+    // by hand. Jackson 3 consumers do not need it — see OptionalWireContractJackson3Test.
     api 'com.fasterxml.jackson.datatype:jackson-datatype-jdk8'
     api 'jakarta.validation:jakarta.validation-api:3.1.1'
     // NOT declared here. This module's source never references msgpack — it was a

@@ -8,6 +8,7 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.exc.InvalidDefinitionException;
 import com.fasterxml.jackson.databind.json.JsonMapper;
@@ -40,7 +41,11 @@ import dev.bluestep.global.dto.aitenantconfig.AiTenantConfigRequest;
  */
 class OptionalWireContractTest {
 
-	/** Mirrors the mapper Spring Boot auto-configures (Jdk8Module is registered from the classpath). */
+	/**
+	 * Mirrors a correctly-configured Jackson 2 mapper. Note this has to be built by hand:
+	 * Boot 4 auto-configures Jackson 3 only, so a Jackson 2 mapper in a Boot 4 service is
+	 * always hand-rolled and always the caller's responsibility to register the module on.
+	 */
 	private static final ObjectMapper MAPPER = JsonMapper.builder().addModule(new Jdk8Module()).build();
 
 	@Test
@@ -84,8 +89,10 @@ class OptionalWireContractTest {
 	}
 
 	/**
-	 * The wire shape is unchanged by the migration: an empty Optional serializes as JSON
-	 * null, exactly as the nullable component it replaced did. Clients see no difference.
+	 * The wire shape is unchanged by the migration under the default inclusion: an empty
+	 * Optional serializes as JSON null, exactly as the nullable component it replaced did.
+	 * See {@link #nonNullInclusionIsTheOneSettingThatDiverges()} for the one configuration
+	 * where that stops being true.
 	 */
 	@Test
 	void emptyOptionalSerializesAsJsonNull() throws Exception {
@@ -110,13 +117,7 @@ class OptionalWireContractTest {
 	}
 
 	/**
-	 * Documents why {@code jackson-datatype-jdk8} is an {@code api} dependency rather than
-	 * a consumer's problem. Without it a mapper does not fail fast: absent and null fields
-	 * bind literal {@code null} into components the type system says can never be null, and
-	 * the error only surfaces later, when a value is actually present.
-	 */
-	/**
-	 * The write side of the same gap, and the one that actually bites on migration.
+	 * The write side of the gap, and the one that actually bites on migration.
 	 *
 	 * <p>This is not hypothetical. The web monolith's {@code AiUsageGateClient} builds its
 	 * msgpack mapper as {@code new ObjectMapper(new MessagePackFactory())
@@ -144,6 +145,42 @@ class OptionalWireContractTest {
 				"the failure should name the missing module, got: " + thrown.getMessage());
 	}
 
+	/**
+	 * The one inclusion setting where "invisible to clients" stops holding, pinned so the
+	 * boundary is discoverable before someone crosses it.
+	 *
+	 * <p>{@code NON_NULL} is the obvious reach for trimming payloads, and it is the wrong
+	 * one here: an empty {@code Optional} is not null, so it is <em>included</em> and
+	 * written as {@code null}, where the nullable component it replaced would have been
+	 * omitted. {@code NON_ABSENT} is the Optional-aware equivalent and preserves the old
+	 * shape. Nothing in web-global sets a non-default inclusion today — this exists so that
+	 * a future {@code spring.jackson.default-property-inclusion: non_null} is a caught
+	 * decision rather than a silent wire change.</p>
+	 */
+	@Test
+	void nonNullInclusionIsTheOneSettingThatDiverges() throws Exception {
+		AiPreflightResponse response =
+				new AiPreflightResponse(true, "trk-1", Optional.empty(), Optional.empty());
+
+		ObjectMapper nonNull = JsonMapper.builder().addModule(new Jdk8Module())
+				.serializationInclusion(JsonInclude.Include.NON_NULL).build();
+		ObjectMapper nonAbsent = JsonMapper.builder().addModule(new Jdk8Module())
+				.serializationInclusion(JsonInclude.Include.NON_ABSENT).build();
+
+		assertEquals("{\"a\":true,\"t\":\"trk-1\",\"d\":null,\"i\":null}",
+				nonNull.writeValueAsString(response),
+				"NON_NULL keeps empty Optionals — an empty Optional is not null");
+		assertEquals("{\"a\":true,\"t\":\"trk-1\"}", nonAbsent.writeValueAsString(response),
+				"NON_ABSENT is the Optional-aware setting and reproduces the pre-migration shape");
+	}
+
+	/**
+	 * The read side, and why {@code jackson-datatype-jdk8} is an {@code api} dependency
+	 * rather than a consumer's problem. Reading does not fail fast the way writing does:
+	 * absent and null fields bind literal {@code null} into components the type system says
+	 * can never be null, and the error only surfaces later, when a value is actually
+	 * present. There are no compact constructors to catch it in between.
+	 */
 	@Test
 	void withoutTheModuleNullsLeakIntoRecords() throws Exception {
 		ObjectMapper bare = new ObjectMapper();
