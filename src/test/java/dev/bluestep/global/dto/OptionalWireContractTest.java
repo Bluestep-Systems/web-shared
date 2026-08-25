@@ -51,9 +51,9 @@ class OptionalWireContractTest {
 	@Test
 	void absentKeyBindsToEmpty() throws Exception {
 		AiTenantConfigRequest request = MAPPER.readValue("""
-				{"schemaName":"acme","maxIterations":5}""", AiTenantConfigRequest.class);
+				{"tenantId":"acme","maxIterations":5}""", AiTenantConfigRequest.class);
 
-		assertEquals(Optional.empty(), request.organizationId());
+		assertEquals(Optional.empty(), request.unitId());
 		assertEquals(Optional.empty(), request.flag());
 		assertEquals(Optional.empty(), request.maxSpendMicros());
 		assertEquals(Optional.empty(), request.budgetSchedule());
@@ -64,11 +64,11 @@ class OptionalWireContractTest {
 	@Test
 	void explicitJsonNullBindsToEmpty() throws Exception {
 		AiTenantConfigRequest request = MAPPER.readValue("""
-				{"schemaName":"acme","maxIterations":5,"organizationId":null,
+				{"tenantId":"acme","maxIterations":5,"unitId":null,
 				 "flag":null,"maxSpendMicros":null,"budgetSchedule":null,
 				 "utcOffsetMinutes":null,"enabled":null}""", AiTenantConfigRequest.class);
 
-		assertEquals(Optional.empty(), request.organizationId());
+		assertEquals(Optional.empty(), request.unitId());
 		assertEquals(Optional.empty(), request.maxSpendMicros());
 		assertEquals(Optional.empty(), request.budgetSchedule());
 	}
@@ -76,11 +76,11 @@ class OptionalWireContractTest {
 	@Test
 	void presentValuesBind() throws Exception {
 		AiTenantConfigRequest request = MAPPER.readValue("""
-				{"schemaName":"acme","organizationId":"org-1","flag":"chat",
+				{"tenantId":"acme","unitId":"org-1","flag":"chat",
 				 "maxSpendMicros":250000,"maxIterations":5,"budgetSchedule":"MONTHLY",
 				 "utcOffsetMinutes":-420,"enabled":true}""", AiTenantConfigRequest.class);
 
-		assertEquals(Optional.of("org-1"), request.organizationId());
+		assertEquals(Optional.of("org-1"), request.unitId());
 		assertEquals(Optional.of("chat"), request.flag());
 		assertEquals(Optional.of(250_000L), request.maxSpendMicros());
 		assertEquals(Optional.of(BudgetSchedule.MONTHLY), request.budgetSchedule());
@@ -186,12 +186,12 @@ class OptionalWireContractTest {
 		ObjectMapper bare = new ObjectMapper();
 
 		AiTenantConfigRequest silentlyNull = bare.readValue("""
-				{"schemaName":"acme","maxIterations":5}""", AiTenantConfigRequest.class);
-		assertEquals(null, silentlyNull.organizationId(),
+				{"tenantId":"acme","maxIterations":5}""", AiTenantConfigRequest.class);
+		assertEquals(null, silentlyNull.unitId(),
 				"without Jdk8Module an absent field binds null, not Optional.empty");
 
 		assertThrows(InvalidDefinitionException.class, () -> bare.readValue("""
-				{"schemaName":"acme","maxIterations":5,"organizationId":"org-1"}""",
+				{"tenantId":"acme","maxIterations":5,"unitId":"org-1"}""",
 				AiTenantConfigRequest.class),
 				"without Jdk8Module a *present* value is the first thing that fails");
 	}
