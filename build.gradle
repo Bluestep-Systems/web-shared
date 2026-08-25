@@ -27,7 +27,7 @@ publishing {
 group = 'dev.bluestep'
 // 2.0.0: nullable record components became Optional<T>. Source- and binary-breaking for
 // consumers — the web monolith deliberately stays on 1.2.2 until it migrates separately.
-version = '2.0.0'
+version = '3.0.0'
 
 repositories {
     mavenCentral()

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.util.HexFormat;
+import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
@@ -67,6 +68,11 @@ class LegacyWireCompatTest {
 	private static final String COMPLETION_REQ_NULLS_MP =
 			"8ba174a574726b2d37a16964a16fccc8a16ccd05dca16e03a173c0a165c0a161c0a26169c0a26369c0a2616fc0";
 
+	/** 1.2.2's payload with the one key 3.0.0 adds, in the position the component order puts it. */
+	private static final String COMPLETION_REQ_NULLS_WITH_VECTOR =
+			"{\"t\":\"trk-7\",\"i\":100,\"o\":200,\"l\":1500,\"n\":3,\"s\":null,\"e\":null,"
+					+ "\"u\":{},\"a\":null,\"ai\":null,\"ci\":null,\"ao\":null}";
+
 	private static final String COMPLETION_REQ_FULL =
 			"{\"t\":\"trk-8\",\"i\":100,\"o\":200,\"l\":1500,\"n\":3,\"s\":\"end_turn\",\"e\":\"boom\","
 					+ "\"a\":12,\"ai\":34,\"ci\":56,\"ao\":78}";
@@ -105,6 +111,9 @@ class LegacyWireCompatTest {
 		assertEquals(Optional.empty(), request.audioInputTokens());
 		assertEquals(Optional.empty(), request.cachedInputTokens());
 		assertEquals(Optional.empty(), request.audioOutputTokens());
+		assertEquals(Map.of(), request.unitAmounts(),
+				"1.2.2 has no amount vector to send, and an absent one must be empty rather than null — "
+						+ "the legacy lane is read precisely when this is empty");
 	}
 
 	@Test
@@ -181,11 +190,28 @@ class LegacyWireCompatTest {
 		assertEquals(PREFLIGHT_REQ_NULLS, JACKSON3.writeValueAsString(preflight));
 		assertArrayEquals(hex(PREFLIGHT_REQ_NULLS_MP), MSGPACK.writeValueAsBytes(preflight));
 
+	}
+
+	/**
+	 * The completion request is the one payload 3.0.0 does <em>not</em> emit byte-identically, and this states
+	 * exactly how it differs rather than dropping the claim.
+	 *
+	 * <p>It gained {@code "u"}, the amount vector. Every legacy key keeps its name, its position and its
+	 * encoding, so a reader that does not know {@code "u"} sees precisely the payload 1.2.2 emitted — which is
+	 * what makes the addition safe in the one direction it travels: web emits this and web-global reads it, and
+	 * web-global is upgraded first. Were a key renamed or reordered instead, an un-upgraded reader would bind
+	 * silently wrong values rather than ignoring an unknown one.</p>
+	 */
+	@Test
+	void currentCompletionRequestAddsTheVectorAndChangesNothingElse() throws Exception {
 		AiCompletionRequest completion = new AiCompletionRequest(
-				"trk-7", 100, 200, 1500L, 3, Optional.empty(), Optional.empty(),
+				"trk-7", 100, 200, 1500L, 3, Optional.empty(), Optional.empty(), Map.of(),
 				Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
-		assertEquals(COMPLETION_REQ_NULLS, JACKSON3.writeValueAsString(completion));
-		assertArrayEquals(hex(COMPLETION_REQ_NULLS_MP), MSGPACK.writeValueAsBytes(completion));
+
+		assertEquals(COMPLETION_REQ_NULLS_WITH_VECTOR, JACKSON3.writeValueAsString(completion));
+		assertEquals(COMPLETION_REQ_NULLS,
+				JACKSON3.writeValueAsString(completion).replace("\"u\":{},", ""),
+				"with the one added key removed, the payload must be 1.2.2's own bytes");
 	}
 
 	/**
