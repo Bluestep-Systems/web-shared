@@ -37,9 +37,10 @@ import jakarta.validation.constraints.Size;
  */
 public record TenantAccessReportRequest(
 		@NotBlank @Size(max = 50) String tenantId,
-		// Bounded because this arrives over the wire and is written to a table. Global users are
-		// BlueStep staff rather than customer accounts, so a real tenant reports tens; a report of
-		// ten thousand is a bug or an attack, and either way is better refused than persisted.
+		// Bounded because this arrives over the wire and is written to a table. A tenant's global
+		// users are its administrators — staff, resellers, or customers holding a global account —
+		// so a real tenant reports tens; a report of ten thousand is a bug or an attack, and either
+		// way is better refused than persisted.
 		@Size(max = 10_000) List<@Valid GlobalUserKey> users
 ) {
 
