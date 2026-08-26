@@ -3,11 +3,15 @@ package dev.bluestep.global.dto;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import java.util.ArrayList;
 import java.util.HexFormat;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
@@ -17,16 +21,29 @@ import dev.bluestep.global.dto.ai.AiCompletionRequest;
 import dev.bluestep.global.dto.ai.AiDenialCode;
 import dev.bluestep.global.dto.ai.AiPreflightRequest;
 import dev.bluestep.global.dto.ai.AiPreflightResponse;
+import dev.bluestep.global.dto.ai.UnitKeys;
 
 /**
  * Cross-version wire compatibility with web-shared <b>1.2.2</b>.
  *
- * <p>2.0.0 is a source- and binary-breaking release, but it must not be a <em>wire</em>
- * breaking one: the web monolith stays on 1.2.2 and keeps calling the AI gate throughout.
- * A caller that cannot be recompiled in lockstep is the whole reason the migration chose
- * {@code Optional} over a nullable component in the first place — the claim is that the
- * two produce an identical wire, and this class is where that claim is actually checked
- * rather than asserted.</p>
+ * <p>2.0.0 was source- and binary-breaking but not <em>wire</em> breaking, and this class is where
+ * that claim was actually checked rather than asserted. 3.0.0 narrows the claim rather than keeping
+ * it: the completion request gains one key, {@code "u"}, and every other payload is still emitted
+ * byte-identically. What has to hold now is that the added key is <em>additive</em> — every legacy
+ * key keeps its name, its position and its value — so a reader that does not know it ignores it,
+ * rather than binding shifted values silently.</p>
+ *
+ * <p><b>Why this still matters after the monolith moves to 3.0.0.</b> web rolls out per namespace
+ * against a single web-global, so callers on the old shape and the new shape report to the same gate
+ * concurrently, and for as long as the stagger lasts. The compatibility being pinned here is not a
+ * transient upgrade window; it is a steady state the gate has to serve.</p>
+ *
+ * <p><b>4.0.0 renamed these components and changed nothing here.</b> {@code schemaName} became
+ * {@code tenantId} and {@code organizationId} became {@code unitId}. The assertions below now read
+ * the new accessors off byte-identical 1.2.2 payloads, which is the whole proof: {@link
+ * AiPreflightRequest} pins every component to a one-character {@code @JsonProperty}, so the
+ * vocabulary change stopped at the Java source. If someone ever aligns those annotations with the
+ * component names, these tests fail — which is the point.</p>
  *
  * <p><b>Provenance of the golden payloads.</b> Every constant below was captured by running
  * the real {@code dev.bluestep:web-shared:1.2.2} artifact — not by hand-writing what 1.2.2
@@ -86,8 +103,8 @@ class LegacyWireCompatTest {
 	void legacyPreflightRequestJsonBindsToEmptyOptionals() throws Exception {
 		AiPreflightRequest request = JACKSON3.readValue(PREFLIGHT_REQ_NULLS, AiPreflightRequest.class);
 
-		assertEquals("acme", request.schemaName());
-		assertEquals("org-1", request.organizationId());
+		assertEquals("acme", request.tenantId());
+		assertEquals("org-1", request.unitId());
 		assertEquals(Optional.empty(), request.flag());
 		assertEquals(Optional.empty(), request.triggeringProcess());
 		assertEquals("claude-opus-4", request.model());
@@ -105,6 +122,10 @@ class LegacyWireCompatTest {
 		assertEquals(Optional.empty(), request.audioInputTokens());
 		assertEquals(Optional.empty(), request.cachedInputTokens());
 		assertEquals(Optional.empty(), request.audioOutputTokens());
+		assertEquals(Optional.empty(), request.unitAmounts(),
+				"1.2.2 has no amount vector to send, and an absent one must arrive as absent rather than as an "
+						+ "empty map — the legacy lane is read precisely when this is absent, and an empty map "
+						+ "would instead mean a current caller that metered nothing");
 	}
 
 	@Test
@@ -118,18 +139,22 @@ class LegacyWireCompatTest {
 	}
 
 	/**
-	 * msgpack is the transport the monolith actually uses today, and it is served by a
-	 * hand-built Jackson 2 mapper because no Jackson 3 msgpack dataformat exists. That
-	 * mapper needs {@code Jdk8Module} registered explicitly — without it these payloads
-	 * bind literal nulls into the records instead of empty Optionals.
+	 * msgpack is served by a hand-built Jackson 2 mapper because no Jackson 3 msgpack
+	 * dataformat exists. That mapper needs {@code Jdk8Module} registered explicitly — without
+	 * it these payloads bind literal nulls into the records instead of empty Optionals.
+	 *
+	 * <p>The monolith itself has moved to CBOR ({@code AiUsageGateClient}), so msgpack is no
+	 * longer the transport it speaks; web-global still advertises it on
+	 * {@code application/x-msgpack}, and the hand-built mapper is the one place where Jackson
+	 * 2's unknown-property strictness still applies, so it stays pinned here.</p>
 	 */
 	@Test
 	void legacyPreflightRequestMsgpackBindsToEmptyOptionals() throws Exception {
 		AiPreflightRequest request =
 				MSGPACK.readValue(hex(PREFLIGHT_REQ_NULLS_MP), AiPreflightRequest.class);
 
-		assertEquals("acme", request.schemaName());
-		assertEquals("org-1", request.organizationId());
+		assertEquals("acme", request.tenantId());
+		assertEquals("org-1", request.unitId());
 		assertEquals(Optional.empty(), request.flag());
 		assertEquals(Optional.empty(), request.triggeringProcess());
 	}
@@ -181,11 +206,93 @@ class LegacyWireCompatTest {
 		assertEquals(PREFLIGHT_REQ_NULLS, JACKSON3.writeValueAsString(preflight));
 		assertArrayEquals(hex(PREFLIGHT_REQ_NULLS_MP), MSGPACK.writeValueAsBytes(preflight));
 
+	}
+
+	/**
+	 * The direction that actually happens under staggered deploys: a 1.2.2 payload read by 3.0.0.
+	 *
+	 * <p>web rolls out per namespace against a single web-global, so pre-vector callers report to the current
+	 * gate concurrently and for a long time. This pins that their payload still binds, and — the part that
+	 * decides how the gate prices it — that the absent vector arrives as <em>absent</em> rather than as an empty
+	 * map. Those are different facts: empty would mean "a current caller metered nothing", which would send the
+	 * turn down the vector branch and price a legacy report as though it had reported no charges at all.</p>
+	 */
+	@Test
+	void legacyCompletionPayloadBindsWithTheVectorAbsent() throws Exception {
+		AiCompletionRequest request = JACKSON3.readValue(COMPLETION_REQ_NULLS, AiCompletionRequest.class);
+
+		assertEquals(Optional.empty(), request.unitAmounts(),
+				"1.2.2 sends no \"u\" at all; absent must not be normalised into an empty vector");
+		assertEquals("trk-7", request.trackingId());
+		assertEquals(100, request.totalInputTokens());
+		assertEquals(200, request.totalOutputTokens());
+	}
+
+	/**
+	 * The completion request is the one payload 3.0.0 does <em>not</em> emit byte-identically, and this states
+	 * exactly how it differs rather than dropping the claim.
+	 *
+	 * <p>It gained {@code "u"}, the amount vector. The claim being checked is that every legacy key keeps its
+	 * name, its position and its value, so the addition is a key an old reader ignores rather than a reshuffle
+	 * that makes it bind wrong values silently.</p>
+	 *
+	 * <p>Checked structurally — key list against key list — rather than by deleting a substring from the output
+	 * and comparing it to a constant built by inserting that same substring. That form cannot fail: it is a
+	 * property of two hand-written strings, not of the serializer.</p>
+	 */
+	@Test
+	void currentCompletionRequestAddsTheVectorAndChangesNothingElse() throws Exception {
 		AiCompletionRequest completion = new AiCompletionRequest(
-				"trk-7", 100, 200, 1500L, 3, Optional.empty(), Optional.empty(),
+				"trk-7", 100, 200, 1500L, 3, Optional.empty(), Optional.empty(), Optional.empty(),
 				Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
-		assertEquals(COMPLETION_REQ_NULLS, JACKSON3.writeValueAsString(completion));
-		assertArrayEquals(hex(COMPLETION_REQ_NULLS_MP), MSGPACK.writeValueAsBytes(completion));
+
+		JsonNode legacy = JACKSON2.readTree(COMPLETION_REQ_NULLS);
+		JsonNode current =
+				JACKSON2.readTree(JACKSON3.writeValueAsString(completion));
+
+		List<String> legacyKeys = new ArrayList<>();
+		legacy.fieldNames().forEachRemaining(legacyKeys::add);
+		List<String> currentKeys = new ArrayList<>();
+		current.fieldNames().forEachRemaining(currentKeys::add);
+
+		List<String> added = new ArrayList<>(currentKeys);
+		added.removeAll(legacyKeys);
+		assertEquals(List.of("u"), added, "3.0.0 may add \"u\" and nothing else");
+
+		assertEquals(legacyKeys, currentKeys.stream().filter(k -> !"u".equals(k)).toList(),
+				"every legacy key must keep its name and its position");
+		for (String key : legacyKeys) {
+			assertEquals(legacy.get(key), current.get(key),
+					"legacy key \"" + key + "\" must keep its value and encoding");
+		}
+	}
+
+	/**
+	 * The payload that now carries money, pinned in both transports.
+	 *
+	 * <p>Every other assertion here uses an empty vector, which encodes the same however the map is handled. A
+	 * populated one is what a real turn sends and what the gate prices from, so its key spellings, its integer
+	 * widths and its round trip are the thing worth holding still — an amount that survives JSON but truncates
+	 * or reorders in the binary transport would bill wrong with nothing else failing.</p>
+	 */
+	@Test
+	void populatedVectorRoundTripsThroughBothTransports() throws Exception {
+		AiCompletionRequest completion = AiCompletionRequest.of(
+				"trk-9", 1_500, 500, 1234L, 2, Optional.of("end_turn"), Optional.empty(),
+				Map.of(UnitKeys.TEXT_INPUT, 400L, UnitKeys.CACHED_INPUT, 900L,
+						UnitKeys.CACHE_WRITE_5M, 200L, UnitKeys.TEXT_OUTPUT, 500L));
+
+		Map<String, Long> expected = Map.of(UnitKeys.TEXT_INPUT, 400L, UnitKeys.CACHED_INPUT, 900L,
+				UnitKeys.CACHE_WRITE_5M, 200L, UnitKeys.TEXT_OUTPUT, 500L);
+
+		AiCompletionRequest viaJson =
+				JACKSON3.readValue(JACKSON3.writeValueAsString(completion), AiCompletionRequest.class);
+		assertEquals(Optional.of(expected), viaJson.unitAmounts());
+
+		AiCompletionRequest viaMsgpack =
+				MSGPACK.readValue(MSGPACK.writeValueAsBytes(completion), AiCompletionRequest.class);
+		assertEquals(Optional.of(expected), viaMsgpack.unitAmounts(),
+				"amounts are longs; a transport that narrowed them would bill a different number");
 	}
 
 	/**

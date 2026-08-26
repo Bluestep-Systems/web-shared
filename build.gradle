@@ -25,9 +25,30 @@ publishing {
 }
 
 group = 'dev.bluestep'
-// 2.0.0: nullable record components became Optional<T>. Source- and binary-breaking for
-// consumers — the web monolith deliberately stays on 1.2.2 until it migrates separately.
-version = '2.0.0'
+// 2.0.0: nullable record components became Optional<T>.
+// 3.0.0: PricedUnit deleted — the metered-unit vocabulary is an open unit_key string plus the
+// descriptive UnitCategory/UnitMeasure axes and a RateVariant, and AiCompletionRequest carries an
+// amount vector. Source-, binary- AND wire-breaking: AiUnitRateRequest gained three required
+// discriminators, so a caller posting the old {provider, model, pricedUnit, rate} shape gets a 400.
+// Both consumers (web, web-global) move to 3.0.0 together; neither can resolve it until the
+// GitHub release is cut, because mavenLocal() is what makes an unreleased version look fine here.
+// 4.0.0: the scope vocabulary is renamed — schemaName -> tenantId, organizationId -> unitId —
+// across every AI DTO, and ai_tenant_config gains a first-class userId dimension. Source-breaking
+// everywhere. WIRE-breaking only on the admin surfaces (AiTenantConfig*, AiTenantBlock*,
+// AiUsageQuery*), whose components serialize under their own names; AiPreflightRequest is pinned to
+// one-character @JsonProperty keys and AiCompletionRequest carries neither field, so the gate's hot
+// path is byte-identical to 3.0.0 and 1.2.2. LegacyWireCompatTest is where that is checked rather
+// than asserted. web-global serves both contracts side by side under version-tagged paths, so the
+// fleet does not have to move in lockstep this time.
+//
+// 4.0.0 also ADDS two packages rather than changing any. dto.globaluser carries the catalog-scope
+// classification web-global now owns outright — CatalogScopeKind replaces reading global.globaluser
+// .super, which is a boolean that cannot express a reseller super. dto.reseller carries the
+// read-only branding rows, mapped only so that a classification naming a reseller which does not
+// exist can be refused rather than silently scoping its user to nothing. Both are purely additive,
+// so they do not move the number; they ride 4.0.0 because 4.0.0 is not released yet, and a consumer
+// resolving it therefore gets the vocabulary rename and these surfaces together or not at all.
+version = '4.0.0'
 
 repositories {
     mavenCentral()
@@ -87,11 +108,12 @@ dependencies {
     api platform('com.fasterxml.jackson:jackson-bom:2.22.1')
     api 'com.fasterxml.jackson.core:jackson-annotations'
     // Optional<T> record components only bind correctly when this module is registered on
-    // the ObjectMapper, and there are NO runtime guards behind it: these records have no
-    // compact constructors, so a mapper without the module binds literal null into
-    // components the type system says can never be null. OptionalWireContractTest pins both
-    // halves of that failure. Declaring it `api` means a consumer cannot end up with these
-    // DTOs and no Optional support.
+    // the ObjectMapper, and almost nothing guards that at runtime: a mapper without the module
+    // binds literal null into components the type system says can never be null.
+    // AiCompletionRequest's compact constructor catches it for that one record's vector; every
+    // other record here has no such guard. OptionalWireContractTest pins both halves of the
+    // failure. Declaring it `api` means a consumer cannot end up with these DTOs and no
+    // Optional support.
     //
     // Do not rely on Boot auto-configuration to supply it: Boot 4 has no Jackson 2
     // ObjectMapper auto-configuration at all (spring-boot-jackson auto-configures
