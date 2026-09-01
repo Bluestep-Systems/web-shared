@@ -46,9 +46,20 @@ group = 'dev.bluestep'
 // .super, which is a boolean that cannot express a reseller super. dto.reseller carries the
 // read-only branding rows, mapped only so that a classification naming a reseller which does not
 // exist can be refused rather than silently scoping its user to nothing. Both are purely additive,
-// so they do not move the number; they ride 4.0.0 because 4.0.0 is not released yet, and a consumer
+// so they do not move the number; they rode 4.0.0 because 4.0.0 was not released yet, and a consumer
 // resolving it therefore gets the vocabulary rename and these surfaces together or not at all.
-version = '4.0.0'
+//
+// 4.1.0 adds the tenant-access grant shapes: TenantAccessGrantRequest/Response, TenantGrantsResponse
+// and UserTenantsResponse. Purely additive, and a minor rather than a ride-along because 4.0.0 IS
+// released now — the monolith pins it and web-global resolves it, so republishing that coordinate
+// with different bytes would make a released version mean two things.
+//
+// They belong here rather than in web-global because the monolith is the caller they exist for. The
+// tenant-access surface stopped being a report protocol that ages out and became grants an
+// administrator writes and withdraws, and it is the monolith that knows who materializes in which
+// tenant. Keeping the shapes private to the server would have meant the client either hand-rolling
+// them or not being able to call at all.
+version = '4.1.0'
 
 repositories {
     mavenCentral()
