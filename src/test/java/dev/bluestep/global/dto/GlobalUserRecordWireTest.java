@@ -3,6 +3,7 @@ package dev.bluestep.global.dto;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -24,8 +25,9 @@ import dev.bluestep.global.dto.globaluserrecord.GlobalUserRecordUpdateRequest;
  * <h2>The property that has to hold, and nearly did not</h2>
  *
  * <p>A {@code @AssertTrue} constraint is a JavaBeans getter. Jackson does not know it is a
- * constraint; it sees {@code isAttribsInStoredForm()} and publishes {@code attribsInStoredForm} as a
- * property of the record. That is a field the record cannot bind back — it has no such component — so
+ * constraint; it sees {@code isStoredCredentialInStoredForm()} and publishes
+ * {@code storedCredentialInStoredForm} as a property of the record. That is a field the record cannot
+ * bind back — it has no such component — so
  * the type stops round-tripping through its own mapper, and a strict mapper rejects it outright.</p>
  *
  * <p>{@code @JsonIgnore} is what prevents it, and nothing else would have caught its removal: the
@@ -87,16 +89,20 @@ class GlobalUserRecordWireTest {
 		});
 	}
 
-	// ---------------------------------------------------------------- omitted fields bind to empty
+	// ---------------------------------------------------------------- omitted fields bind to null
 
 	/**
-	 * The credential shape has exactly one component, which makes {@code {}} its most likely malformed
-	 * body — and a single-component record is also where Jackson's delegating-creator heuristic could
-	 * plausibly take a different path. Both are pinned here rather than assumed.
+	 * {@code {}} binds — it does not throw — and produces a {@code null} component, which is exactly
+	 * why {@code @NotBlank} rather than a compact-constructor default is what makes the credential
+	 * required. A shape that relied on binding to fail would be relying on mapper configuration this
+	 * module does not control; a constraint answers the same way under any mapper.
+	 *
+	 * <p>Both Jackson families, because both bind this shape in production and a single-component
+	 * record is where a delegating-creator heuristic could plausibly diverge.</p>
 	 */
 	@Test
-	@DisplayName("an omitted credential binds to empty rather than null, under either Jackson")
-	void omittedCredentialBindsToEmpty() throws Exception {
+	@DisplayName("an omitted or null credential binds to null, leaving @NotBlank to refuse it")
+	void omittedCredentialBindsToNull() throws Exception {
 		GlobalUserCredentialUpdateRequest fromJackson2 =
 				JACKSON2.readValue("{}", GlobalUserCredentialUpdateRequest.class);
 		GlobalUserCredentialUpdateRequest fromJackson3 =
@@ -107,7 +113,7 @@ class GlobalUserRecordWireTest {
 
 		for (GlobalUserCredentialUpdateRequest bound :
 				List.of(fromJackson2, fromJackson3, explicitNull)) {
-			assertEquals(Optional.empty(), bound.storedCredential());
+			assertNull(bound.storedCredential());
 		}
 	}
 
@@ -122,14 +128,14 @@ class GlobalUserRecordWireTest {
 				JACKSON2.writeValueAsString(credentialUpdate()),
 				GlobalUserCredentialUpdateRequest.class);
 
-		assertEquals(Optional.of(STORED_CREDENTIAL), bound.storedCredential());
+		assertEquals(STORED_CREDENTIAL, bound.storedCredential());
 		assertTrue(bound.isStoredCredentialInStoredForm());
 	}
 
 	// ---------------------------------------------------------------- fixtures
 
 	private static GlobalUserCredentialUpdateRequest credentialUpdate() {
-		return new GlobalUserCredentialUpdateRequest(Optional.of(STORED_CREDENTIAL));
+		return new GlobalUserCredentialUpdateRequest(STORED_CREDENTIAL);
 	}
 
 	private static GlobalUserRecordCreateRequest create() {

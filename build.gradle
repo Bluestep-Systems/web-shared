@@ -154,7 +154,32 @@ group = 'dev.bluestep'
 // A PATCH for the same reason 4.1.1 was: ContractVersion.tag() puts this number in the URL, so the
 // jar version and the served path are one string. Nothing resolves it until the GitHub release is
 // cut — mavenLocal() is what makes an unreleased version look fine in a sibling checkout.
-version = '4.1.2'
+//
+// 4.1.3 makes the credential REQUIRED, and fixes the same @AssertTrue serialization defect on two
+// older shapes.
+//
+// GlobalUserCredentialUpdateRequest.storedCredential is a plain @NotBlank String rather than an
+// Optional. 4.1.2 read an empty Optional as "clear the credential", which put a destructive operation
+// behind `{}` -- the most likely malformed body this endpoint can receive, and the exact payload its
+// intended caller produces by accident. The monolith never loads a credential (nothing returns one),
+// so its model holds null for the password unless an admin has just typed one; a request built from
+// that model without checking would have sent `{}` and deleted the account's password while reporting
+// success. An admin screen with the password box left blank is precisely that case. Now it is a 400
+// naming the field. There is deliberately NO way to clear a credential on this shape: an update that
+// names nothing to write is incoherent rather than a request to delete, and if clearing is ever wanted
+// it wants its own verb.
+//
+// This is a BREAKING change to a shape 4.1.2 shipped -- a caller sending {"storedCredential": null},
+// or omitting it, moves from 200 to 400 -- which is why it costs a version rather than riding 4.1.2.
+// A caller that sent a real credential is unaffected.
+//
+// @JsonIgnore on GlobalUserScopeEntry and GlobalUserScopeRequest, which carry the identical defect
+// fixed on the globaluserrecord shapes in 4.1.2: a @AssertTrue method is a JavaBeans getter, so
+// Jackson has been publishing `resellerConsistentWithScope` as a record property since 4.0.0, and a
+// record that emits a field it cannot bind back does not round-trip through its own mapper. Removes a
+// spurious field; nothing reads it. GlobalUserScopeWireTest is the coverage that would have caught it,
+// matching what GlobalUserRecordWireTest does next door.
+version = '4.1.3'
 
 repositories {
     mavenCentral()

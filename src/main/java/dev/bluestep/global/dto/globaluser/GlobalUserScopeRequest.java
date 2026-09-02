@@ -2,6 +2,8 @@ package dev.bluestep.global.dto.globaluser;
 
 import java.util.Optional;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import dev.bluestep.global.dto.tenantaccess.ResellerKey;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
@@ -47,7 +49,14 @@ public record GlobalUserScopeRequest(
 	 * <p>A {@code RESELLER} with no reseller would scope the user to nothing and show them an empty
 	 * catalog — indistinguishable, to them, from having no access at all. A {@code FLEET} carrying one
 	 * reads as a restriction that is not applied. Neither is a state worth storing.</p>
+	 *
+	 * <p>{@code @JsonIgnore} is not decoration. A {@code @AssertTrue} method is a JavaBeans getter, so
+	 * without it Jackson serializes {@code resellerConsistentWithScope} as a property of this record —
+	 * a field the record cannot bind back, so the type stops round-tripping through its own mapper and
+	 * a strict mapper rejects it outright. This shipped in 4.0.0 and has been on the wire ever since;
+	 * removing the field is what 4.1.3 does, and no consumer reads it.</p>
 	 */
+	@JsonIgnore
 	@AssertTrue(message = "a reseller is required for a RESELLER scope and permitted for no other")
 	public boolean isResellerConsistentWithScope() {
 		return (scope == CatalogScopeKind.RESELLER) == reseller.isPresent();

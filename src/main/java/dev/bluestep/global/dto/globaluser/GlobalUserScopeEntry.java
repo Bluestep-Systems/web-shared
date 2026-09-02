@@ -2,6 +2,8 @@ package dev.bluestep.global.dto.globaluser;
 
 import java.util.Optional;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import dev.bluestep.global.dto.tenantaccess.GlobalUserKey;
 import dev.bluestep.global.dto.tenantaccess.ResellerKey;
 import jakarta.validation.Valid;
@@ -27,7 +29,13 @@ public record GlobalUserScopeEntry(
 		reseller = reseller == null ? Optional.empty() : reseller;
 	}
 
-	/** Same invariant the per-user request states, for the same reasons. */
+	/**
+	 * Same invariant the per-user request states, for the same reasons.
+	 *
+	 * <p>{@code @JsonIgnore} for the reason given on {@link GlobalUserScopeRequest}: without it this
+	 * constraint is a JavaBeans getter and Jackson publishes it as a property.</p>
+	 */
+	@JsonIgnore
 	@AssertTrue(message = "a reseller is required for a RESELLER scope and permitted for no other")
 	public boolean isResellerConsistentWithScope() {
 		return (scope == CatalogScopeKind.RESELLER) == reseller.isPresent();
