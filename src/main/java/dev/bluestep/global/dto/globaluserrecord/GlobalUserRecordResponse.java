@@ -18,6 +18,19 @@ import dev.bluestep.global.dto.tenantaccess.ResellerKey;
  * recoverable passwords rather than digests. Nothing on this surface returns a credential, which is
  * what makes a list of every account a safe thing to ask for.</p>
  *
+ * <p><b>Nor a fingerprint of it.</b> One was built here and withdrawn before release, and the reason
+ * generalises to anything derived from that column. The monolith enciphers rather than digests the
+ * credential, with AES in ECB mode under one process-wide key — so the stored value is a deterministic
+ * function of the password alone, and any digest of it is too. Two accounts with the same password
+ * would carry the same fingerprint, and on a surface that lists every account that is a bulk
+ * password-equality oracle: set a known password, read the list, and every match shares it. Holding
+ * the crypt seed turns it into offline confirmation of any dictionary guess. Truncation and
+ * one-wayness do not help, because the input space is passwords rather than keys.</p>
+ *
+ * <p>The monolith binds its 90-day device-trust cookie to the credential, and that check does need
+ * <em>something</em> here to bind to. It needs a value that moves when the credential moves and is not
+ * derived from it — a change counter, not a digest.</p>
+ *
  * @param user      the account's key
  * @param firstName as stored; the column is nullable and plenty of rows leave it so
  * @param lastName  as stored; the listing's primary sort key, upper-cased
