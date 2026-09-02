@@ -101,6 +101,36 @@ class GlobalUserRecordValidationTest {
 		assertEquals(Set.of("attribs"), violatedPaths(bigAttribs));
 	}
 
+	/**
+	 * The bound counts <b>code points</b>, because {@code varchar(n)} counts characters and
+	 * {@code @Size} would have counted UTF-16 code units.
+	 *
+	 * <p>Sixteen supplementary-plane ideographs are sixteen characters to PostgreSQL and thirty-two to
+	 * {@code String.length()}. Under {@code @Size(max = 30)} that name was refused while the column
+	 * stored it happily — and because the update is a whole-record replace fed by a read that returns
+	 * the stored value verbatim, a row already holding one could not be edited through the API at all.
+	 * The 400 arrived on a {@code PUT} the caller had no way to make succeed.</p>
+	 *
+	 * <p>The over-long case is asserted alongside it so this pins a bound and not merely the absence of
+	 * one: thirty-one of the same characters must still be refused.</p>
+	 */
+	@Test
+	@DisplayName("the bound counts code points, as the column does — not UTF-16 code units")
+	void codePointSize_countsCharactersNotCodeUnits() {
+		// U+20000, a supplementary-plane CJK ideograph: one character, two Java chars.
+		String wide = "𠀀";
+
+		String sixteen = wide.repeat(16);
+		assertEquals(32, sixteen.length(), "fixture must actually be supplementary-plane");
+		assertEquals(Set.of(), violatedPaths(create(sixteen, "Novak", "del.novak")),
+				"varchar(30) stores 16 characters, so the constraint must accept them");
+
+		assertEquals(Set.of(), violatedPaths(create(wide.repeat(30), "Novak", "del.novak")),
+				"exactly at the bound, in characters");
+		assertEquals(Set.of("firstName"), violatedPaths(create(wide.repeat(31), "Novak", "del.novak")),
+				"and one character past it is still refused — the bound is a bound, not a suggestion");
+	}
+
 	@Test
 	@DisplayName("the update shape carries the same bounds as the create shape")
 	void size_updateMatchesCreate() {

@@ -6,11 +6,11 @@ import java.util.Optional;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
+import dev.bluestep.global.dto.constraints.CodePointSize;
 import dev.bluestep.global.dto.tenantaccess.ResellerKey;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Positive;
-import jakarta.validation.constraints.Size;
 
 /**
  * Creating a {@code global.globaluser} row.
@@ -76,14 +76,14 @@ import jakarta.validation.constraints.Size;
 public record GlobalUserRecordCreateRequest(
 		@Positive long classid,
 		Optional<Long> seqnum,
-		Optional<@Size(max = 30) String> firstName,
-		Optional<@Size(max = 30) String> lastName,
-		Optional<@Size(max = 50) String> username,
-		Optional<@Size(max = 255) String> userEmail,
+		Optional<@CodePointSize(max = 30) String> firstName,
+		Optional<@CodePointSize(max = 30) String> lastName,
+		Optional<@CodePointSize(max = 50) String> username,
+		Optional<@CodePointSize(max = 255) String> userEmail,
 		@Valid Optional<ResellerKey> reseller,
 		boolean superUser,
 		boolean disabled,
-		Optional<@Size(max = 4000) String> attribs,
+		Optional<@CodePointSize(max = 4000) String> attribs,
 		Optional<LocalDateTime> passwordExpireStart,
 		boolean emailValidated,
 		Optional<LocalDateTime> emailValidatedExpireStart,

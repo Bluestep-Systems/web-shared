@@ -4,9 +4,9 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import dev.bluestep.global.dto.constraints.CodePointSize;
 import dev.bluestep.global.dto.tenantaccess.ResellerKey;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Size;
 
 /**
  * Replacing a {@code global.globaluser} row's editable columns.
@@ -48,14 +48,14 @@ import jakarta.validation.constraints.Size;
  *                  mistaken for "no change".
  */
 public record GlobalUserRecordUpdateRequest(
-		Optional<@Size(max = 30) String> firstName,
-		Optional<@Size(max = 30) String> lastName,
-		Optional<@Size(max = 50) String> username,
-		Optional<@Size(max = 255) String> userEmail,
+		Optional<@CodePointSize(max = 30) String> firstName,
+		Optional<@CodePointSize(max = 30) String> lastName,
+		Optional<@CodePointSize(max = 50) String> username,
+		Optional<@CodePointSize(max = 255) String> userEmail,
 		@Valid Optional<ResellerKey> reseller,
 		boolean superUser,
 		boolean disabled,
-		Optional<@Size(max = 4000) String> attribs,
+		Optional<@CodePointSize(max = 4000) String> attribs,
 		Optional<LocalDateTime> passwordExpireStart,
 		boolean emailValidated,
 		Optional<LocalDateTime> emailValidatedExpireStart,

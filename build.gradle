@@ -109,9 +109,6 @@ group = 'dev.bluestep'
 //     varchar(50) column: a lookup does not write, so an over-long name there is currently a
 //     well-defined 404 rather than an error, and turning that into a 400 would change how a shipped
 //     tag answers a request it already answers coherently.
-//     Note @Size counts UTF-16 code units where varchar(n) counts characters, so a 30-emoji first
-//     name is 60 to the constraint and 30 to Postgres. Always stricter, never looser, so nothing
-//     unstorable slips through — but it is not exactly the column bound.
 //     An over-long value was reaching a transaction and being refused by Postgres, which
 //     the consumer then has to translate: web-global maps it to a bare-string 400 that names no
 //     field, and its own handler says outright that naming the constraint would be better but the
@@ -179,6 +176,28 @@ group = 'dev.bluestep'
 // record that emits a field it cannot bind back does not round-trip through its own mapper. Removes a
 // spurious field; nothing reads it. GlobalUserScopeWireTest is the coverage that would have caught it,
 // matching what GlobalUserRecordWireTest does next door.
+// 4.1.3, re-released. The column-width bounds now count CODE POINTS, not UTF-16 code units, via a
+// @CodePointSize constraint of our own. @Size counts String.length(); varchar(n) counts characters.
+// For anything outside the Basic Multilingual Plane Java counts two where Postgres counts one, so
+// @Size(max = 30) refused a sixteen-character name the column stores happily. On a whole-record
+// update that is not merely over-strict: the read hands the stored value back verbatim and the write
+// then refuses it, so a row already holding such a value could not be edited through the API at all.
+// That is exactly the round-trip hazard the attribs guard was withdrawn over, so leaving it here
+// would have been inconsistent as well as wrong. With code points, "refuses only what the database
+// refuses anyway" is finally a true statement rather than an approximation.
+//
+// Applied to every bound that mirrors a varchar: the globaluser record write shapes and
+// ResellerUpdateRequest's two. NOT to the bounds that mirror no column (LinkedAccount's jsonb
+// issuer/sub, the scope shapes' reason/actor), which are chosen limits and stay @Size.
+//
+// A ConstraintValidator rather than a compact-constructor check, deliberately: a compact constructor
+// throws during Jackson binding, BEFORE Bean Validation runs, producing a
+// HttpMessageNotReadableException -- a 400 with no fieldErrors array and no field name -- where every
+// other constraint here produces the field-level shape the services' tests assert.
+//
+// Re-released over the same number rather than cut as 4.1.4, so the tag and the artifact stay one
+// string. Anyone who resolved the earlier 4.1.3 holds a stale jar under a number whose content
+// changed; --refresh-dependencies is what clears it.
 version = '4.1.3'
 
 repositories {
