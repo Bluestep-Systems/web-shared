@@ -4,9 +4,13 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import dev.bluestep.global.dto.tenantaccess.ResellerKey;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 
 /**
  * Creating a {@code global.globaluser} row.
@@ -70,31 +74,22 @@ import jakarta.validation.constraints.AssertTrue;
  *                       only ever sign in through a linked account.
  */
 public record GlobalUserRecordCreateRequest(
-		long classid,
+		@Positive long classid,
 		Optional<Long> seqnum,
-		Optional<String> firstName,
-		Optional<String> lastName,
-		Optional<String> username,
-		Optional<String> userEmail,
+		Optional<@Size(max = 30) String> firstName,
+		Optional<@Size(max = 30) String> lastName,
+		Optional<@Size(max = 50) String> username,
+		Optional<@Size(max = 255) String> userEmail,
 		@Valid Optional<ResellerKey> reseller,
 		boolean superUser,
 		boolean disabled,
-		Optional<String> attribs,
+		Optional<@Size(max = 4000) String> attribs,
 		Optional<LocalDateTime> passwordExpireStart,
 		boolean emailValidated,
 		Optional<LocalDateTime> emailValidatedExpireStart,
 		@Valid List<LinkedAccount> linkedAccounts,
 		Optional<String> storedCredential
 ) {
-
-	/**
-	 * The prefix the monolith's encoder puts in front of every value it produces, naming which cipher
-	 * generation encoded the rest.
-	 *
-	 * <p>Matched on rather than parsed: this record does not care which generation, only that the
-	 * value went through the encoder at all.</p>
-	 */
-	private static final String STORED_FORM_PREFIX = "\n";
 
 	/** Jackson binds omitted fields to {@code null} whatever this package's null-marking says. */
 	public GlobalUserRecordCreateRequest {
@@ -115,14 +110,22 @@ public record GlobalUserRecordCreateRequest(
 	/**
 	 * Refuses a credential that has plainly not been through the monolith's encoder.
 	 *
-	 * <p>This is a mistake-catcher, not a security boundary — a caller determined to send a plaintext
-	 * password with the right prefix in front of it will succeed. What it does catch is the mistake
-	 * that actually happens: a caller reading "credential" and passing the password it already has in
-	 * hand, which would store an unusable value and put a live password in a request body on the way.
-	 * Cheap, and it fails at the edge with a reason rather than at a login six months later.</p>
+	 * <p>{@link StoredForm#carriesGenerationMarker} carries what this does and does not establish. In
+	 * particular it accepts only a <em>marked</em> value, which is narrower than the set the monolith
+	 * can decode — the unmarked earlier generation is 56.1% of stored rows and is measured there. This
+	 * record's javadoc previously blurred that by calling the marker something "the monolith's encoder
+	 * puts in front of every value it produces". Every value it produces <em>today</em>, which is not
+	 * the same claim.</p>
+	 *
+	 * <p>{@code @JsonIgnore} is not decoration. A {@code @AssertTrue} method is a JavaBeans getter, so
+	 * without it Jackson serializes {@code storedCredentialInStoredForm} as a property of this record —
+	 * putting a field on the wire that the record cannot bind back, so the type fails to round-trip
+	 * through its own mapper.</p>
 	 */
+	@JsonIgnore
 	@AssertTrue(message = "storedCredential must be the monolith's stored form, not a password")
 	public boolean isStoredCredentialInStoredForm() {
-		return storedCredential.map(value -> value.startsWith(STORED_FORM_PREFIX)).orElse(true);
+		return storedCredential.map(StoredForm::carriesGenerationMarker).orElse(true);
 	}
+
 }

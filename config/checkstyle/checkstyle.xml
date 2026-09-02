@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+		"-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+		"https://checkstyle.org/dtds/configuration_1_3.dtd">
+
+<!--
+	Unused imports, and nothing else.
+
+	Error Prone is already on this build, but its catalogue has no unused-import bug pattern — the
+	compiler does not consider an unused import an error and Error Prone works from the compiler's
+	AST, so there is nothing there to switch on. Checkstyle is the surgical alternative: it is a
+	separate parse, it can be scoped to exactly two checks, and it changes no bytes on disk.
+
+	Deliberately NOT Spotless. Spotless can remove unused imports, but it does so by rewriting the
+	file, and this repo is hand-formatted with tabs and deliberate javadoc wrapping that a formatter
+	would fight on every subsequent commit. A linter that reports and fails is the whole requirement;
+	a formatter that edits is a migration nobody asked for.
+
+	Held to two checks on purpose. Every additional rule is a style opinion this repo has not ruled
+	on, and a ruleset that grows quietly is one that eventually gets switched off wholesale.
+-->
+<module name="Checker">
+	<property name="severity" value="error"/>
+	<property name="charset" value="UTF-8"/>
+	<property name="fileExtensions" value="java"/>
+
+	<module name="TreeWalker">
+		<!--
+			processJavadoc MUST stay true. With it false — which is Checkstyle's default — an import
+			referenced only from a {@link} is reported as unused, and this codebase's javadoc links
+			types constantly. Turning it off would produce a page of false positives on the first run
+			and teach everyone to ignore the check.
+		-->
+		<module name="UnusedImports">
+			<property name="processJavadoc" value="true"/>
+		</module>
+
+		<!-- The same class imported twice, or imported from java.lang / the current package. -->
+		<module name="RedundantImport"/>
+	</module>
+</module>
