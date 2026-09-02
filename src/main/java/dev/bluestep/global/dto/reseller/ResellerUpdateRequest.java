@@ -2,8 +2,9 @@ package dev.bluestep.global.dto.reseller;
 
 import java.util.Optional;
 
+import dev.bluestep.global.dto.constraints.CodePointSize;
+
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
 
 /**
  * Editing a reseller's branding: the twelve columns of {@code global.reseller} that the monolith's
@@ -32,10 +33,16 @@ import jakarta.validation.constraints.Size;
  * would be inventing an operation rather than replacing one.</p>
  *
  * <p>The two length limits are written as container-element constraints
- * ({@code Optional<@Size(max = 256) String>}) rather than on the component, because a constraint
+ * ({@code Optional<@CodePointSize(max = 256) String>}) rather than on the component, because a constraint
  * placed on an {@code Optional} is checked against the {@code Optional} itself and fails at runtime
  * with "no validator could be found" instead of checking the value inside it. The two columns
  * carrying them are the only ones on this table that are not {@code text}.</p>
+ *
+ * <p>{@link dev.bluestep.global.dto.constraints.CodePointSize} rather than {@code @Size} because the
+ * bound is a column width: {@code @Size} counts UTF-16 code units and {@code varchar(256)} counts
+ * characters, so a value of supplementary-plane characters would be refused here and accepted by the
+ * database. On a whole-record update that is worse than over-strict — a row already holding one could
+ * not be edited at all, since the read hands the value back and the write then refuses it.</p>
  *
  * @param supportEmail   where this reseller's users are told to write
  * @param defaultDomain  the host its tenants front by default. Not a URL — a bare host name.
@@ -46,8 +53,8 @@ import jakarta.validation.constraints.Size;
  *                       something inferred from a missing field.
  */
 public record ResellerUpdateRequest(
-		Optional<@Size(max = 256) String> supportEmail,
-		Optional<@Size(max = 256) String> defaultDomain,
+		Optional<@CodePointSize(max = 256) String> supportEmail,
+		Optional<@CodePointSize(max = 256) String> defaultDomain,
 		Optional<String> privacyPageUrl,
 		Optional<String> termsPageUrl,
 		@NotNull ResellerIcons icons
