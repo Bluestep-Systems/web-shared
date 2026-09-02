@@ -6,6 +6,7 @@ import java.util.Optional;
 
 import dev.bluestep.global.dto.tenantaccess.ResellerKey;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
 
 /**
  * Replacing a {@code global.globaluser} row's editable columns.
@@ -47,14 +48,14 @@ import jakarta.validation.Valid;
  *                  mistaken for "no change".
  */
 public record GlobalUserRecordUpdateRequest(
-		Optional<String> firstName,
-		Optional<String> lastName,
-		Optional<String> username,
-		Optional<String> userEmail,
+		Optional<@Size(max = 30) String> firstName,
+		Optional<@Size(max = 30) String> lastName,
+		Optional<@Size(max = 50) String> username,
+		Optional<@Size(max = 255) String> userEmail,
 		@Valid Optional<ResellerKey> reseller,
 		boolean superUser,
 		boolean disabled,
-		Optional<String> attribs,
+		Optional<@Size(max = 4000) String> attribs,
 		Optional<LocalDateTime> passwordExpireStart,
 		boolean emailValidated,
 		Optional<LocalDateTime> emailValidatedExpireStart,
@@ -74,4 +75,5 @@ public record GlobalUserRecordUpdateRequest(
 				emailValidatedExpireStart == null ? Optional.empty() : emailValidatedExpireStart;
 		linkedAccounts = linkedAccounts == null ? List.of() : List.copyOf(linkedAccounts);
 	}
+
 }

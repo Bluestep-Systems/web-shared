@@ -2,6 +2,22 @@ plugins {
     id 'java-library'
     id 'maven-publish'
     id 'net.ltgt.errorprone' version '5.1.0'
+    id 'checkstyle'
+}
+
+// Unused imports fail the build. See config/checkstyle/checkstyle.xml for why this is Checkstyle
+// rather than Error Prone (no such bug pattern) or Spotless (rewrites hand-formatted files).
+//
+// The plugin wires checkstyleMain and checkstyleTest into `check` on its own, so `./gradlew build`
+// catches this and both source sets are covered without naming them here.
+checkstyle {
+    toolVersion = '10.21.4'
+    configFile = file('config/checkstyle/checkstyle.xml')
+    // What actually fails this build is maxErrors, which defaults to 0 — the ruleset declares
+    // severity=error, so a violation is an error and the default is already the strict one.
+    // maxWarnings is set for the case that ruleset ever gains a warning-severity rule: its default is
+    // Integer.MAX_VALUE, so such a rule would otherwise report and pass. Inert today, on purpose.
+    maxWarnings = 0
 }
 
 publishing {
@@ -80,7 +96,65 @@ group = 'dev.bluestep'
 // are one string, and this was ratified as the v4_1_1 contract binding. Nothing resolves it until the
 // GitHub release is cut — mavenLocal() is what makes an unreleased version look fine in a sibling
 // checkout, and web-global's app/build.gradle pins the coordinate it will need.
-version = '4.1.1'
+//
+// 4.1.2 adds the credential write the 4.1.1 surface left out, and tightens what the 4.1.1 request
+// shapes accept:
+//   * GlobalUserCredentialUpdateRequest — the credential on its own verb. 4.1.1 omitted it from
+//     update as a consequence of the "no credential rides an account edit" rule rather than as a
+//     decision, which left the monolith's admin screen setting a password on its model and calling
+//     update: accepted, discarded, no error. The whole-record update still cannot touch the column.
+//   * @Size on the bounded string components of the globaluser record WRITE shapes (create and
+//     update), derived from the column widths (firstname/lastname 30, username 50, useremail 255,
+//     attribs 4000) rather than guessed. NOT on UsernameLookupRequest, which names the same
+//     varchar(50) column: a lookup does not write, so an over-long name there is currently a
+//     well-defined 404 rather than an error, and turning that into a 400 would change how a shipped
+//     tag answers a request it already answers coherently.
+//     Note @Size counts UTF-16 code units where varchar(n) counts characters, so a 30-emoji first
+//     name is 60 to the constraint and 30 to Postgres. Always stricter, never looser, so nothing
+//     unstorable slips through — but it is not exactly the column bound.
+//     An over-long value was reaching a transaction and being refused by Postgres, which
+//     the consumer then has to translate: web-global maps it to a bare-string 400 that names no
+//     field, and its own handler says outright that naming the constraint would be better but the
+//     cause chain is vendor SQL. A constraint answers at the edge with the field. No valid request
+//     changes behaviour, which is why this is safe to apply to shapes 4.1.1 already serves — the
+//     values it newly refuses are values the database refused anyway.
+//   * @Positive on the create request's classid. This one DOES narrow what an already-released tag
+//     accepts -- classid 0 was a 201 creating a row under a class nothing can find, and is now a 400 --
+//     but it refuses only an incoherent key, never a usable one, so it is a bug fix rather than a
+//     contract change. Measured: no non-positive classid exists.
+//
+// A shape guard on attribs was written and WITHDRAWN. It belongs in the same family as the credential
+// guard and catches the same kind of mistake, but it is not free the way @Size is: attribs is
+// varchar(4000) with no CHECK, so Postgres accepts 'PLATFORM_A,PLATFORM_B' happily, and these shapes
+// are served by an ALREADY-RELEASED tag whose controller binds them -- so the guard would refuse
+// values 4.1.1 stored with a 201. Worse, the update is a whole-record replace and a read hands the
+// stored value straight back, so any row already holding a non-Base64 attribs would become
+// un-editable through the API: GET, change a surname, PUT, 400, with no way for the caller to comply.
+// Zero such rows exist on a development copy, but that is one schema and the constraint's blast radius
+// is every tenant. Reinstating it needs a fleet-wide count first, and probably a tag that has not
+// shipped yet.
+//
+// NO verify operation, deliberately. The obvious companion — monolith encodes a candidate, this
+// service compares bytes, answers a boolean — is unsound against the real data: 133 of 237 credential
+// -carrying accounts (56.1%) in a development copy of the global schema hold an EARLIER cipher
+// generation, which the monolith reads by decoding rather than matching. A byte comparison would
+// refuse the correct password for those. StoredForm carries the measurement; verify wants that
+// population at zero first.
+//
+// Additive on the wire, with one correction that goes the other way. The constraint annotations
+// themselves serialize and bind identically. But a @AssertTrue method is a JavaBeans getter, so
+// Jackson was serializing the derived booleans as properties — 4.1.1's create request has been
+// emitting `storedCredentialInStoredForm` since it shipped, and the new attribs guard would have
+// added `attribsInStoredForm` to the update request too. A record that emits a property it cannot
+// bind back does not round-trip through its own mapper. All four are @JsonIgnore now, so 4.1.2
+// REMOVES a spurious field rather than adding one; nothing reads it, and a consumer tolerant enough
+// to have accepted it is tolerant of its absence. The same leak exists on GlobalUserScopeEntry and
+// GlobalUserScopeRequest, shipped in 4.0.0, and is deliberately left alone here — retrofitting types
+// this change has no other business touching is a separate decision.
+// A PATCH for the same reason 4.1.1 was: ContractVersion.tag() puts this number in the URL, so the
+// jar version and the served path are one string. Nothing resolves it until the GitHub release is
+// cut — mavenLocal() is what makes an unreleased version look fine in a sibling checkout.
+version = '4.1.2'
 
 repositories {
     mavenCentral()
@@ -160,6 +234,13 @@ dependencies {
     // A consumer of these DTOs that speaks msgpack must declare the dataformat itself.
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    // The constraint annotations ARE part of this module's published contract now — @Size derived
+    // from column widths, and two @AssertTrue guards over opaque columns — so "the annotation is
+    // present in the source" is not evidence that it fires. Without a provider on the test
+    // classpath, swapping two @Size values or moving one somewhere Bean Validation never reads it
+    // leaves the whole suite green. This is the provider the consumers run (Boot's starter-validation
+    // pulls the same family), so what fires here is what fires there.
+    testImplementation 'org.hibernate.validator:hibernate-validator:9.0.1.Final'
     // 1.5.0+: earlier ArchUnit bundles an ASM that cannot read Java 25 class files (major
     // 69). It fails silently — the import yields zero classes and every rule passes
     // vacuously — which is what scanFoundTheDtoRecords() exists to catch.
