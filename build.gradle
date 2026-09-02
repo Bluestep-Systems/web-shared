@@ -59,7 +59,28 @@ group = 'dev.bluestep'
 // administrator writes and withdraws, and it is the monolith that knows who materializes in which
 // tenant. Keeping the shapes private to the server would have meant the client either hand-rolling
 // them or not being able to call at all.
-version = '4.1.0'
+//
+// 4.1.1 adds the shapes the monolith needs to stop opening a second datasource onto the `global`
+// schema and writing its own SQL against global.GLOBALUSER and global.RESELLER:
+//   * dto.globaluserrecord — the globaluser ROW, listable and filterable, resolvable by username and
+//     by OpenID (issuer, sub) within one organization, creatable and updatable. Deliberately a
+//     different package from dto.globaluser, which is the tenant-catalog CLASSIFICATION and keeps
+//     that meaning; the two are neighbours, not variants.
+//   * dto.reseller gains ResellerRecordResponse (the twelve branding columns PLUS the display name
+//     the monolith orders and renders by, which lives on the joined global.basetable row) and
+//     ResellerUpdateRequest (the twelve editable columns). ResellerResponse itself is untouched, so
+//     4.0.0 and 4.1.0 keep serving exactly the shape they promised and need no frozen snapshots.
+//
+// Purely additive, and the only change to an existing type is a compact constructor on ResellerIcons
+// that maps an omitted field to Optional.empty() instead of null — same components, same wire, and
+// needed because that record is now something a caller sends rather than only receives.
+//
+// A PATCH rather than a minor, unlike 4.1.0's additive bump. The number is not only a dependency
+// coordinate here: ContractVersion.tag() puts it in the URL, so the jar version and the served path
+// are one string, and this was ratified as the v4_1_1 contract binding. Nothing resolves it until the
+// GitHub release is cut — mavenLocal() is what makes an unreleased version look fine in a sibling
+// checkout, and web-global's app/build.gradle pins the coordinate it will need.
+version = '4.1.1'
 
 repositories {
     mavenCentral()
