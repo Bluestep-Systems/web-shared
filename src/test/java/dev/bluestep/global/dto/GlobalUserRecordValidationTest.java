@@ -139,11 +139,28 @@ class GlobalUserRecordValidationTest {
 	 * reports a failed constraint's rejected value would publish a live password if the constraint sat
 	 * on {@code storedCredential} itself, and reports {@code false} because it does not.
 	 */
+	/**
+	 * The credential is required, and every shape of "nothing" is a violation rather than an
+	 * instruction. This is the constraint that stops {@code {}} — the most likely malformed body this
+	 * endpoint receives, and the one its intended caller produces by accident when an admin leaves the
+	 * password box blank — from deleting an account's password.
+	 */
+	@Test
+	@DisplayName("a missing, null, empty or blank credential is refused")
+	void notBlank_credentialIsRequired() {
+		for (String nothing : new String[] {null, "", "   ", "\t\n"}) {
+			assertEquals(Set.of("storedCredential"),
+					violatedPaths(new GlobalUserCredentialUpdateRequest(nothing)),
+					"a credential update that names nothing to write is incoherent, not a request to "
+							+ "clear; and exactly one violation should say so");
+		}
+	}
+
 	@Test
 	@DisplayName("the credential guard fires, and reports the derived property rather than the value")
 	void assertTrue_credentialGuardFires() {
 		Set<ConstraintViolation<GlobalUserCredentialUpdateRequest>> violations =
-				VALIDATOR.validate(new GlobalUserCredentialUpdateRequest(Optional.of("hunter2")));
+				VALIDATOR.validate(new GlobalUserCredentialUpdateRequest("hunter2"));
 
 		assertEquals(1, violations.size());
 		ConstraintViolation<GlobalUserCredentialUpdateRequest> violation =

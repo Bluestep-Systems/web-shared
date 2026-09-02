@@ -1,6 +1,5 @@
 package dev.bluestep.global.dto;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -45,7 +44,7 @@ class GlobalUserRecordConstraintsTest {
 		@Test
 		@DisplayName("accepts a value carrying a cipher-generation marker")
 		void acceptsAMarkedValue() {
-			assertTrue(credentialUpdate(Optional.of(STORED_CREDENTIAL)).isStoredCredentialInStoredForm());
+			assertTrue(credentialUpdate(STORED_CREDENTIAL).isStoredCredentialInStoredForm());
 			assertTrue(create(Optional.of(STORED_CREDENTIAL)).isStoredCredentialInStoredForm());
 		}
 
@@ -56,7 +55,7 @@ class GlobalUserRecordConstraintsTest {
 		@Test
 		@DisplayName("refuses something that looks like a password")
 		void refusesAPlaintextPassword() {
-			assertFalse(credentialUpdate(Optional.of("not-a-stored-form")).isStoredCredentialInStoredForm());
+			assertFalse(credentialUpdate("not-a-stored-form").isStoredCredentialInStoredForm());
 			assertFalse(create(Optional.of("not-a-stored-form")).isStoredCredentialInStoredForm());
 		}
 
@@ -73,11 +72,11 @@ class GlobalUserRecordConstraintsTest {
 		@Test
 		@DisplayName("accepts only the generations the monolith's decoder has a case for")
 		void acceptsOnlyDecodableGenerations() {
-			assertTrue(credentialUpdate(Optional.of("\n0QUJD")).isStoredCredentialInStoredForm());
-			assertTrue(credentialUpdate(Optional.of("\n1QUJD")).isStoredCredentialInStoredForm());
-			assertFalse(credentialUpdate(Optional.of("\n2QUJD")).isStoredCredentialInStoredForm());
-			assertFalse(credentialUpdate(Optional.of("\n9QUJD")).isStoredCredentialInStoredForm());
-			assertFalse(credentialUpdate(Optional.of("\nxQUJD")).isStoredCredentialInStoredForm());
+			assertTrue(credentialUpdate("\n0QUJD").isStoredCredentialInStoredForm());
+			assertTrue(credentialUpdate("\n1QUJD").isStoredCredentialInStoredForm());
+			assertFalse(credentialUpdate("\n2QUJD").isStoredCredentialInStoredForm());
+			assertFalse(credentialUpdate("\n9QUJD").isStoredCredentialInStoredForm());
+			assertFalse(credentialUpdate("\nxQUJD").isStoredCredentialInStoredForm());
 		}
 
 		/**
@@ -88,8 +87,20 @@ class GlobalUserRecordConstraintsTest {
 		@Test
 		@DisplayName("refuses a marker with no ciphertext after it")
 		void refusesAMarkerWithNoBody() {
-			assertFalse(credentialUpdate(Optional.of("\n")).isStoredCredentialInStoredForm());
-			assertFalse(credentialUpdate(Optional.of("\n1")).isStoredCredentialInStoredForm());
+			assertFalse(credentialUpdate("\n1").isStoredCredentialInStoredForm());
+		}
+
+		/**
+		 * A bare marker is whitespace, so it is blank, so it is {@code @NotBlank}'s to refuse and this
+		 * constraint stands aside — the request is still a 400, from the constraint that describes the
+		 * problem best. Asserted so that the division of labour is visible rather than surprising: the
+		 * two constraints between them must leave no gap, and this is where they meet.
+		 */
+		@Test
+		@DisplayName("leaves a whitespace-only value to @NotBlank")
+		void leavesWhitespaceToNotBlank() {
+			assertTrue(credentialUpdate("\n").isStoredCredentialInStoredForm());
+			assertTrue(credentialUpdate("\n\n\n").isStoredCredentialInStoredForm());
 		}
 
 		/**
@@ -99,9 +110,9 @@ class GlobalUserRecordConstraintsTest {
 		@Test
 		@DisplayName("the shortest legal marked value is accepted, and one character less is not")
 		void pinsTheLengthBoundary() {
-			assertTrue(credentialUpdate(Optional.of("\n1QUJD")).isStoredCredentialInStoredForm(),
+			assertTrue(credentialUpdate("\n1QUJD").isStoredCredentialInStoredForm(),
 					"marker, generation, and one full Base64 quantum is the minimum");
-			assertFalse(credentialUpdate(Optional.of("\n1QUJ")).isStoredCredentialInStoredForm(),
+			assertFalse(credentialUpdate("\n1QUJ").isStoredCredentialInStoredForm(),
 					"a body that is not a whole number of quanta is not something the decoder can read");
 		}
 
@@ -113,9 +124,8 @@ class GlobalUserRecordConstraintsTest {
 		@Test
 		@DisplayName("refuses a marked value whose body is not Base64")
 		void refusesAMarkedValueWithAnUnreadableBody() {
-			assertFalse(credentialUpdate(Optional.of("\n1hunter2!")).isStoredCredentialInStoredForm());
-			assertFalse(credentialUpdate(Optional.of("\n\n\n")).isStoredCredentialInStoredForm());
-			assertFalse(credentialUpdate(Optional.of("\n1QUJD\r\nRUZH")).isStoredCredentialInStoredForm(),
+			assertFalse(credentialUpdate("\n1hunter2!").isStoredCredentialInStoredForm());
+			assertFalse(credentialUpdate("\n1QUJD\r\nRUZH").isStoredCredentialInStoredForm(),
 					"the monolith's encoder never wraps, so a wrapped body did not come from it");
 		}
 
@@ -129,29 +139,33 @@ class GlobalUserRecordConstraintsTest {
 		@Test
 		@DisplayName("refuses an unmarked legacy value, which is why the guard is about the current generation")
 		void refusesAnUnmarkedLegacyValue() {
-			assertFalse(credentialUpdate(Optional.of("SUpLTA==")).isStoredCredentialInStoredForm());
+			assertFalse(credentialUpdate("SUpLTA==").isStoredCredentialInStoredForm());
 		}
 
-		/** No credential is a legitimate account state, not a malformed request. */
+		/**
+		 * On <em>create</em>, no credential is still a legitimate account state — an account that will
+		 * only ever sign in through a linked identity. The update shape is the one where absence is not
+		 * expressible at all.
+		 */
 		@Test
-		@DisplayName("accepts no credential at all")
-		void acceptsAnEmptyCredential() {
-			assertTrue(credentialUpdate(Optional.empty()).isStoredCredentialInStoredForm());
+		@DisplayName("create still accepts no credential at all")
+		void createAcceptsAnEmptyCredential() {
 			assertTrue(create(Optional.empty()).isStoredCredentialInStoredForm());
 		}
+
+		/**
+		 * A missing credential is {@code @NotBlank}'s to report, not this constraint's. Two violations
+		 * for one omission would tell a caller its absent value is also malformed, which is noise on top
+		 * of the answer.
+		 */
+		@Test
+		@DisplayName("defers a missing value to @NotBlank rather than reporting it twice")
+		void defersAbsenceToNotBlank() {
+			assertTrue(credentialUpdate(null).isStoredCredentialInStoredForm());
+		}
 	}
 
-	/**
-	 * The compact constructor's own contract, called directly: a {@code null} component becomes empty.
-	 * {@link GlobalUserRecordWireTest} is what proves Jackson actually produces that {@code null}.
-	 */
-	@Test
-	@DisplayName("a null credential component is coalesced to empty")
-	void nullCredentialComponentBecomesEmpty() {
-		assertEquals(Optional.empty(), new GlobalUserCredentialUpdateRequest(null).storedCredential());
-	}
-
-	private static GlobalUserCredentialUpdateRequest credentialUpdate(Optional<String> credential) {
+	private static GlobalUserCredentialUpdateRequest credentialUpdate(String credential) {
 		return new GlobalUserCredentialUpdateRequest(credential);
 	}
 

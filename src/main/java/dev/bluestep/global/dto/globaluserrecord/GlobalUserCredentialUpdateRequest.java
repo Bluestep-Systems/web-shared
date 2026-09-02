@@ -1,10 +1,9 @@
 package dev.bluestep.global.dto.globaluserrecord;
 
-import java.util.Optional;
-
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.NotBlank;
 
 /**
  * Setting a {@code global.globaluser} row's credential, on its own.
@@ -22,6 +21,31 @@ import jakarta.validation.constraints.AssertTrue;
  * then called update — so with no credential on the update shape, an administrator changing a global
  * user's password saw the change accepted and discarded. Silently: no error, because nothing had gone
  * wrong from the update's point of view. The screen needs an operation that exists.</p>
+ *
+ * <h2>Required, and there is no way to clear a credential</h2>
+ *
+ * <p>{@code storedCredential} is a plain {@code String} under {@code @NotBlank}, not an
+ * {@code Optional}. A missing field, an explicit {@code null}, an empty string and a string of spaces
+ * are all 400s. <b>This shape has no expressible form that removes a credential.</b></p>
+ *
+ * <p>That is the point rather than an omission. 4.1.2 modelled the component as an {@code Optional}
+ * and read empty as "clear the credential", which put a destructive operation behind the most likely
+ * malformed body this endpoint can receive — {@code {}} — and behind the exact payload its intended
+ * caller produces by accident. The monolith never loads a credential (no response on this surface
+ * carries one), so its in-memory model holds {@code null} for the password unless an administrator
+ * has just typed one; a request built from that model without checking would have sent {@code {}} and
+ * silently deleted the account's password while reporting success. An admin screen whose password box
+ * was left blank is precisely that case.</p>
+ *
+ * <p>So the caller must have a credential in hand to call this at all, and a caller that does not
+ * finds out at the edge with a 400 naming the field instead of afterwards, from a user who can no
+ * longer sign in. An update that names nothing to write is not a request to clear something — it is
+ * an incoherent request, and the fail-fast reading is the correct one.</p>
+ *
+ * <p>Removing a credential outright — legitimate for an account that signs in only through a linked
+ * identity — is therefore <em>not</em> available here. It is a different operation with a different
+ * shape and a different blast radius, and if it is ever wanted it wants its own verb saying so out
+ * loud, not an empty body that could equally have been a mistake.</p>
  *
  * <h2>Still not a password</h2>
  *
@@ -59,28 +83,23 @@ import jakarta.validation.constraints.AssertTrue;
  * decision with its own reasoning rather than a detail of this one.</p>
  *
  * @param storedCredential the monolith's stored representation of the new password — <b>never a
- *                         password</b>. Empty removes the credential outright, which is a real
- *                         operation rather than an accident to guard against: an account that signs in
- *                         only through a linked identity has no use for one, and the column is
- *                         nullable precisely so it can say that. Stated here because empty is the one
- *                         value whose meaning a caller could otherwise guess wrongly as "leave it
- *                         alone" — this record has one component, so an omitted one is not a partial
- *                         update, it is the whole request.
+ *                         password</b>, and never absent. Required, for the reasons above.
  */
 public record GlobalUserCredentialUpdateRequest(
-		Optional<String> storedCredential
+		@NotBlank String storedCredential
 ) {
-
-	/** Jackson binds omitted fields to {@code null} whatever this package's null-marking says. */
-	public GlobalUserCredentialUpdateRequest {
-		storedCredential = storedCredential == null ? Optional.empty() : storedCredential;
-	}
 
 	/**
 	 * Refuses a credential that has plainly not been through the monolith's encoder.
 	 *
 	 * <p>{@link StoredForm#carriesGenerationMarker} carries what this does and does not establish,
 	 * including which cipher generations it accepts and what that costs.</p>
+	 *
+	 * <p>Answers {@code true} for any value {@code @NotBlank} already refuses — null, empty, or all
+	 * whitespace — so that one omission is reported once, as the absence it is, rather than twice with
+	 * this constraint also complaining that nothing is not in the monolith's stored form. Absence in
+	 * every shape it takes belongs to {@code @NotBlank}; this constraint only has an opinion about a
+	 * value that is actually there.</p>
 	 *
 	 * <p>{@code @JsonIgnore} is not decoration. A {@code @AssertTrue} method is a JavaBeans getter, so
 	 * without it Jackson serializes {@code storedCredentialInStoredForm} as a property of this record —
@@ -90,6 +109,7 @@ public record GlobalUserCredentialUpdateRequest(
 	@JsonIgnore
 	@AssertTrue(message = "storedCredential must be the monolith's stored form, not a password")
 	public boolean isStoredCredentialInStoredForm() {
-		return storedCredential.map(StoredForm::carriesGenerationMarker).orElse(true);
+		return storedCredential == null || storedCredential.isBlank()
+				|| StoredForm.carriesGenerationMarker(storedCredential);
 	}
 }
