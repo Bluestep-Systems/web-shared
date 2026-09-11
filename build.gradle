@@ -198,7 +198,46 @@ group = 'dev.bluestep'
 // Re-released over the same number rather than cut as 4.1.4, so the tag and the artifact stay one
 // string. Anyone who resolved the earlier 4.1.3 holds a stale jar under a number whose content
 // changed; --refresh-dependencies is what clears it.
-version = '4.1.3'
+//
+// 4.1.4 names a third credential generation: one-way, Argon2id, which the monolith cannot read back
+// and does not want to. StoredForm gains it, with a body shape of its own.
+//
+// The set it joins was deliberately closed, and the reasoning that closed it was sound and is now
+// half wrong. It ran: an unrecognised generation decodes to nothing, a credential that decodes to
+// nothing is an account that can never sign in, so refusing one protects the account. That inference
+// held for every generation the constraint was written against, because all of them were ciphers and
+// reading one back was how a password was checked. It does not hold for this one -- a `\n2` value
+// decodes to nothing on purpose and its account signs in perfectly well, because the monolith stopped
+// verifying by decoding and now verifies against the stored form. "Cannot be read back" became a
+// property to want rather than a symptom to catch. The monolith's docs/password-hashing-plan.md is
+// the whole of that argument; CU-86bbn5r5v is the work.
+//
+// So the set stays closed and gains a member rather than being opened, and each generation is held to
+// ITS OWN body shape rather than to a single one. A `\n2` carrying a Base64 body is still refused,
+// exactly as it was before the generation existed; what is accepted is the Argon2id encoded form,
+// optionally behind a key=value segment carrying what the monolith knew about the password at the one
+// moment it had it. That segment is held to a shape rather than to a list of keys, because its keys
+// are the monolith's to add.
+//
+// PURELY WIDENING on the wire, which is the reason this is safe to apply to shapes already-released
+// tags bind. The shared records are bound by every version's controllers, so a constraint change
+// reaches the released tags too — the Surface split governs routing and only routing. Every value any
+// tag accepted before, it accepts now; the only difference is a shape that used to be a 400 and is now
+// a 201. That is the opposite of the round-trip hazard the attribs guard was withdrawn over.
+//
+// NO ContractVersion entry, deliberately, and this is the first release where that is a decision
+// rather than an omission. Nothing is reshaped and no surface is added, so a /api/v4.1.4/ tag would
+// answer byte-identically to /api/v4.1.3/ in every particular — a routable name for a distinction
+// that does not exist. The precedent is 4.1.2, which shipped as an artifact and never as a tag. What
+// does follow from that: this loosening reaches every live tag the moment web-global resolves it,
+// which is the intended behaviour and is why the ordering below matters.
+//
+// ORDERING, because a credential is not a field you get to fix afterwards. web-global must be running
+// this artifact BEFORE any monolith writes the generation, or a password change is a 400 at the edge.
+// The monolith guards that from its side: security.one-way-global-passwords is off by default and is
+// documented as turnable-on only once every ring can read `\n2`. The two guards are independent on
+// purpose — neither service has to trust the other's rollout.
+version = '4.1.4'
 
 repositories {
     mavenCentral()
