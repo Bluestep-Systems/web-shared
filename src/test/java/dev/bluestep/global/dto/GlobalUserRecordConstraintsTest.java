@@ -37,6 +37,15 @@ class GlobalUserRecordConstraintsTest {
 	 */
 	private static final String STORED_CREDENTIAL = "\n1Q0lQSEVSVEVYVA==";
 
+	/**
+	 * The shape the one-way generation produces: the marker, {@code '2'}, what the monolith knew about
+	 * the password at the moment it had it, and Argon2id's own encoded form. Invented, like every other
+	 * fixture here — the salt and hash are Base64-alphabet filler, because nothing in this package
+	 * computes or checks a hash.
+	 */
+	private static final String ONE_WAY_CREDENTIAL =
+			"\n2s=2,b=41.00$argon2id$v=19$m=9216,t=4,p=1$c2FsdHNhbHRzYWx0c2E$aGFzaGhhc2hoYXNoaGFzaGhhc2g";
+
 	@Nested
 	@DisplayName("the credential guard")
 	class CredentialGuard {
@@ -60,23 +69,98 @@ class GlobalUserRecordConstraintsTest {
 		}
 
 		/**
-		 * Both generations the monolith's decoder has a case for, and nothing else.
+		 * The generations this package names, and nothing else.
 		 *
-		 * <p>Its switch is closed — {@code '0'} and {@code '1'}, no default — and it falls through to
-		 * returning {@code null} while swallowing the exception. So an unrecognised generation is not a
-		 * value from the future this package should wave through; it is a value that stores with a 200
-		 * and then decodes to nothing, leaving an account that can never sign in and logs no reason. A
-		 * genuinely new generation needs a case added to that switch anyway, so the constraint follows a
-		 * monolith change rather than blocking one.</p>
+		 * <p>The monolith's switch is closed — {@code '0'}, {@code '1'}, {@code '2'}, no default — and
+		 * it falls through to returning {@code null} while swallowing the exception. So a generation
+		 * nothing names is not a value from the future to wave through; it is a value that stores with
+		 * a 200 and is then unusable, with no error at either end. A genuinely new generation needs a
+		 * case added to that switch anyway, so this constraint follows a monolith change rather than
+		 * blocking one.</p>
+		 *
+		 * <p><b>{@code '2'} is the generation that broke the old phrasing of this test</b>, which asked
+		 * whether the decoder could read the value back. It cannot read a {@code \n2} value back and
+		 * the account signs in anyway, because verification stopped going through the decoder. What the
+		 * test asks now is whether the monolith's encoder produced the value — which was always what the
+		 * constraint was for.</p>
 		 */
 		@Test
-		@DisplayName("accepts only the generations the monolith's decoder has a case for")
-		void acceptsOnlyDecodableGenerations() {
+		@DisplayName("accepts only the generations the monolith's encoder produces")
+		void acceptsOnlyNamedGenerations() {
 			assertTrue(credentialUpdate("\n0QUJD").isStoredCredentialInStoredForm());
 			assertTrue(credentialUpdate("\n1QUJD").isStoredCredentialInStoredForm());
-			assertFalse(credentialUpdate("\n2QUJD").isStoredCredentialInStoredForm());
+			assertTrue(credentialUpdate(ONE_WAY_CREDENTIAL).isStoredCredentialInStoredForm());
 			assertFalse(credentialUpdate("\n9QUJD").isStoredCredentialInStoredForm());
 			assertFalse(credentialUpdate("\nxQUJD").isStoredCredentialInStoredForm());
+		}
+
+		/**
+		 * Each generation is held to <em>its own</em> body shape, so naming the character is not what
+		 * accepts a value. This is the assertion that keeps the widening honest: a {@code \n2} carrying
+		 * a Base64 body is still refused, exactly as it was before that generation existed.
+		 */
+		@Test
+		@DisplayName("a generation's marker does not admit another generation's body")
+		void bodyShapeFollowsTheGeneration() {
+			assertFalse(credentialUpdate("\n2QUJD").isStoredCredentialInStoredForm(),
+					"a Base64 body is not what the one-way generation produces");
+			assertFalse(credentialUpdate("\n1" + ONE_WAY_CREDENTIAL.substring(2)).isStoredCredentialInStoredForm(),
+					"nor is an Argon2id encoded form what a reversible generation produces");
+		}
+
+		/**
+		 * The metadata the one-way body carries ahead of the encoded form is the monolith's to extend,
+		 * so it is held to a shape rather than to a list of keys — but it is held to one, because a
+		 * password with a marker and an encoded form glued after it would otherwise pass.
+		 */
+		@Test
+		@DisplayName("the one-way body's leading segment is optional but shaped")
+		void oneWayMetadataIsShaped() {
+			final String encoded = ONE_WAY_CREDENTIAL.substring(ONE_WAY_CREDENTIAL.indexOf('$'));
+			assertTrue(credentialUpdate("\n2" + encoded).isStoredCredentialInStoredForm(),
+					"a body that is nothing but the encoded form is coherent");
+			assertTrue(credentialUpdate("\n2s=2,b=41.00,x=7" + encoded).isStoredCredentialInStoredForm(),
+					"a key this package has never heard of is the monolith's to add");
+			assertFalse(credentialUpdate("\n2hunter2" + encoded).isStoredCredentialInStoredForm());
+			assertFalse(credentialUpdate("\n2s=" + encoded).isStoredCredentialInStoredForm());
+		}
+
+		/**
+		 * The encoded form is what establishes that a caller did not pass the password it had in hand,
+		 * so a body missing or mangling it has to be refused however plausible the rest looks.
+		 */
+		@Test
+		@DisplayName("refuses a one-way body whose encoded form is not one")
+		void refusesAMalformedOneWayBody() {
+			assertFalse(credentialUpdate("\n2s=2,b=41.00").isStoredCredentialInStoredForm(),
+					"metadata with no encoded form after it");
+			assertFalse(credentialUpdate(ONE_WAY_CREDENTIAL.replace("$argon2id$", "$argon2d$"))
+					.isStoredCredentialInStoredForm(),
+					"a different algorithm is a different thing");
+			assertFalse(credentialUpdate(ONE_WAY_CREDENTIAL.substring(0, ONE_WAY_CREDENTIAL.lastIndexOf('$') + 1))
+					.isStoredCredentialInStoredForm(),
+					"an encoded form with no hash");
+			assertFalse(credentialUpdate(ONE_WAY_CREDENTIAL + "$extra").isStoredCredentialInStoredForm(),
+					"one segment too many is not the encoded form either");
+		}
+
+		/**
+		 * <b>The cross-repository check.</b> Every other fixture here is a shape written to match a
+		 * description of the monolith's encoder; this one came out of that encoder, so it is the only
+		 * assertion that fails if the description and the encoder have drifted apart.
+		 *
+		 * <p>Produced by {@code DBPasswordDescriptor.encryptOneWayPassword} from a passphrase invented
+		 * for the purpose — it names no account and, being one-way, is not a credential for anything.
+		 * The salt carries both {@code +} and {@code /}, which is the half of the alphabet a value
+		 * written against the URL-safe variant would be missing.</p>
+		 */
+		@Test
+		@DisplayName("accepts a value the monolith's encoder actually produced")
+		void acceptsWhatTheEncoderProduces() {
+			final String emitted = "\n2s=2,b=141.99$argon2id$v=19$m=9216,t=4,p=1"
+					+ "$vhny/alZ6HTQOTd+OwuRsw$Pe8XjRT/ITDe1k2dUUF/IdwvSBRlPi5nI8sebh7/z1o";
+			assertTrue(credentialUpdate(emitted).isStoredCredentialInStoredForm());
+			assertTrue(create(Optional.of(emitted)).isStoredCredentialInStoredForm());
 		}
 
 		/**

@@ -40,22 +40,49 @@ final class StoredForm {
 	private static final char GENERATION_MARKER = '\n';
 
 	/**
-	 * The cipher generations the monolith's decoder can actually read.
+	 * The generations whose value the monolith can read back, each a Base64 body over a reversible
+	 * cipher.
 	 *
 	 * <p><b>A closed set, matching a closed switch.</b> The decoder branches on the generation
-	 * character with cases for {@code '0'} and {@code '1'} and no default, falls through to returning
-	 * {@code null}, and swallows the exception on the way. So a value marked with any other character
-	 * is not "a generation this package has not heard of" — it is a value that decodes to nothing, and
-	 * an account whose credential decodes to nothing can never sign in and reports no error at either
+	 * character with cases for {@code '0'} and {@code '1'}, falls through to returning {@code null},
+	 * and swallows the exception on the way. So a value marked with a character nothing here names is
+	 * not "a generation this package has not heard of" — it is a value that decodes to nothing, and an
+	 * account whose credential decodes to nothing can never sign in and reports no error at either
 	 * end.</p>
 	 *
-	 * <p>This deliberately does <em>not</em> stay open for a future generation. A new cipher generation
-	 * requires a change to that switch, so the monolith cannot add one this constraint would have
-	 * needed to already accept; leaving the set open buys nothing and costs the silently-dead account
-	 * above. Measured over a development copy of the global schema: every one of the 104 marked
-	 * credentials carries generation {@code '1'}, so nothing real is refused by naming the set.</p>
+	 * <p>Measured over a development copy of the global schema: every one of the 104 marked credentials
+	 * carries generation {@code '1'}, so nothing real is refused by naming the set.</p>
 	 */
-	private static final String DECODABLE_GENERATIONS = "01";
+	private static final String REVERSIBLE_GENERATIONS = "01";
+
+	/**
+	 * The generation whose value the monolith <em>cannot</em> read back: Argon2id, one-way by design.
+	 *
+	 * <h2>Why this is here at all, when the set above was deliberately closed</h2>
+	 *
+	 * <p>The reasoning that closed it was sound and is now half wrong. It ran: an unrecognised
+	 * generation decodes to nothing, and a credential that decodes to nothing is a dead account, so
+	 * refusing one protects the account. That inference holds for every generation this constraint was
+	 * written against, because all of them were ciphers and reading one back was how a password was
+	 * checked.</p>
+	 *
+	 * <p>It does not hold for this one. A {@code \n2} value decodes to nothing <b>on purpose</b>, and
+	 * the account it belongs to signs in perfectly well — the monolith stopped verifying by decoding
+	 * and now verifies against the stored form, so "cannot be read back" became a property to want
+	 * rather than a symptom to catch. See {@code docs/password-hashing-plan.md} in the monolith.</p>
+	 *
+	 * <p>So the set stays closed and gains a member, rather than being opened. What this constraint
+	 * tests is still "did the monolith's encoder produce this", and the answer for a generation with no
+	 * body shape of its own would still be no. It is named here because its shape is known, not because
+	 * the character is new.</p>
+	 */
+	private static final char ONE_WAY_GENERATION = '2';
+
+	/** The algorithm a one-way body names, in the encoded form Argon2's reference implementation defines. */
+	private static final String ARGON2ID = "argon2id";
+
+	/** What separates the fields of that encoded form, and what ends the segment ahead of it. */
+	private static final char PHC_SEPARATOR = '$';
 
 	/**
 	 * The shortest value that can carry a marker and a body: the marker, the generation character, and
@@ -96,20 +123,94 @@ final class StoredForm {
 	 * wants an explicit verb that says it is carrying an already-stored value, not a quiet loosening
 	 * of this constraint into one that can no longer tell a credential from a password.</p>
 	 *
-	 * <h2>Three conditions, all of them the decoder's own</h2>
+	 * <h2>Three conditions, and the third depends on the second</h2>
 	 *
-	 * <p>Long enough to hold a body, marked with a generation that decoder recognises, and a body its
-	 * Base64 decoder can read. Anything weaker admits a value that stores successfully and then
-	 * decodes to {@code null} — which is not a rejected password but an account that can never sign in
-	 * again, with a 200 at the write and no error at the read. Measured: all 104 marked credentials in
-	 * a development copy of the global schema satisfy all three, so the strictness costs nothing
-	 * real.</p>
+	 * <p>Long enough to hold a body, marked with a generation this package names, and a body of the
+	 * shape <em>that generation</em> produces — Base64 over a reversible cipher, or the Argon2id
+	 * encoded form. Anything weaker admits a value that stores successfully and is then unusable: for
+	 * a reversible generation that is an account which can never sign in again, with a 200 at the
+	 * write and no error at the read; for the one-way generation it is an account whose every password
+	 * is refused, which fails just as quietly. Measured: all 104 marked credentials in a development
+	 * copy of the global schema satisfy all three, so the strictness costs nothing real.</p>
 	 */
 	static boolean carriesGenerationMarker(String credential) {
-		return credential.length() >= SHORTEST_MARKED_VALUE
-				&& credential.charAt(0) == GENERATION_MARKER
-				&& DECODABLE_GENERATIONS.indexOf(credential.charAt(1)) >= 0
-				&& isBase64Body(credential.substring(BODY_START));
+		if (credential.length() < SHORTEST_MARKED_VALUE || credential.charAt(0) != GENERATION_MARKER) {
+			return false;
+		}
+		final String body = credential.substring(BODY_START);
+		if (credential.charAt(1) == ONE_WAY_GENERATION) {
+			return isOneWayBody(body);
+		}
+		return REVERSIBLE_GENERATIONS.indexOf(credential.charAt(1)) >= 0 && isBase64Body(body);
+	}
+
+	/**
+	 * Whether a body has the shape the one-way generation produces: an optional {@code key=value}
+	 * segment, then Argon2id's encoded form.
+	 *
+	 * <p>The encoded form is what makes this a usable test at all. It is self-describing —
+	 * {@code $argon2id$v=19$m=...,t=...,p=...$salt$hash} — so a value carrying it did not come from a
+	 * caller passing the password it had in hand, which is the mistake this class exists to catch. The
+	 * segment ahead of it is whatever the monolith knows about the password and cannot recompute
+	 * later; it is held to a shape rather than parsed, because its keys are the monolith's to add and
+	 * a constraint that enumerated them would refuse the next one.</p>
+	 *
+	 * <p>An <em>empty</em> segment is accepted for the same reason. A body that is nothing but the
+	 * encoded form is a coherent value in this generation, and refusing it would make a key the
+	 * monolith happens to write today into part of the contract.</p>
+	 */
+	private static boolean isOneWayBody(String body) {
+		final int encodedStart = body.indexOf(PHC_SEPARATOR);
+		if (encodedStart < 0 || !isMetadata(body.substring(0, encodedStart))) {
+			return false;
+		}
+		// A leading empty segment, then algorithm, version, cost, salt and hash.
+		final String[] parts = body.substring(encodedStart).split("\\$", -1);
+		return parts.length == 6
+				&& parts[0].isEmpty()
+				&& ARGON2ID.equals(parts[1])
+				&& !parts[2].isEmpty()
+				&& !parts[3].isEmpty()
+				&& !parts[4].isEmpty() && isBase64Alphabet(parts[4])
+				&& !parts[5].isEmpty() && isBase64Alphabet(parts[5]);
+	}
+
+	/**
+	 * Whether a segment is empty or a comma-separated list of non-empty {@code key=value} pairs.
+	 *
+	 * <p>Both halves are held to a token alphabet rather than to anything meaning-bearing. The
+	 * monolith writes numbers here today and the temptation was to say so, but a constraint in this
+	 * repository that refuses the next key's value is a cross-repository coupling nobody would find
+	 * until a password change started answering 400 in production — and it would buy nothing, because
+	 * what establishes that a caller did not pass a password is the Argon2id encoded form after this
+	 * segment, not the segment's contents.</p>
+	 */
+	private static boolean isMetadata(String segment) {
+		if (segment.isEmpty()) {
+			return true;
+		}
+		for (final String pair : segment.split(",", -1)) {
+			final int equals = pair.indexOf('=');
+			if (equals <= 0 || equals == pair.length() - 1
+					|| !isToken(pair.substring(0, equals))
+					|| !isToken(pair.substring(equals + 1))) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/** Alphanumerics and the punctuation a version, a score or a date needs; no whitespace, no {@code =}. */
+	private static boolean isToken(String value) {
+		for (int i = 0; i < value.length(); i++) {
+			final char c = value.charAt(i);
+			final boolean allowed = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
+					|| (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '_' || c == '+';
+			if (!allowed) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**
@@ -138,7 +239,23 @@ final class StoredForm {
 			end--;
 			padding++;
 		}
-		for (int i = 0; i < end; i++) {
+		return isBase64Alphabet(value.substring(0, end));
+	}
+
+	/**
+	 * Whether every character is in the standard Base64 alphabet, with nothing said about length or
+	 * padding.
+	 *
+	 * <p>Split out because the two generations disagree about those two things and agree about this
+	 * one. A reversible body is padded and a whole number of quanta; Argon2id's encoded form carries
+	 * unpadded salt and hash segments whose lengths are whatever the parameters made them, so holding
+	 * them to a multiple of four would refuse every value the encoder produces.</p>
+	 *
+	 * <p>The empty string answers true here. Callers that need a non-empty value say so themselves,
+	 * which is what {@link #isBase64Body}'s own emptiness check is for.</p>
+	 */
+	private static boolean isBase64Alphabet(String value) {
+		for (int i = 0; i < value.length(); i++) {
 			final char c = value.charAt(i);
 			final boolean inAlphabet = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
 					|| (c >= '0' && c <= '9') || c == '+' || c == '/';

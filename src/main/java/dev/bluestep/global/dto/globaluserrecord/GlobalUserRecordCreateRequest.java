@@ -117,6 +117,10 @@ public record GlobalUserRecordCreateRequest(
 	 * puts in front of every value it produces". Every value it produces <em>today</em>, which is not
 	 * the same claim.</p>
 	 *
+	 * <p>"Not a password" is the whole of it, and that no longer implies "readable". One of the
+	 * generations named there is one-way, and a credential in it cannot be turned back into a password
+	 * by this service, by the monolith, or by anyone holding the row.</p>
+	 *
 	 * <p>{@code @JsonIgnore} is not decoration. A {@code @AssertTrue} method is a JavaBeans getter, so
 	 * without it Jackson serializes {@code storedCredentialInStoredForm} as a property of this record —
 	 * putting a field on the wire that the record cannot bind back, so the type fails to round-trip

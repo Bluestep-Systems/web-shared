@@ -93,7 +93,8 @@ public record GlobalUserCredentialUpdateRequest(
 	 * Refuses a credential that has plainly not been through the monolith's encoder.
 	 *
 	 * <p>{@link StoredForm#carriesGenerationMarker} carries what this does and does not establish,
-	 * including which cipher generations it accepts and what that costs.</p>
+	 * including which generations it accepts and what that costs. One of them is one-way, so a value
+	 * arriving here may be a credential this service could not reverse even if it wanted to.</p>
 	 *
 	 * <p>Answers {@code true} for any value {@code @NotBlank} already refuses — null, empty, or all
 	 * whitespace — so that one omission is reported once, as the absence it is, rather than twice with
