@@ -7,7 +7,6 @@ import dev.bluestep.global.dto.constraints.CodePointSize;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.PastOrPresent;
 import jakarta.validation.constraints.Size;
 
 /**
@@ -19,25 +18,37 @@ import jakarta.validation.constraints.Size;
  * a restart, lands on the same rows and overwrites them. The endpoint is idempotent by key.</p>
  *
  * <p>An empty {@code samples} is valid and meaningful: it is the namespace's heartbeat, saying the
- * sampler ran and found no tenant to measure. Without it a namespace with no tenants would be
- * indistinguishable from one whose sampler has stopped.</p>
+ * sampler ran and found no tenant to measure. Web-global records the pass per namespace, so a
+ * namespace with no tenants stays distinguishable from one whose sampler has stopped.</p>
  *
  * <p>The wire keys are the component names; see {@link StorageSample} for why.</p>
  *
- * @param namespace the Kubernetes namespace the sampler runs in, recorded on every row — held to
- *                  the same spelling rules as {@link UsageBatchRequest#namespace()}
- * @param sampledAt the start of the sampling period — midnight UTC while the cadence is daily.
- *                  Never in the future, enforced here; web-global additionally refuses a value
- *                  not aligned to the period (a misaligned value would write a second row for
- *                  the same period) or older than a few periods (an uninitialized or sign-flipped
- *                  producer value would otherwise write a row pricing reads). Both are refusals,
- *                  never silent corrections
+ * <h2>What web-global refuses beyond these constraints</h2>
+ *
+ * <p>Each of these is a 400 — dropped and counted by the producer, never retried — and never a
+ * silent correction. They live at ingest rather than here because each needs server time or the
+ * server's normalization:</p>
+ * <ul>
+ *   <li>a {@code sampledAt} not aligned to the sampling period, which would write a second row
+ *       for the same period;</li>
+ *   <li>a {@code sampledAt} ahead of server time by more than a clock-skew allowance, or older
+ *       than a few periods — an uninitialized or sign-flipped producer value would otherwise
+ *       write a row pricing reads;</li>
+ *   <li>two samples naming the same tenant once schema names are normalized ({@code U1000001},
+ *       {@code u1000001} and {@code 1000001} are one tenant). A pass measures each tenant once,
+ *       so a duplicate is a producer bug.</li>
+ * </ul>
+ *
+ * @param namespace the Kubernetes namespace the sampler runs in, recorded on every row; trimmed,
+ *                  lowercased and spelling-checked at ingest exactly as
+ *                  {@link UsageBatchRequest#namespace()} is
+ * @param sampledAt the start of the sampling period — midnight UTC while the cadence is daily
  * @param samples   one entry per tenant measured, at most {@value #MAX_SAMPLES}; empty for a
  *                  heartbeat
  */
 public record StorageSampleBatchRequest(
 		@NotBlank @CodePointSize(max = UsageBatchRequest.MAX_NAMESPACE_LENGTH) String namespace,
-		@NotNull @PastOrPresent OffsetDateTime sampledAt,
+		@NotNull OffsetDateTime sampledAt,
 		@Size(max = MAX_SAMPLES) List<@Valid StorageSample> samples) {
 
 	/**

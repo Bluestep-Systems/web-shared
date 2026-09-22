@@ -28,10 +28,12 @@ public record StorageUsageResponse(
 		List<StorageUsageDay> days) {
 
 	/**
-	 * Takes a defensive copy of {@code days}, folding an absent list — which is what Jackson binds
-	 * an omitted key to — into the empty series it means.
+	 * Folds an absent {@code latest} or {@code days} into its empty form, and takes a defensive
+	 * copy of a present list. Jackson already binds an omitted {@code latest} to empty; this holds
+	 * the same for a Java caller that passes {@code null}.
 	 */
 	public StorageUsageResponse {
+		latest = latest == null ? Optional.empty() : latest;
 		days = days == null ? List.of() : List.copyOf(days);
 	}
 }

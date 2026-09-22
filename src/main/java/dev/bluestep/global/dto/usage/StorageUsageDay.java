@@ -7,15 +7,17 @@ import java.time.LocalDate;
  * pricing reads, so a report built from these cannot disagree with an invoice.
  *
  * @param day                  the UTC day
- * @param sampleCount          how many samples the day's figures were built from. Zero never
- *                             appears (a day with no sample has no row); a count below the
- *                             cadence's expectation is a sampler gap, and the byte-hours below
- *                             under-state the day by that much
+ * @param sampleCount          how many samples fell in the day. Zero never appears (a day with no
+ *                             sample has no row); a count below the cadence's expectation means
+ *                             the sampler missed runs, and the day's figures rest on fewer
+ *                             measurements than usual
  * @param maxDbBytes           the day's largest {@code dbBytes}
  * @param maxFileLogicalBytes  the day's largest {@code fileLogicalBytes}
- * @param dbByteHours          {@code dbBytes} integrated over the day by web-global's rollup, in
- *                             byte-hours
- * @param fileLogicalByteHours {@code fileLogicalBytes} integrated over the day, in byte-hours
+ * @param dbByteHours          {@code dbBytes} over time, in byte-hours, as web-global's daily
+ *                             rollup integrates it — that rollup, not this record, defines how
+ *                             samples are credited to days
+ * @param fileLogicalByteHours {@code fileLogicalBytes} over time, in byte-hours, integrated the
+ *                             same way
  */
 public record StorageUsageDay(
 		LocalDate day,

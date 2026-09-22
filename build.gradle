@@ -245,7 +245,9 @@ group = 'dev.bluestep'
 //     mis-bound every batch. One record, one UsageWireContractTest, closes that.
 //   * StorageSampleBatchRequest / StorageSample are the disk sampler's push. An empty pass is valid:
 //     it is the namespace's heartbeat, which the staleness check needs to tell "no tenants" from
-//     "sampler dead". sampledAt is an OffsetDateTime period start, refused if in the future.
+//     "sampler dead". sampledAt is an OffsetDateTime period start. Alignment, skew, age and
+//     duplicate-tenant refusals belong to web-global's ingest, since each needs server time or
+//     its normalization.
 //   * StorageUsageResponse / StorageLevel / StorageUsageDay are the tenant-facing storage read, and
 //     carry no physical-bytes figure at all. InternalStorageUsageResponse wraps the tenant answer
 //     with StoragePhysicalDay rows for the internal-admin credential: a separate type rather than

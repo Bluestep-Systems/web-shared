@@ -1,6 +1,7 @@
 package dev.bluestep.global.dto.usage;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.LocalDate;
@@ -215,5 +216,59 @@ class UsageWireContractTest {
 				JSON.readTree(JACKSON2.writeValueAsString(internalResponse())));
 		assertEquals(internalResponse(), JACKSON2.readValue(
 				JSON.writeValueAsString(internalResponse()), InternalStorageUsageResponse.class));
+	}
+
+	/** The never-sampled tenant: both families write the empty {@code Optional}s identically. */
+	@Test
+	void jackson2AndJackson3AgreeOnTheEmptyCase() throws Exception {
+		final InternalStorageUsageResponse empty = new InternalStorageUsageResponse(
+				new StorageUsageResponse("U1000001", DAY, DAY, Optional.empty(), List.of()),
+				Optional.empty(), List.of());
+
+		assertEquals(JSON.readTree(JSON.writeValueAsString(empty)),
+				JSON.readTree(JACKSON2.writeValueAsString(empty)));
+		assertEquals(empty, JACKSON2.readValue(JSON.writeValueAsString(empty),
+				InternalStorageUsageResponse.class));
+		assertEquals(empty, JSON.readValue(JACKSON2.writeValueAsString(empty),
+				InternalStorageUsageResponse.class));
+	}
+
+	/** A Java caller's null {@code Optional} means empty, as it does on the wire. */
+	@Test
+	void nullOptionalsFoldToEmpty() {
+		final StorageUsageResponse tenant = new StorageUsageResponse("U1000001", DAY, DAY, null, null);
+
+		assertEquals(Optional.empty(), tenant.latest());
+		assertEquals(Optional.empty(),
+				new InternalStorageUsageResponse(tenant, null, null).latestFilePhysicalBytes());
+	}
+
+	/** Each way the two series can disagree is refused where the response is built. */
+	@Test
+	void internalResponseRefusesMisalignedPhysicalFigures() {
+		final StorageUsageResponse tenant = tenantResponse();
+		final List<StoragePhysicalDay> aligned = List.of(new StoragePhysicalDay(DAY, 52, 53));
+
+		assertThrows(NullPointerException.class,
+				() -> new InternalStorageUsageResponse(null, Optional.of(51L), aligned));
+		assertThrows(IllegalArgumentException.class,
+				() -> new InternalStorageUsageResponse(tenant, Optional.empty(), aligned),
+				"latest present, physical latest absent");
+		assertThrows(IllegalArgumentException.class, () -> new InternalStorageUsageResponse(
+				new StorageUsageResponse("U1000001", DAY, DAY, Optional.empty(), tenant.days()),
+				Optional.of(51L), aligned), "latest absent, physical latest present");
+		assertThrows(IllegalArgumentException.class,
+				() -> new InternalStorageUsageResponse(tenant, Optional.of(51L), List.of()),
+				"a missing physical day");
+		assertThrows(IllegalArgumentException.class, () -> new InternalStorageUsageResponse(tenant,
+				Optional.of(51L), List.of(new StoragePhysicalDay(DAY.plusDays(1), 52, 53))),
+				"a physical day for a different date");
+	}
+
+	/** A body missing {@code usage} is refused on binding rather than accepted half-built. */
+	@Test
+	void internalResponseWithoutUsageDoesNotBind() {
+		assertThrows(Exception.class, () -> JSON.readValue("{\"physicalDays\":[]}",
+				InternalStorageUsageResponse.class));
 	}
 }

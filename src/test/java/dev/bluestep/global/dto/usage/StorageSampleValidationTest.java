@@ -92,13 +92,14 @@ class StorageSampleValidationTest {
 	}
 
 	/**
-	 * A null {@code sampledAt} is what an omitted key binds to. The time-window refusals are
-	 * web-global's; this record only refuses the future.
+	 * A null {@code sampledAt} is what an omitted key binds to. Every time-window refusal is
+	 * web-global's, which alone can allow for clock skew — so a future value passes here.
 	 */
 	@Test
-	void sampledAtIsRequiredAndNeverInTheFuture() {
-		assertEquals(Set.of("sampledAt"), violatedPaths(new StorageSampleBatchRequest("b6p-07", null, List.of())));
-		assertEquals(Set.of("sampledAt"), violatedPaths(
+	void sampledAtIsRequiredButNotTimeBoundedHere() {
+		assertEquals(Set.of("sampledAt"),
+				violatedPaths(new StorageSampleBatchRequest("b6p-07", null, List.of())));
+		assertEquals(Set.of(), violatedPaths(
 				new StorageSampleBatchRequest("b6p-07", OffsetDateTime.now().plusDays(1), List.of())));
 	}
 
