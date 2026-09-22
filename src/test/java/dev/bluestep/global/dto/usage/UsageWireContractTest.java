@@ -1,7 +1,6 @@
 package dev.bluestep.global.dto.usage;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.LocalDate;
@@ -13,6 +12,10 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import org.junit.jupiter.api.Test;
+
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -27,13 +30,24 @@ import tools.jackson.dataformat.cbor.CBORMapper;
  * consumer and silently mis-bind every push from a pod still on the previous release. These tests
  * fail instead. The pinned JSON literals are the contract as prose.</p>
  *
- * <p>Jackson 3 only: both consumers bind these records through Boot 4's Jackson 3 mappers, JSON for
- * reads and CBOR for the pushes.</p>
+ * <p>Jackson 3 is what both consumers' Boot 4 mappers use, JSON for reads and CBOR for pushes.
+ * The storage read shapes are also pinned against a Jackson 2 mapper configured the way
+ * web-global's msgpack converter is ({@code Jdk8Module}, {@code JavaTimeModule}, ISO dates),
+ * since that converter can answer the same GET.</p>
  */
 class UsageWireContractTest {
 
 	private static final ObjectMapper JSON = JsonMapper.builder().build();
 	private static final ObjectMapper CBOR = CBORMapper.builder().build();
+	private static final com.fasterxml.jackson.databind.ObjectMapper JACKSON2 =
+			com.fasterxml.jackson.databind.json.JsonMapper.builder()
+					.addModule(new Jdk8Module())
+					.addModule(new JavaTimeModule())
+					.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+					.build();
+
+	private static final OffsetDateTime PERIOD = OffsetDateTime.of(2026, 9, 7, 0, 0, 0, 0, ZoneOffset.UTC);
+	private static final LocalDate DAY = LocalDate.of(2026, 9, 7);
 
 	/** Every value distinct, so a swapped pair of keys cannot cancel out. */
 	private static final String PINNED_WINDOW_JSON = """
@@ -46,7 +60,7 @@ class UsageWireContractTest {
 			""".formatted(PINNED_WINDOW_JSON);
 
 	private static final String PINNED_STORAGE_BATCH_JSON = """
-			{"namespace":"b6p-07","sampledAt":1788652800000,"samples":[
+			{"namespace":"b6p-07","sampledAt":"2026-09-07T00:00:00Z","samples":[
 			 {"schemaName":"U1000001","dbBytes":31,"fileLogicalBytes":32,"filePhysicalBytes":33}]}
 			""";
 
@@ -61,18 +75,19 @@ class UsageWireContractTest {
 	}
 
 	private static StorageSampleBatchRequest storageBatch() {
-		return new StorageSampleBatchRequest("b6p-07", 1_788_652_800_000L,
+		return new StorageSampleBatchRequest("b6p-07", PERIOD,
 				List.of(new StorageSample("U1000001", 31, 32, 33)));
 	}
 
-	private static StorageUsageResponse storageResponse(final boolean internal) {
-		final Optional<Long> physical = internal ? Optional.of(43L) : Optional.empty();
-		final Optional<Long> physicalHours = internal ? Optional.of(46L) : Optional.empty();
-		return new StorageUsageResponse("U1000001",
-				Optional.of(new StorageLevel(OffsetDateTime.of(2026, 9, 7, 0, 0, 0, 0, ZoneOffset.UTC),
-						41, 42, physical)),
-				List.of(new StorageUsageDay(LocalDate.of(2026, 9, 7), 41, 42, 44, 45,
-						physical, physicalHours)));
+	private static StorageUsageResponse tenantResponse() {
+		return new StorageUsageResponse("U1000001", DAY, DAY.plusDays(6),
+				Optional.of(new StorageLevel(PERIOD, 41, 42)),
+				List.of(new StorageUsageDay(DAY, 1, 43, 44, 45, 46)));
+	}
+
+	private static InternalStorageUsageResponse internalResponse() {
+		return new InternalStorageUsageResponse(tenantResponse(), Optional.of(51L),
+				List.of(new StoragePhysicalDay(DAY, 52, 53)));
 	}
 
 	private static Set<String> keysOf(final JsonNode node) {
@@ -140,49 +155,39 @@ class UsageWireContractTest {
 				StorageSampleBatchRequest.class));
 	}
 
-	/**
-	 * An omitted {@code samples} must reach Bean Validation as the empty list — a throw during
-	 * binding would surface as a 400 that names no field.
-	 */
+	/** An omitted {@code samples} is the heartbeat: it binds as the empty pass. */
 	@Test
-	void omittedSamples_bindAsEmpty() {
+	void omittedSamples_bindAsTheHeartbeat() {
 		final StorageSampleBatchRequest bound = JSON.readValue(
-				"{\"namespace\":\"b6p-07\",\"sampledAt\":1788652800000}", StorageSampleBatchRequest.class);
+				"{\"namespace\":\"b6p-07\",\"sampledAt\":\"2026-09-07T00:00:00Z\"}",
+				StorageSampleBatchRequest.class);
 
 		assertTrue(bound.samples().isEmpty());
 	}
 
+	/** The tenant shape has no physical-bytes key anywhere — not null, absent. */
 	@Test
-	void storageUsageResponse_pinsKeysAndDateShapes() {
-		final JsonNode node = JSON.valueToTree(storageResponse(true));
+	void storageUsageResponse_pinsKeysAndCarriesNoPhysicalFigures() {
+		final JsonNode node = JSON.valueToTree(tenantResponse());
 
-		assertEquals(Set.of("schemaName", "latest", "days"), keysOf(node));
-		assertEquals(Set.of("sampledAt", "dbBytes", "fileLogicalBytes", "filePhysicalBytes"),
-				keysOf(node.get("latest")));
-		assertEquals(Set.of("day", "maxDbBytes", "maxFileLogicalBytes", "dbByteHours",
-				"fileLogicalByteHours", "maxFilePhysicalBytes", "filePhysicalByteHours"),
-				keysOf(node.get("days").get(0)));
-		assertEquals("2026-09-07", node.get("days").get(0).get("day").asString(),
-				"a day is an ISO date string, not an epoch number or an array");
-		assertEquals(43, node.get("latest").get("filePhysicalBytes").asLong());
+		assertEquals(Set.of("schemaName", "from", "to", "latest", "days"), keysOf(node));
+		assertEquals(Set.of("sampledAt", "dbBytes", "fileLogicalBytes"), keysOf(node.get("latest")));
+		assertEquals(Set.of("day", "sampleCount", "maxDbBytes", "maxFileLogicalBytes", "dbByteHours",
+				"fileLogicalByteHours"), keysOf(node.get("days").get(0)));
+		assertEquals("2026-09-07", node.get("from").asString(), "dates are ISO strings");
+		assertEquals("2026-09-13", node.get("to").asString());
+		assertEquals("2026-09-07", node.get("days").get(0).get("day").asString());
 	}
 
-	/**
-	 * The tenant-facing shape: physical figures are absent, never zero, and survive a round trip
-	 * as absent.
-	 */
 	@Test
-	void storageUsageResponse_tenantShapeCarriesNoPhysicalFigures() {
-		final StorageUsageResponse tenant = storageResponse(false);
-		final JsonNode node = JSON.valueToTree(tenant);
+	void internalStorageUsageResponse_wrapsTheTenantShape() {
+		final JsonNode node = JSON.valueToTree(internalResponse());
 
-		assertTrue(node.get("latest").get("filePhysicalBytes").isNull());
-		assertTrue(node.get("days").get(0).get("maxFilePhysicalBytes").isNull());
-		assertTrue(node.get("days").get(0).get("filePhysicalByteHours").isNull());
-		final StorageUsageResponse decoded =
-				JSON.readValue(JSON.writeValueAsString(tenant), StorageUsageResponse.class);
-		assertEquals(tenant, decoded);
-		assertFalse(decoded.latest().orElseThrow().filePhysicalBytes().isPresent());
+		assertEquals(Set.of("usage", "latestFilePhysicalBytes", "physicalDays"), keysOf(node));
+		assertEquals(JSON.valueToTree(tenantResponse()), node.get("usage"),
+				"the wrapped usage is byte-for-byte the tenant answer");
+		assertEquals(Set.of("day", "maxFilePhysicalBytes", "filePhysicalByteHours"),
+				keysOf(node.get("physicalDays").get(0)));
 	}
 
 	/** The wire format producers actually push — same mapper family Spring registers. */
@@ -191,7 +196,24 @@ class UsageWireContractTest {
 		assertEquals(batch(), CBOR.readValue(CBOR.writeValueAsBytes(batch()), UsageBatchRequest.class));
 		assertEquals(storageBatch(), CBOR.readValue(CBOR.writeValueAsBytes(storageBatch()),
 				StorageSampleBatchRequest.class));
-		assertEquals(storageResponse(true), CBOR.readValue(CBOR.writeValueAsBytes(storageResponse(true)),
+		assertEquals(tenantResponse(), CBOR.readValue(CBOR.writeValueAsBytes(tenantResponse()),
 				StorageUsageResponse.class));
+		final StorageUsageResponse neverSampled =
+				new StorageUsageResponse("U1000001", DAY, DAY, Optional.empty(), List.of());
+		assertEquals(neverSampled, CBOR.readValue(CBOR.writeValueAsBytes(neverSampled),
+				StorageUsageResponse.class));
+		assertEquals(internalResponse(), CBOR.readValue(CBOR.writeValueAsBytes(internalResponse()),
+				InternalStorageUsageResponse.class));
+	}
+
+	/** Either mapper family can answer the storage GET; both must write the same tree. */
+	@Test
+	void jackson2AndJackson3WriteTheSameStorageWire() throws Exception {
+		assertEquals(JSON.readTree(JSON.writeValueAsString(tenantResponse())),
+				JSON.readTree(JACKSON2.writeValueAsString(tenantResponse())));
+		assertEquals(JSON.readTree(JSON.writeValueAsString(internalResponse())),
+				JSON.readTree(JACKSON2.writeValueAsString(internalResponse())));
+		assertEquals(internalResponse(), JACKSON2.readValue(
+				JSON.writeValueAsString(internalResponse()), InternalStorageUsageResponse.class));
 	}
 }

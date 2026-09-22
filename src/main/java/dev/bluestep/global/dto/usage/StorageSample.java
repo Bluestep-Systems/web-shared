@@ -1,9 +1,9 @@
 package dev.bluestep.global.dto.usage;
 
+import dev.bluestep.global.dto.constraints.CodePointSize;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.PositiveOrZero;
-import jakarta.validation.constraints.Size;
 
 /**
  * One tenant's storage levels as one sampling pass measured them.
@@ -23,10 +23,12 @@ import jakarta.validation.constraints.Size;
  *                          file figure
  * @param filePhysicalBytes the tenant's dedup- and compression-amortized share of real file disk.
  *                          Internal margin visibility only: it moves when a <em>different</em>
- *                          tenant uploads the same file, so it must never reach an invoice
+ *                          tenant uploads the same file, so it must never reach an invoice or a
+ *                          tenant — which is why the read side carries it only on
+ *                          {@link InternalStorageUsageResponse}
  */
 public record StorageSample(
-		@NotBlank @Size(max = MAX_SCHEMA_NAME_LENGTH) String schemaName,
+		@NotBlank @CodePointSize(max = MAX_SCHEMA_NAME_LENGTH) String schemaName,
 		@PositiveOrZero @Max(MAX_BYTES) long dbBytes,
 		@PositiveOrZero @Max(MAX_BYTES) long fileLogicalBytes,
 		@PositiveOrZero @Max(MAX_BYTES) long filePhysicalBytes) {

@@ -243,9 +243,16 @@ group = 'dev.bluestep'
 //     single-character keys, same bounds). Until now web-global and the monolith each kept a
 //     hand-maintained copy, so a coordinated-but-mismatched edit passed both repos' key tests and
 //     mis-bound every batch. One record, one UsageWireContractTest, closes that.
-//   * StorageSampleBatchRequest / StorageSample are the disk sampler's push, and StorageUsageResponse
-//     / StorageLevel / StorageUsageDay the storage read. Full-word keys: a sample is one row per
-//     tenant per period, so the per-minute lane's single-character economy buys nothing.
+//   * StorageSampleBatchRequest / StorageSample are the disk sampler's push. An empty pass is valid:
+//     it is the namespace's heartbeat, which the staleness check needs to tell "no tenants" from
+//     "sampler dead". sampledAt is an OffsetDateTime period start, refused if in the future.
+//   * StorageUsageResponse / StorageLevel / StorageUsageDay are the tenant-facing storage read, and
+//     carry no physical-bytes figure at all. InternalStorageUsageResponse wraps the tenant answer
+//     with StoragePhysicalDay rows for the internal-admin credential: a separate type rather than
+//     optional fields, so a tenant handler cannot leak margin data without changing its signature.
+//     Days carry sampleCount so a sampler gap is visible, and the response echoes its from/to.
+//   Full-word keys on all of these: a sample is one row per tenant per period, so the per-minute
+//   lane's single-character economy buys nothing.
 //
 // NO ContractVersion entry, and not merely by the 4.1.2/4.1.4 precedent: these shapes are served
 // under /api/v1/usage/, which is not tag-routed at all. A consumer moving to 4.1.5 changes no AI or
@@ -356,6 +363,9 @@ dependencies {
     // Test-only, like msgpack below: UsageWireContractTest round-trips the usage DTOs through CBOR,
     // the format producers push them in.
     testImplementation 'tools.jackson.dataformat:jackson-dataformat-cbor:3.1.5'
+    // Test-only: web-global's Jackson 2 msgpack converter registers JavaTimeModule, and the storage
+    // read shapes carry java.time components, so the family-parity check needs it too.
+    testImplementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
     // Test-only: LegacyWireCompatTest pins the msgpack bytes the monolith exchanges with
     // the AI gate. Proving that contract is this module's job even though shipping the
     // dataformat is not.

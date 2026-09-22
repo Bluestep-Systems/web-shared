@@ -8,7 +8,8 @@
  *       {@link StorageSample}s, one sampling pass of a namespace's per-tenant storage levels.
  *       Replacing upsert.</li>
  *   <li>{@code GET /api/v1/usage/storage} — {@link StorageUsageResponse}, one tenant's latest
- *       storage level and its daily series.</li>
+ *       storage level and its daily series; {@link InternalStorageUsageResponse} wraps it with the
+ *       physical-bytes figures for the internal-admin credential only.</li>
  * </ul>
  *
  * <p>These paths are not {@code ContractVersion}-tagged: a change to a shape here is a change
