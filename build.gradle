@@ -237,7 +237,33 @@ group = 'dev.bluestep'
 // The monolith guards that from its side: security.one-way-global-passwords is off by default and is
 // documented as turnable-on only once every ring can read `\n2`. The two guards are independent on
 // purpose — neither service has to trust the other's rollout.
-version = '4.1.4'
+//
+// 4.1.5 adds dto.usage: the tenant usage metering shapes. Purely additive — no existing type changes.
+//   * UsageBatchRequest / UsageWindow MOVE here from web-global, byte-identical on the wire (same
+//     single-character keys, same bounds). Until now web-global and the monolith each kept a
+//     hand-maintained copy, so a coordinated-but-mismatched edit passed both repos' key tests and
+//     mis-bound every batch. One record, one UsageWireContractTest, closes that.
+//   * StorageSampleBatchRequest / StorageSample are the disk sampler's push. An empty pass is valid:
+//     it is the namespace's heartbeat, which the staleness check needs to tell "no tenants" from
+//     "sampler dead". sampledAt is an OffsetDateTime period start. Alignment, skew, age and
+//     duplicate-tenant refusals belong to web-global's ingest, since each needs server time or
+//     its normalization.
+//   * StorageUsageResponse / StorageLevel / StorageUsageDay are the tenant-facing storage read, and
+//     carry no physical-bytes figure at all. InternalStorageUsageResponse wraps the tenant answer
+//     with StoragePhysicalDay rows for the internal-admin credential: a separate type rather than
+//     optional fields, so a tenant handler cannot leak margin data without changing its signature.
+//     Days carry sampleCount so a sampler gap is visible, and the response echoes its from/to.
+//   Full-word keys on all of these: a sample is one row per tenant per period, so the per-minute
+//   lane's single-character economy buys nothing.
+//
+// NO ContractVersion entry, and not merely by the 4.1.2/4.1.4 precedent: these shapes are served
+// under /api/v1/usage/, which is not tag-routed at all. A consumer moving to 4.1.5 changes no AI or
+// global-user path.
+//
+// ORDERING: web-global deletes its own dto.usage copies in the same change that resolves 4.1.5 —
+// the package name is identical, so keeping both would put two classes of one name on its
+// classpath. The monolith can move before or after; the bytes on the wire are the same either way.
+version = '4.1.5'
 
 repositories {
     mavenCentral()
@@ -336,6 +362,12 @@ dependencies {
     // while keeping a Jackson 2 island for msgpack, so these DTOs are serialized by both.
     // OptionalWireContractJackson3Test pins that they produce an identical wire.
     testImplementation 'tools.jackson.core:jackson-databind:3.1.5'
+    // Test-only, like msgpack below: UsageWireContractTest round-trips the usage DTOs through CBOR,
+    // the format producers push them in.
+    testImplementation 'tools.jackson.dataformat:jackson-dataformat-cbor:3.1.5'
+    // Test-only: web-global's Jackson 2 msgpack converter registers JavaTimeModule, and the storage
+    // read shapes carry java.time components, so the family-parity check needs it too.
+    testImplementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
     // Test-only: LegacyWireCompatTest pins the msgpack bytes the monolith exchanges with
     // the AI gate. Proving that contract is this module's job even though shipping the
     // dataformat is not.
