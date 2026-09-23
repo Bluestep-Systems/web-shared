@@ -293,7 +293,12 @@ group = 'dev.bluestep'
 // WebGlobalClient.mapper() disables FAIL_ON_UNKNOWN_PROPERTIES, so a replica holding an older jar
 // ignores the new field rather than failing the read. Recorded here, like the 4.1.3 @JsonIgnore note,
 // so that a shipped tag emitting one more property is not later found as unexplained drift.
-version = '4.1.5'
+//
+// 4.1.6 adds UsageSummaryResponse / UsageSummaryRow: per-tenant totals of the usage batch metrics
+// over a time range, the read the monolith's Page Statistics report and ServerBalancer cut over to
+// (usage metering phase 5, CU-86bbugbjn). Purely additive. Served under /api/v1/usage/summary, which
+// is not tag-routed, so again NO ContractVersion entry.
+version = '4.1.6'
 
 repositories {
     mavenCentral()

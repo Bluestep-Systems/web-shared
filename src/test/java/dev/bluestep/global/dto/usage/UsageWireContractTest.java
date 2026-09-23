@@ -222,4 +222,42 @@ class UsageWireContractTest {
 		assertTrue(response.days().isEmpty());
 		assertTrue(new StorageSample("U1000001", null).levels().isEmpty());
 	}
+
+	private static UsageSummaryResponse summary() {
+		return new UsageSummaryResponse(PERIOD, PERIOD.plusDays(14), List.of("http", "file"),
+				List.of(new UsageSummaryRow("U1000001", 51, 52, 53, 54, 55, 56, 57, 58, 59, 60)));
+	}
+
+	@Test
+	void usageSummaryResponse_pinsKeys() {
+		final JsonNode node = JSON.valueToTree(summary());
+
+		assertEquals(Set.of("from", "to", "categories", "tenants"), keysOf(node));
+		assertEquals(Set.of("schemaName", "hits", "pageMillis", "pageMillisMax", "cpuMillis",
+				"dbMillis", "allocBytes", "requestBytes", "requestBytesMax", "responseBytes",
+				"responseBytesMax"), keysOf(node.get("tenants").get(0)));
+		assertEquals("2026-09-07T00:00:00Z", node.get("from").asString(), "instants are ISO strings");
+		final JsonNode row = node.get("tenants").get(0);
+		assertEquals(51, row.get("hits").asLong());
+		assertEquals(53, row.get("pageMillisMax").asLong());
+		assertEquals(60, row.get("responseBytesMax").asLong());
+	}
+
+	/** Both mapper families and CBOR must carry the summary unchanged, empty or not. */
+	@Test
+	void usageSummaryResponse_roundTripsEveryMapper() throws Exception {
+		final UsageSummaryResponse empty =
+				new UsageSummaryResponse(PERIOD, PERIOD.plusDays(1), List.of("http"), List.of());
+		for (final UsageSummaryResponse response : List.of(summary(), empty)) {
+			assertEquals(response, CBOR.readValue(CBOR.writeValueAsBytes(response),
+					UsageSummaryResponse.class));
+			assertEquals(JSON.readTree(JSON.writeValueAsString(response)),
+					JSON.readTree(JACKSON2.writeValueAsString(response)));
+			assertEquals(response, JACKSON2.readValue(JSON.writeValueAsString(response),
+					UsageSummaryResponse.class));
+		}
+		final UsageSummaryResponse nulls = new UsageSummaryResponse(PERIOD, PERIOD, null, null);
+		assertTrue(nulls.categories().isEmpty());
+		assertTrue(nulls.tenants().isEmpty());
+	}
 }
