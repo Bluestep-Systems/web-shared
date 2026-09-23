@@ -7,9 +7,9 @@
  *   <li>{@code POST /api/v1/usage/storage-samples} — {@link StorageSampleBatchRequest} of
  *       {@link StorageSample}s, one sampling pass of a namespace's per-tenant storage levels.
  *       Replacing upsert.</li>
- *   <li>{@code GET /api/v1/usage/storage} — {@link StorageUsageResponse}, one tenant's latest
- *       storage level and its daily series; {@link InternalStorageUsageResponse} wraps it with the
- *       physical-bytes figures for the internal-admin credential only.</li>
+ *   <li>{@code GET /api/v1/usage/storage} and {@code GET /api/v1/usage/storage/internal} —
+ *       {@link StorageUsageResponse}, one tenant's newest level and daily series per meter; the
+ *       tenant path carries only the meters web-global's catalog marks tenant-visible.</li>
  * </ul>
  *
  * <p>These paths are not {@code ContractVersion}-tagged: a change to a shape here is a change

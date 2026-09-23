@@ -2,38 +2,38 @@ package dev.bluestep.global.dto.usage;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
 
 /**
- * One tenant's storage usage: its newest sample and its daily series over the requested range —
- * the tenant-facing answer to {@code GET /api/v1/usage/storage?schema=&from=&to=}.
+ * One tenant's storage usage: each meter's newest level and the daily series over the requested
+ * range — the answer to {@code GET /api/v1/usage/storage?schema=&from=&to=} and its
+ * {@code /internal} twin.
  *
- * <p>Carries no physical-bytes figure anywhere, by type rather than by convention: the internal
- * view is {@link InternalStorageUsageResponse}, which wraps this one, so a handler that answers a
- * tenant with it cannot leak margin data without changing its declared return type.</p>
+ * <p>One shape for both audiences. Which meters appear is decided by web-global's
+ * {@code storage_meter} catalog: the tenant path carries only the meters marked tenant-visible,
+ * the internal path carries every meter. A consumer must not assume a fixed meter set.</p>
  *
  * @param schemaName the canonical {@code U<seqnum>} the figures belong to
  * @param from       the first UTC day of the range the series covers, as resolved by web-global
  * @param to         the last UTC day of the range, inclusive
- * @param latest     the newest sample, whatever the range; empty when the tenant has never been
- *                   sampled
- * @param days       the daily rows inside the range, oldest first; a day with no row had no
- *                   sample at all
+ * @param latest     each meter's newest raw level, whatever the range; a meter is absent when it
+ *                   has no raw sample left — never sampled, or not within web-global's raw-sample
+ *                   retention, even though its dailies may still be present
+ * @param days       the daily rows inside the range, ordered by day then meter; a day with no row
+ *                   for a meter had no sample of it
  */
 public record StorageUsageResponse(
 		String schemaName,
 		LocalDate from,
 		LocalDate to,
-		Optional<StorageLevel> latest,
+		List<StorageLevel> latest,
 		List<StorageUsageDay> days) {
 
 	/**
-	 * Folds an absent {@code latest} or {@code days} into its empty form, and takes a defensive
-	 * copy of a present list. Jackson already binds an omitted {@code latest} to empty; this holds
-	 * the same for a Java caller that passes {@code null}.
+	 * Folds an absent list into its empty form and takes a defensive copy of a present one, so a
+	 * Java caller passing {@code null} gets what an omitted JSON key binds to.
 	 */
 	public StorageUsageResponse {
-		latest = latest == null ? Optional.empty() : latest;
+		latest = latest == null ? List.of() : List.copyOf(latest);
 		days = days == null ? List.of() : List.copyOf(days);
 	}
 }

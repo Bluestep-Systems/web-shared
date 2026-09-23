@@ -247,12 +247,16 @@ group = 'dev.bluestep'
 //     it is the namespace's heartbeat, which the staleness check needs to tell "no tenants" from
 //     "sampler dead". sampledAt is an OffsetDateTime period start. Alignment, skew, age and
 //     duplicate-tenant refusals belong to web-global's ingest, since each needs server time or
-//     its normalization.
-//   * StorageUsageResponse / StorageLevel / StorageUsageDay are the tenant-facing storage read, and
-//     carry no physical-bytes figure at all. InternalStorageUsageResponse wraps the tenant answer
-//     with StoragePhysicalDay rows for the internal-admin credential: a separate type rather than
-//     optional fields, so a tenant handler cannot leak margin data without changing its signature.
-//     Days carry sampleCount so a sampler gap is visible, and the response echoes its from/to.
+//     its normalization. A sample carries a Map of meter key -> bytes rather than one component
+//     per figure: a new kind of storage is a new key in web-global's storage_meter catalog, not a
+//     new record shape every deployed producer must be rebuilt against (the lesson 008's open
+//     unit_key vocabulary learned on the AI side).
+//   * StorageUsageResponse / StorageLevel / StorageUsageDay are the storage read, one shape for the
+//     tenant and internal paths — per-meter rows, so which meters a tenant sees is the catalog's
+//     tenant_visible flag, not a type. Days carry sampleCount so a sampler gap is visible, and the
+//     response echoes its from/to.
+//   (Amended before release: 4.1.5 first merged a one-column-per-figure shape with a separate
+//   internal response type. It never shipped, so it was reshaped in place rather than as 4.1.6.)
 //   Full-word keys on all of these: a sample is one row per tenant per period, so the per-minute
 //   lane's single-character economy buys nothing.
 //
