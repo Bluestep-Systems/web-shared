@@ -10,6 +10,8 @@
  *   <li>{@code GET /api/v1/usage/storage} and {@code GET /api/v1/usage/storage/internal} —
  *       {@link StorageUsageResponse}, one tenant's newest level and daily series per meter; the
  *       tenant path carries only the meters web-global's catalog marks tenant-visible.</li>
+ *   <li>{@code GET /api/v1/usage/summary} — {@link UsageSummaryResponse}, per-tenant totals of the
+ *       {@code /batch} metrics over a time range, folded across every grain web-global keeps.</li>
  * </ul>
  *
  * <p>These paths are not {@code ContractVersion}-tagged: a change to a shape here is a change
