@@ -22,6 +22,24 @@ import jakarta.validation.constraints.NotNull;
  * back to its own hosted default for every one of these when a reseller supplies none, so an empty
  * value means "use the default" rather than "show nothing".</p>
  *
+ * <h2>{@code flags} is the one exception, and why it has to be</h2>
+ *
+ * <p>An absent {@code flags} leaves the stored word <b>standing</b>, where an absent value anywhere
+ * else on this record clears its column. That is a deliberate break in the rule above, and it is
+ * forced by how this shape is served: the shared records are bound by <em>every</em> live version's
+ * controllers, not by frozen per-version copies, so a component added here reaches tags that shipped
+ * before it existed. A caller on such a tag cannot name a field it has never heard of, so under the
+ * whole-set rule its ordinary save would post no {@code flags} and silently clear every bit —
+ * turning a switch a reseller deliberately set back off, at the next unrelated edit to its branding.
+ * Widening what an older tag accepts is safe; letting it destroy a value it cannot see is not.</p>
+ *
+ * <p>The asymmetry is narrower than it looks. Clearing a URL is a real request because a cleared URL
+ * has a defined meaning — fall back to the hosted default. Clearing the switch word has no such
+ * meaning: zero is not "no preference", it is a specific configuration, so "say nothing" and "set
+ * every switch off" are genuinely different requests and a shape that cannot tell them apart is the
+ * defect. A caller that means the second sends {@code 0}, which is still one call and still
+ * idempotent.</p>
+ *
  * <h2>Why the display name is required, where every URL is optional</h2>
  *
  * <p>{@code displayName} is the one field here that is not branding. It lives on {@code basetable}
@@ -65,6 +83,8 @@ import jakarta.validation.constraints.NotNull;
  * @param icons          the icon set, in full. Required as an object even when every icon inside it
  *                       is empty, so that "no icons" is something the caller says rather than
  *                       something inferred from a missing field.
+ * @param flags          the switch word to store, or empty to leave the stored one alone. The one
+ *                       component here that an absent value does not clear — see above.
  */
 public record ResellerUpdateRequest(
 		@NotBlank @CodePointSize(max = 1000) String displayName,
@@ -72,7 +92,8 @@ public record ResellerUpdateRequest(
 		Optional<@CodePointSize(max = 256) String> defaultDomain,
 		Optional<String> privacyPageUrl,
 		Optional<String> termsPageUrl,
-		@NotNull ResellerIcons icons
+		@NotNull ResellerIcons icons,
+		Optional<Long> flags
 ) {
 
 	/**
@@ -90,5 +111,6 @@ public record ResellerUpdateRequest(
 		defaultDomain = defaultDomain == null ? Optional.empty() : defaultDomain;
 		privacyPageUrl = privacyPageUrl == null ? Optional.empty() : privacyPageUrl;
 		termsPageUrl = termsPageUrl == null ? Optional.empty() : termsPageUrl;
+		flags = flags == null ? Optional.empty() : flags;
 	}
 }
