@@ -267,6 +267,32 @@ group = 'dev.bluestep'
 // ORDERING: web-global deletes its own dto.usage copies in the same change that resolves 4.1.5 —
 // the package name is identical, so keeping both would put two classes of one name on its
 // classpath. The monolith can move before or after; the bytes on the wire are the same either way.
+//
+// 4.1.5 also gives a reseller a switch word: `flags`, a bigint on global.reseller, on
+// ResellerRecordResponse and ResellerUpdateRequest. A RIDER on an unreleased number rather than a
+// 4.1.6, on the 4.0.0 precedent — dto.globaluser and dto.reseller rode 4.0.0 because 4.0.0 was not
+// released yet, and a rider costs nothing while nothing can have resolved the number. 4.1.5 is
+// merged and NOT released; the moment it is, this would have to be 4.1.6 instead.
+//
+// Served as the raw word, not as named booleans, which is the entire reason the column is a bit set:
+// the reseller-level switches this opens the door to cost a bit position each and nothing here. This
+// service stores and returns the number and interprets none of it, the way it stores a branding URL
+// it never fetches. A `long` rather than an Optional because the column is NOT NULL DEFAULT 0 — zero
+// is a configuration, not an absence.
+//
+// ONE DELIBERATE BREAK in ResellerUpdateRequest's whole-set rule: an absent `flags` leaves the stored
+// word standing where an absent value anywhere else on that record clears its column. Forced by how
+// the shape is served — the shared records are bound by EVERY live tag's controllers, not by frozen
+// per-version copies, so a component added here reaches tags that shipped before it existed. A caller
+// on such a tag cannot name a field it has never heard of, so under the whole-set rule its ordinary
+// branding save would post no `flags` and silently clear every bit. Widening what an older tag accepts
+// is safe; letting it destroy a value it cannot see is not. A caller that really means "all switches
+// off" sends 0, which is still one call and still idempotent.
+//
+// Additive on the response side, and safe for builds already in rotation: the monolith's
+// WebGlobalClient.mapper() disables FAIL_ON_UNKNOWN_PROPERTIES, so a replica holding an older jar
+// ignores the new field rather than failing the read. Recorded here, like the 4.1.3 @JsonIgnore note,
+// so that a shipped tag emitting one more property is not later found as unexplained drift.
 version = '4.1.5'
 
 repositories {

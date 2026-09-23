@@ -46,6 +46,21 @@ import dev.bluestep.global.dto.tenantaccess.ResellerKey;
  * <p>The version travels in the {@code ETag} rather than here, because it is what a write is pinned
  * to and belongs with the transport's own concurrency mechanism.</p>
  *
+ * <h2>Why {@code flags} is a bare number</h2>
+ *
+ * <p>It is a bit set, and it is served as the {@code bigint} the column holds rather than as the
+ * booleans the monolith reads out of it. That is the whole point of the column: a reseller-level
+ * switch added later costs a bit position and nothing on this contract, where a named boolean
+ * component per switch would cost a shape change — and therefore a release — every time. This
+ * service does not interpret any of the bits and has no opinion about what they mean; it stores and
+ * returns the word, the same way it stores and returns a branding URL it never fetches.</p>
+ *
+ * <p>Zero is the meaningful default rather than an absence, which is why this component is a
+ * {@code long} where every optional column beside it is an {@code Optional}. The column is
+ * {@code NOT NULL DEFAULT 0}, so every reseller has a value; a reseller that has never been edited
+ * has all bits clear, which is what makes "no bits set" the behaviour a new bit must be defined
+ * against.</p>
+ *
  * <p>Timestamps are {@code LocalDateTime} rather than {@code Instant}: the columns are
  * {@code timestamp without time zone} and carry a wall-clock reading with no zone, so presenting them
  * as instants would invent an offset nobody stored.</p>
@@ -59,6 +74,7 @@ import dev.bluestep.global.dto.tenantaccess.ResellerKey;
  * @param privacyPageUrl the privacy policy it renders
  * @param termsPageUrl   the terms it renders
  * @param icons          its icon set
+ * @param flags          its switch word, verbatim. Zero for a reseller with none set.
  * @param creator        who created the row. Empty exactly when there is no {@code basetable} row at
  *                       all — the reseller row can outlive it, and such a reseller is readable but
  *                       not writable.
@@ -72,6 +88,7 @@ public record ResellerRecordResponse(
 		Optional<String> privacyPageUrl,
 		Optional<String> termsPageUrl,
 		ResellerIcons icons,
+		long flags,
 		Optional<BaseTableKey> creator,
 		Optional<LocalDateTime> created
 ) {
