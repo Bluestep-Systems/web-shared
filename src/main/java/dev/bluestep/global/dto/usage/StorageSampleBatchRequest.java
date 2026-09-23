@@ -14,8 +14,8 @@ import jakarta.validation.constraints.Size;
  *
  * <p>No batch id, unlike {@link UsageBatchRequest}, because none is needed. {@code sampledAt} is
  * the <em>period</em> the pass belongs to, not the moment of measurement, and web-global replaces
- * rather than adds on {@code (sampledAt, schemaName)} — so a retried push, or a pass re-run after
- * a restart, lands on the same rows and overwrites them. The endpoint is idempotent by key.</p>
+ * rather than adds on {@code (sampledAt, schemaName, meter)} — so a retried push, or a pass
+ * re-run after a restart, lands on the same rows and overwrites them. The endpoint is idempotent by key.</p>
  *
  * <p>An empty {@code samples} is valid and meaningful: it is the namespace's heartbeat, saying the
  * sampler ran and found no tenant to measure. Web-global records the pass per namespace, so a
@@ -36,7 +36,11 @@ import jakarta.validation.constraints.Size;
  *       write a row pricing reads;</li>
  *   <li>two samples naming the same tenant once schema names are normalized ({@code U1000001},
  *       {@code u1000001} and {@code 1000001} are one tenant). A pass measures each tenant once,
- *       so a duplicate is a producer bug.</li>
+ *       so a duplicate is a producer bug;</li>
+ *   <li>a meter web-global's catalog does not list. A meter is catalogued before any producer
+ *       sends it; a figure silently dropped would be storage nobody bills;</li>
+ *   <li>two levels naming the same meter for one tenant once meter keys are normalized
+ *       (trimmed and lowercased, like the namespace).</li>
  * </ul>
  *
  * @param namespace the Kubernetes namespace the sampler runs in, recorded on every row; trimmed,

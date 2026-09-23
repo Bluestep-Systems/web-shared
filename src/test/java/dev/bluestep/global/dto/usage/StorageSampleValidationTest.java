@@ -6,6 +6,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -51,7 +52,7 @@ class StorageSampleValidationTest {
 	}
 
 	private static StorageSample valid() {
-		return new StorageSample("U1000001", 1, 2, 3);
+		return new StorageSample("U1000001", Map.of("db", 1L, "file_logical", 2L));
 	}
 
 	@Test
@@ -107,31 +108,51 @@ class StorageSampleValidationTest {
 	void theSchemaNameIsRequiredAndBounded() {
 		final int max = StorageSample.MAX_SCHEMA_NAME_LENGTH;
 		assertEquals(Set.of("samples[0].schemaName"),
-				violatedPaths(batchOf(List.of(new StorageSample("", 1, 2, 3)))));
-		assertEquals(Set.of(), violatedPaths(batchOf(List.of(new StorageSample("U".repeat(max), 1, 2, 3)))));
+				violatedPaths(batchOf(List.of(new StorageSample("", valid().levels())))));
+		assertEquals(Set.of(), violatedPaths(batchOf(List.of(new StorageSample("U".repeat(max), valid().levels())))));
 		assertEquals(Set.of("samples[0].schemaName"),
-				violatedPaths(batchOf(List.of(new StorageSample("U".repeat(max + 1), 1, 2, 3)))));
+				violatedPaths(batchOf(List.of(new StorageSample("U".repeat(max + 1), valid().levels())))));
 	}
 
-	/** Each byte column refused on its own at both ends, and accepted at both limits. */
+	private static StorageSample levels(final Map<String, Long> levels) {
+		return new StorageSample("U1000001", levels);
+	}
+
+	/** Each level refused at both ends, and accepted at both limits, through the cascade. */
 	@Test
-	void everyByteColumnIsBoundedThroughTheCascade() {
+	void everyLevelIsBoundedThroughTheCascade() {
 		assertEquals(Set.of(), violatedPaths(batchOf(List.of(
-				new StorageSample("U1000001", 0, 0, 0),
-				new StorageSample("U1000001", MAX, MAX, MAX)))));
+				levels(Map.of("db", 0L, "file_logical", MAX))))));
 
-		final List<StorageSample> bad = List.of(
-				new StorageSample("U1000001", -1, 2, 3),
-				new StorageSample("U1000001", MAX + 1, 2, 3),
-				new StorageSample("U1000001", 1, -1, 3),
-				new StorageSample("U1000001", 1, MAX + 1, 3),
-				new StorageSample("U1000001", 1, 2, -1),
-				new StorageSample("U1000001", 1, 2, MAX + 1));
+		assertEquals(Set.of("samples[0].levels[db].<map value>",
+				"samples[1].levels[db].<map value>"),
+				violatedPaths(batchOf(List.of(levels(Map.of("db", -1L)),
+						levels(Map.of("db", MAX + 1))))));
+	}
 
-		assertEquals(Set.of("samples[0].dbBytes", "samples[1].dbBytes",
-				"samples[2].fileLogicalBytes", "samples[3].fileLogicalBytes",
-				"samples[4].filePhysicalBytes", "samples[5].filePhysicalBytes"),
-				violatedPaths(batchOf(bad)));
+	/** A sample must report at least one meter, and at most {@value StorageSample#MAX_METERS}. */
+	@Test
+	void theMeterCountIsBounded() {
+		assertEquals(Set.of("samples[0].levels"), violatedPaths(batchOf(List.of(levels(Map.of())))));
+
+		final Map<String, Long> atCap = new java.util.HashMap<>();
+		for (int i = 0; i < StorageSample.MAX_METERS; i++) {
+			atCap.put("m" + i, 1L);
+		}
+		assertEquals(Set.of(), violatedPaths(batchOf(List.of(levels(atCap)))));
+		atCap.put("one_more", 1L);
+		assertEquals(Set.of("samples[0].levels"), violatedPaths(batchOf(List.of(levels(atCap)))));
+	}
+
+	/** A meter key must be non-blank and at most {@value StorageSample#MAX_METER_LENGTH} code points. */
+	@Test
+	void meterKeysAreRequiredAndBounded() {
+		final String atMax = "m".repeat(StorageSample.MAX_METER_LENGTH);
+		assertEquals(Set.of(), violatedPaths(batchOf(List.of(levels(Map.of(atMax, 1L))))));
+		assertEquals(Set.of("samples[0].levels<K>[" + atMax + "m].<map key>"),
+				violatedPaths(batchOf(List.of(levels(Map.of(atMax + "m", 1L))))));
+		assertEquals(Set.of("samples[0].levels<K>[ ].<map key>"),
+				violatedPaths(batchOf(List.of(levels(Map.of(" ", 1L))))));
 	}
 
 	/** The moved per-minute records' constraints fire here too, cascade included. */

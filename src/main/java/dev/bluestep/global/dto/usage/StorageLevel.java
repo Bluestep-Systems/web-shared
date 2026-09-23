@@ -3,13 +3,12 @@ package dev.bluestep.global.dto.usage;
 import java.time.OffsetDateTime;
 
 /**
- * A tenant's storage as its most recent sample recorded it — the tenant-facing view of one
- * {@link StorageSample}. It has no physical-bytes figure by construction; see
- * {@link InternalStorageUsageResponse}.
+ * One meter's most recent level for a tenant.
  *
- * @param sampledAt        the sampling period the figures belong to
- * @param dbBytes          the schema's relation footprint
- * @param fileLogicalBytes the tenant's documents at face size (the billed figure)
+ * @param meter     the meter key (see {@link StorageSample})
+ * @param sampledAt the sampling period the level belongs to — per meter, since a meter can stop
+ *                  being reported while others continue
+ * @param bytes     the level
  */
-public record StorageLevel(OffsetDateTime sampledAt, long dbBytes, long fileLogicalBytes) {
+public record StorageLevel(String meter, OffsetDateTime sampledAt, long bytes) {
 }
