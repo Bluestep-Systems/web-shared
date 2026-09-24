@@ -298,7 +298,11 @@ group = 'dev.bluestep'
 // over a time range, the read the monolith's Page Statistics report and ServerBalancer cut over to
 // (usage metering phase 5, CU-86bbugbjn). Purely additive. Served under /api/v1/usage/summary, which
 // is not tag-routed, so again NO ContractVersion entry.
-version = '4.1.6'
+// 4.1.7 adds DbUsageBatchRequest / DbUsageRow: a namespace's pg_stat_statements diff, per-tenant
+// server-side DB time and buffer blocks plus the eviction/reset signals that say how far to trust it
+// (usage metering phase 4b, CU-86bc6fw3m). Purely additive. Served under /api/v1/usage/db, which is
+// not tag-routed, so again NO ContractVersion entry.
+version = '4.1.7'
 
 repositories {
     mavenCentral()

@@ -1,11 +1,14 @@
 package dev.bluestep.global.dto.usage;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -17,6 +20,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
@@ -259,5 +263,88 @@ class UsageWireContractTest {
 		final UsageSummaryResponse nulls = new UsageSummaryResponse(PERIOD, PERIOD, null, null);
 		assertTrue(nulls.categories().isEmpty());
 		assertTrue(nulls.tenants().isEmpty());
+	}
+
+	private static final String PINNED_DB_BATCH_JSON = """
+			{"namespace":"b6p-07","windowStart":"2026-09-07T00:00:00Z","windowEnd":"2026-09-07T00:05:00Z",
+			 "deallocDelta":71,"statsReset":true,"entries":72,"entriesMax":73,"tenants":[
+			 {"schemaName":"U1000001","calls":61,"execMicros":62,"sharedBlksRead":63,"sharedBlksHit":64}]}
+			""";
+
+	private static DbUsageBatchRequest dbBatch() {
+		return new DbUsageBatchRequest("b6p-07", PERIOD, PERIOD.plusMinutes(5), 71, true, 72, 73,
+				List.of(new DbUsageRow("U1000001", 61, 62, 63, 64)));
+	}
+
+	@Test
+	void dbUsageBatch_serializesUnderComponentNames() {
+		final JsonNode node = JSON.valueToTree(dbBatch());
+
+		assertEquals(Set.of("namespace", "windowStart", "windowEnd", "deallocDelta", "statsReset",
+				"entries", "entriesMax", "tenants"), keysOf(node),
+				"exact key set: the entriesWithinCapacity @AssertTrue getter must not serialize");
+		assertEquals(Set.of("schemaName", "calls", "execMicros", "sharedBlksRead", "sharedBlksHit"),
+				keysOf(node.get("tenants").get(0)));
+		assertEquals(dbBatch(), JSON.readValue(PINNED_DB_BATCH_JSON, DbUsageBatchRequest.class));
+	}
+
+	/** An omitted {@code tenants} is the heartbeat, and CBOR — the push format — carries both shapes. */
+	@Test
+	void dbUsageBatch_omittedTenantsBindAsEmptyAndCborRoundTrips() {
+		final DbUsageBatchRequest bound = JSON.readValue("""
+				{"namespace":"b6p-07","windowStart":"2026-09-07T00:00:00Z",
+				 "windowEnd":"2026-09-07T00:05:00Z","deallocDelta":0,"statsReset":false,
+				 "entries":0,"entriesMax":50000}
+				""", DbUsageBatchRequest.class);
+
+		assertTrue(bound.tenants().isEmpty());
+		for (final DbUsageBatchRequest batch : List.of(dbBatch(), bound)) {
+			assertEquals(batch, CBOR.readValue(CBOR.writeValueAsBytes(batch), DbUsageBatchRequest.class));
+		}
+	}
+
+	/**
+	 * The push format's exact bytes, so a key or encoding drift on CBOR fails here rather than
+	 * silently mis-binding. Decoded, this is {@link #PINNED_DB_BATCH_JSON}.
+	 */
+	private static final String PINNED_DB_BATCH_CBOR_HEX = """
+			bf696e616d657370616365666236702d30376b77696e646f77537461727474323032362d30392d30375430303a3030\
+			3a30305a6977696e646f77456e6474323032362d30392d30375430303a30353a30305a6c6465616c6c6f6344656c74\
+			6118476a73746174735265736574f567656e747269657318486a656e74726965734d617818496774656e616e747381\
+			bf6a736368656d614e616d656855313030303030316563616c6c73183d6a657865634d6963726f73183e6e73686172\
+			6564426c6b7352656164183f6d736861726564426c6b734869741840ffff\
+			""";
+
+	@Test
+	void dbUsageBatch_cborBytesArePinned() {
+		assertEquals(PINNED_DB_BATCH_CBOR_HEX, HexFormat.of().formatHex(CBOR.writeValueAsBytes(dbBatch())));
+		assertEquals(dbBatch(), CBOR.readValue(HexFormat.of().parseHex(PINNED_DB_BATCH_CBOR_HEX),
+				DbUsageBatchRequest.class));
+		assertEquals(JSON.readTree(PINNED_DB_BATCH_JSON),
+				CBOR.readTree(HexFormat.of().parseHex(PINNED_DB_BATCH_CBOR_HEX)));
+	}
+
+	/** The record-level {@code @AssertTrue} is a getter, and must not leak onto the wire. */
+	@Test
+	void dbUsageBatch_validationGetterIsNotSerialized() {
+		assertFalse(JSON.valueToTree(dbBatch()).has("entriesWithinCapacity"));
+		assertFalse(CBOR.readTree(CBOR.writeValueAsBytes(dbBatch())).has("entriesWithinCapacity"));
+	}
+
+	@Test
+	void dbUsageBatch_nullTenantElementIsRefusedDuringBinding() {
+		assertThrows(JacksonException.class, () -> JSON.readValue(
+				PINNED_DB_BATCH_JSON.replace("\"tenants\":[", "\"tenants\":[null,"), DbUsageBatchRequest.class));
+	}
+
+	/** Every primitive component is required: omitting one is a binding failure, so a 400. */
+	@Test
+	void dbUsageBatch_omittedPrimitiveFailsBinding() {
+		assertThrows(JacksonException.class, () -> JSON.readValue(
+				PINNED_DB_BATCH_JSON.replace("\"statsReset\":true,", ""), DbUsageBatchRequest.class));
+		assertThrows(JacksonException.class, () -> JSON.readValue(
+				PINNED_DB_BATCH_JSON.replace(",\"entriesMax\":73", ""), DbUsageBatchRequest.class));
+		assertThrows(JacksonException.class, () -> JSON.readValue(
+				PINNED_DB_BATCH_JSON.replace(",\"execMicros\":62", ""), DbUsageBatchRequest.class));
 	}
 }
