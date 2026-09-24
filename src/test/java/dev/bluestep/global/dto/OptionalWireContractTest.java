@@ -163,9 +163,13 @@ class OptionalWireContractTest {
 				new AiPreflightResponse(true, "trk-1", Optional.empty(), Optional.empty());
 
 		ObjectMapper nonNull = JsonMapper.builder().addModule(new Jdk8Module())
-				.serializationInclusion(JsonInclude.Include.NON_NULL).build();
+				.defaultPropertyInclusion(JsonInclude.Value.construct(
+						JsonInclude.Include.NON_NULL, JsonInclude.Include.NON_NULL))
+				.build();
 		ObjectMapper nonAbsent = JsonMapper.builder().addModule(new Jdk8Module())
-				.serializationInclusion(JsonInclude.Include.NON_ABSENT).build();
+				.defaultPropertyInclusion(JsonInclude.Value.construct(
+						JsonInclude.Include.NON_ABSENT, JsonInclude.Include.NON_ABSENT))
+				.build();
 
 		assertEquals("{\"a\":true,\"t\":\"trk-1\",\"d\":null,\"i\":null}",
 				nonNull.writeValueAsString(response),
