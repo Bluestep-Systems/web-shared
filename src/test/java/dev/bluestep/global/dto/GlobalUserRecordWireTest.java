@@ -12,15 +12,16 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import dev.bluestep.global.dto.globaluserrecord.GlobalUserCredentialUpdateRequest;
 import dev.bluestep.global.dto.globaluserrecord.GlobalUserRecordCreateRequest;
 import dev.bluestep.global.dto.globaluserrecord.GlobalUserRecordUpdateRequest;
 
 /**
- * What the global-user record write shapes actually put on the wire, under both Jackson families.
+ * What the global-user record write shapes actually put on the wire.
  *
  * <h2>The property that has to hold, and nearly did not</h2>
  *
@@ -35,9 +36,9 @@ import dev.bluestep.global.dto.globaluserrecord.GlobalUserRecordUpdateRequest;
  * payload. Hence this suite. On a credential shape the stakes are higher than tidiness — the fewer
  * derived fields on that wire, the better.</p>
  *
- * <p>Both mappers, because both are real: web-global runs Jackson 3 as its primary and keeps a
- * hand-built Jackson 2 island for msgpack, so a shape that behaves differently between them is a
- * shape whose behaviour depends on which endpoint it arrived at.</p>
+ * <p>Jackson 3, the family both consumers bind these shapes with. Until 5.0.0 every assertion here
+ * ran under Jackson 2 as well, because web-global kept a Jackson 2 msgpack converter that could bind
+ * them; that converter is retired, and the Jackson 2 half went with it.</p>
  */
 @DisplayName("global user record wire shapes")
 class GlobalUserRecordWireTest {
@@ -45,46 +46,46 @@ class GlobalUserRecordWireTest {
 	private static final long CLASSID = 222_222L;
 	private static final String STORED_CREDENTIAL = "\n1Q0lQSEVSVEVYVA==";
 
-	private static final ObjectMapper JACKSON2 = new ObjectMapper().registerModule(new Jdk8Module());
-	private static final tools.jackson.databind.ObjectMapper JACKSON3 =
-			new tools.jackson.databind.json.JsonMapper();
+	/**
+	 * Jackson 3 with {@code FAIL_ON_UNKNOWN_PROPERTIES} switched on. Jackson 3 ships it off, and with it
+	 * off a leaked constraint getter reads back without complaint, so the round-trip assertions would
+	 * pass with the {@code @JsonIgnore} removed. Strict is what makes them about the leak.
+	 */
+	private static final ObjectMapper JACKSON3 = JsonMapper.builder()
+			.enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+			.build();
 
 	// ---------------------------------------------------------------- no derived fields on the wire
 
 	@Test
-	@DisplayName("no constraint method appears as a JSON property, under either Jackson")
+	@DisplayName("no constraint method appears as a JSON property")
 	void constraintMethodsAreNotSerialized() throws Exception {
-		String credential2 = JACKSON2.writeValueAsString(credentialUpdate());
-		String credential3 = JACKSON3.writeValueAsString(credentialUpdate());
-		String create2 = JACKSON2.writeValueAsString(create());
-		String create3 = JACKSON3.writeValueAsString(create());
-		String update2 = JACKSON2.writeValueAsString(update());
-		String update3 = JACKSON3.writeValueAsString(update());
+		String credential = JACKSON3.writeValueAsString(credentialUpdate());
+		String create = JACKSON3.writeValueAsString(create());
+		String update = JACKSON3.writeValueAsString(update());
 
-		for (String json : List.of(credential2, credential3, create2, create3, update2, update3)) {
+		for (String json : List.of(credential, create, update)) {
 			assertFalse(json.contains("InStoredForm"),
 					"a @AssertTrue getter leaked onto the wire: " + json);
 		}
 		assertEquals("{\"storedCredential\":\"" + STORED_CREDENTIAL.replace("\n", "\\n") + "\"}",
-				credential2, "the credential shape is one component and should serialize as one key");
-		assertEquals(credential2, credential3, "the two mappers must agree on the credential shape");
+				credential, "the credential shape is one component and should serialize as one key");
 	}
 
 	/**
 	 * The consequence of the leak, stated as the property rather than the symptom. A type that cannot
-	 * read back what it wrote is one a caller cannot round-trip through a strict mapper — and the
-	 * msgpack mapper this service still registers is hand-built and strict.
+	 * read back what it wrote is one a caller cannot round-trip through a strict mapper.
 	 */
 	@Test
 	@DisplayName("every write shape round-trips through its own mapper")
 	void writeShapesRoundTrip() {
 		assertDoesNotThrow(() -> {
-			assertEquals(credentialUpdate(), JACKSON2.readValue(
-					JACKSON2.writeValueAsString(credentialUpdate()),
+			assertEquals(credentialUpdate(), JACKSON3.readValue(
+					JACKSON3.writeValueAsString(credentialUpdate()),
 					GlobalUserCredentialUpdateRequest.class));
-			assertEquals(create(), JACKSON2.readValue(JACKSON2.writeValueAsString(create()),
+			assertEquals(create(), JACKSON3.readValue(JACKSON3.writeValueAsString(create()),
 					GlobalUserRecordCreateRequest.class));
-			assertEquals(update(), JACKSON2.readValue(JACKSON2.writeValueAsString(update()),
+			assertEquals(update(), JACKSON3.readValue(JACKSON3.writeValueAsString(update()),
 					GlobalUserRecordUpdateRequest.class));
 		});
 	}
@@ -96,23 +97,17 @@ class GlobalUserRecordWireTest {
 	 * why {@code @NotBlank} rather than a compact-constructor default is what makes the credential
 	 * required. A shape that relied on binding to fail would be relying on mapper configuration this
 	 * module does not control; a constraint answers the same way under any mapper.
-	 *
-	 * <p>Both Jackson families, because both bind this shape in production and a single-component
-	 * record is where a delegating-creator heuristic could plausibly diverge.</p>
 	 */
 	@Test
 	@DisplayName("an omitted or null credential binds to null, leaving @NotBlank to refuse it")
 	void omittedCredentialBindsToNull() throws Exception {
-		GlobalUserCredentialUpdateRequest fromJackson2 =
-				JACKSON2.readValue("{}", GlobalUserCredentialUpdateRequest.class);
-		GlobalUserCredentialUpdateRequest fromJackson3 =
+		GlobalUserCredentialUpdateRequest omitted =
 				JACKSON3.readValue("{}", GlobalUserCredentialUpdateRequest.class);
 		GlobalUserCredentialUpdateRequest explicitNull =
-				JACKSON2.readValue("{\"storedCredential\":null}",
+				JACKSON3.readValue("{\"storedCredential\":null}",
 						GlobalUserCredentialUpdateRequest.class);
 
-		for (GlobalUserCredentialUpdateRequest bound :
-				List.of(fromJackson2, fromJackson3, explicitNull)) {
+		for (GlobalUserCredentialUpdateRequest bound : List.of(omitted, explicitNull)) {
 			assertNull(bound.storedCredential());
 		}
 	}
@@ -124,8 +119,8 @@ class GlobalUserRecordWireTest {
 	@Test
 	@DisplayName("the marker survives a round trip through JSON escaping")
 	void markerSurvivesEscaping() throws Exception {
-		GlobalUserCredentialUpdateRequest bound = JACKSON2.readValue(
-				JACKSON2.writeValueAsString(credentialUpdate()),
+		GlobalUserCredentialUpdateRequest bound = JACKSON3.readValue(
+				JACKSON3.writeValueAsString(credentialUpdate()),
 				GlobalUserCredentialUpdateRequest.class);
 
 		assertEquals(STORED_CREDENTIAL, bound.storedCredential());

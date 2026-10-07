@@ -1,0 +1,8 @@
+# Adds this library's auto-configuration to every @WebMvcTest slice (spring-boot-webmvc-test 4.1).
+#
+# A slice runs only the auto-configurations listed under its own annotations, read from every jar's
+# META-INF/spring/<annotation>.imports. A consumer whose slice includes a Filter or @Component that
+# draws on RotatingSecrets would otherwise fail to start every slice. Under test no config tree is
+# imported, so the reloader it brings does nothing. Read only by the slice: nothing outside a test
+# loads this file.
+dev.bluestep.secretfiles.spring.SecretFilesAutoConfiguration

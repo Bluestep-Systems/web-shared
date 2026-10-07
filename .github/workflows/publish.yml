@@ -1,10 +1,34 @@
 name: Publish to GitHub Packages
 
+# This repository publishes two artifacts with independent version lines, and a release publishes
+# exactly one of them, chosen by its tag:
+#
+#   secret-files-<version>  (e.g. secret-files-1.0.0)  -> dev.bluestep:secret-files, and nothing else.
+#                                                          The tag's number must equal the version in
+#                                                          secret-files/build.gradle, or nothing publishes.
+#   any other tag           (e.g. 4.1.7)               -> dev.bluestep:web-shared, exactly as before
+#                                                          the second artifact existed.
+#
+# The task is always project-qualified (`:publish`, `:secret-files:publish`). An unqualified
+# `./gradlew publish` now runs in every project, so a DTO release would also try to publish
+# whatever version secret-files is at — and GitHub Packages versions are immutable, so a second
+# publish of an existing one fails the job.
+#
+# workflow_dispatch publishes whichever artifact is picked (web-shared by default), at the version
+# its build file declares on the dispatched ref. No tag is involved, so there is no tag check.
 on:
   release:
     types:
       - published
   workflow_dispatch:
+    inputs:
+      artifact:
+        description: Artifact to publish, at the version its build file declares on the chosen ref
+        type: choice
+        options:
+          - web-shared
+          - secret-files
+        default: web-shared
 
 jobs:
   publish:
@@ -23,8 +47,46 @@ jobs:
           distribution: temurin
           java-version: 25
 
+      - name: Choose the artifact
+        id: route
+        env:
+          EVENT: ${{ github.event_name }}
+          TAG: ${{ github.event.release.tag_name }}
+          PICKED: ${{ inputs.artifact }}
+        run: |
+          if [ "$EVENT" = release ]; then
+            case "$TAG" in
+              secret-files-*) artifact=secret-files ;;
+              *) artifact=web-shared ;;
+            esac
+          else
+            artifact="$PICKED"
+          fi
+          case "$artifact" in
+            secret-files) project=':secret-files' ;;
+            web-shared) project='' ;;
+            *) echo "::error::Unknown artifact '$artifact'"; exit 1 ;;
+          esac
+          echo "Publishing $artifact (task ${project}:publish)"
+          echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
+          echo "project=$project" >> "$GITHUB_OUTPUT"
+
+      # secret-files only: its tags carry a prefix, which makes a mistyped tag (secret-files-1.0 for
+      # 1.0.0) easy to cut and impossible to take back once a version is published under it.
+      - name: Check the tag matches the secret-files version
+        if: github.event_name == 'release' && steps.route.outputs.artifact == 'secret-files'
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          declared=$(./gradlew -q :secret-files:properties --property version | sed -n 's/^version: //p')
+          if [ "${TAG#secret-files-}" != "$declared" ]; then
+            echo "::error::Tag $TAG does not match secret-files version $declared"
+            exit 1
+          fi
+
       - name: Publish to GitHub Packages
         env:
           USERNAME: ${{ github.actor }}
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./gradlew publish
+          PROJECT: ${{ steps.route.outputs.project }}
+        run: ./gradlew "${PROJECT}:publish"

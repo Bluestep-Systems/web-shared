@@ -16,10 +16,6 @@ import java.util.TreeSet;
 
 import org.junit.jupiter.api.Test;
 
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -35,20 +31,14 @@ import tools.jackson.dataformat.cbor.CBORMapper;
  * fail instead. The pinned JSON literals are the contract as prose.</p>
  *
  * <p>Jackson 3 is what both consumers' Boot 4 mappers use, JSON for reads and CBOR for pushes.
- * The storage read shapes are also pinned against a Jackson 2 mapper configured the way
- * web-global's msgpack converter is ({@code Jdk8Module}, {@code JavaTimeModule}, ISO dates),
- * since that converter can answer the same GET.</p>
+ * Until 5.0.0 the read shapes were also compared against a Jackson 2 mapper configured like
+ * web-global's msgpack converter, which could answer the same GET; that converter is retired, so
+ * the JSON and CBOR assertions below are the whole contract.</p>
  */
 class UsageWireContractTest {
 
 	private static final ObjectMapper JSON = JsonMapper.builder().build();
 	private static final ObjectMapper CBOR = CBORMapper.builder().build();
-	private static final com.fasterxml.jackson.databind.ObjectMapper JACKSON2 =
-			com.fasterxml.jackson.databind.json.JsonMapper.builder()
-					.addModule(new Jdk8Module())
-					.addModule(new JavaTimeModule())
-					.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
-					.build();
 
 	private static final OffsetDateTime PERIOD = OffsetDateTime.of(2026, 9, 7, 0, 0, 0, 0, ZoneOffset.UTC);
 	private static final LocalDate DAY = LocalDate.of(2026, 9, 7);
@@ -202,17 +192,13 @@ class UsageWireContractTest {
 				StorageUsageResponse.class));
 	}
 
-	/** Either mapper family can answer the storage GET; both must write the same tree. */
+	/** The storage GET answers in JSON: what it writes must bind back unchanged, sampled or not. */
 	@Test
-	void jackson2AndJackson3WriteTheSameStorageWire() throws Exception {
+	void storageUsageResponse_roundTripsThroughJson() {
 		final StorageUsageResponse empty =
 				new StorageUsageResponse("U1000001", DAY, DAY, List.of(), List.of());
 		for (final StorageUsageResponse response : List.of(response(), empty)) {
-			assertEquals(JSON.readTree(JSON.writeValueAsString(response)),
-					JSON.readTree(JACKSON2.writeValueAsString(response)));
-			assertEquals(response, JACKSON2.readValue(JSON.writeValueAsString(response),
-					StorageUsageResponse.class));
-			assertEquals(response, JSON.readValue(JACKSON2.writeValueAsString(response),
+			assertEquals(response, JSON.readValue(JSON.writeValueAsString(response),
 					StorageUsageResponse.class));
 		}
 	}
@@ -247,17 +233,15 @@ class UsageWireContractTest {
 		assertEquals(60, row.get("responseBytesMax").asLong());
 	}
 
-	/** Both mapper families and CBOR must carry the summary unchanged, empty or not. */
+	/** JSON and CBOR must both carry the summary unchanged, empty or not. */
 	@Test
-	void usageSummaryResponse_roundTripsEveryMapper() throws Exception {
+	void usageSummaryResponse_roundTripsJsonAndCbor() {
 		final UsageSummaryResponse empty =
 				new UsageSummaryResponse(PERIOD, PERIOD.plusDays(1), List.of("http"), List.of());
 		for (final UsageSummaryResponse response : List.of(summary(), empty)) {
 			assertEquals(response, CBOR.readValue(CBOR.writeValueAsBytes(response),
 					UsageSummaryResponse.class));
-			assertEquals(JSON.readTree(JSON.writeValueAsString(response)),
-					JSON.readTree(JACKSON2.writeValueAsString(response)));
-			assertEquals(response, JACKSON2.readValue(JSON.writeValueAsString(response),
+			assertEquals(response, JSON.readValue(JSON.writeValueAsString(response),
 					UsageSummaryResponse.class));
 		}
 		final UsageSummaryResponse nulls = new UsageSummaryResponse(PERIOD, PERIOD, null, null);

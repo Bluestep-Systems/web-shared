@@ -1,21 +1,18 @@
 package dev.bluestep.global.dto;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.util.ArrayList;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.json.JsonMapper;
-import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
-import org.msgpack.jackson.dataformat.MessagePackFactory;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.dataformat.cbor.CBORMapper;
 
 import dev.bluestep.global.dto.ai.AiCompletionRequest;
 import dev.bluestep.global.dto.ai.AiDenialCode;
@@ -54,35 +51,30 @@ import dev.bluestep.global.dto.ai.UnitKeys;
  *
  * <p>Regenerate these only against a real 1.2.2 jar. Editing one to make a test pass would
  * silently redefine the contract this class exists to hold still.</p>
+ *
+ * <p><b>JSON and CBOR, Jackson 3 only, since 5.0.0.</b> This class also pinned the msgpack bytes
+ * 1.2.2 exchanged and a Jackson 2 JSON mapper's output. Both were retired with the last consumer
+ * that spoke either: web-global no longer serves {@code application/x-msgpack}, and nothing binds
+ * these records with Jackson 2. The JSON goldens are unchanged, and the binary round trip is now
+ * CBOR, the format the gate client sends.</p>
  */
 class LegacyWireCompatTest {
 
-	/** Mirrors web-global's primary Boot 4 mapper for JSON. */
-	private static final tools.jackson.databind.ObjectMapper JACKSON3 =
-			tools.jackson.databind.json.JsonMapper.builder().build();
+	/** Mirrors the primary Boot 4 mapper for JSON that web-global and the monolith both run. */
+	private static final ObjectMapper JACKSON3 = JsonMapper.builder().build();
 
-	/** Mirrors the Jackson 2 mapper web-global's MessagePackConfig hand-builds. */
-	private static final ObjectMapper MSGPACK = JsonMapper.builder(new MessagePackFactory())
-			.addModule(new Jdk8Module())
-			.build();
-
-	/** Mirrors a Jackson 2 JSON mapper, as the monolith itself runs. */
-	private static final ObjectMapper JACKSON2 = JsonMapper.builder().addModule(new Jdk8Module()).build();
+	/** The binary transport: Jackson 3 CBOR, which the AI gate client sends and web-global reads. */
+	private static final ObjectMapper CBOR = CBORMapper.builder().build();
 
 	// ---- goldens emitted by web-shared 1.2.2 -------------------------------------------
 
 	private static final String PREFLIGHT_REQ_NULLS =
 			"{\"s\":\"acme\",\"o\":\"org-1\",\"u\":\"user-9\",\"f\":null,\"t\":null,"
 					+ "\"p\":\"anthropic\",\"m\":\"claude-opus-4\"}";
-	private static final String PREFLIGHT_REQ_NULLS_MP =
-			"87a173a461636d65a16fa56f72672d31a175a6757365722d39a166c0a174c0a170a9616e7468726f706963"
-					+ "a16dad636c617564652d6f7075732d34";
 
 	private static final String COMPLETION_REQ_NULLS =
 			"{\"t\":\"trk-7\",\"i\":100,\"o\":200,\"l\":1500,\"n\":3,\"s\":null,\"e\":null,"
 					+ "\"a\":null,\"ai\":null,\"ci\":null,\"ao\":null}";
-	private static final String COMPLETION_REQ_NULLS_MP =
-			"8ba174a574726b2d37a16964a16fccc8a16ccd05dca16e03a173c0a165c0a161c0a26169c0a26369c0a2616fc0";
 
 	private static final String COMPLETION_REQ_FULL =
 			"{\"t\":\"trk-8\",\"i\":100,\"o\":200,\"l\":1500,\"n\":3,\"s\":\"end_turn\",\"e\":\"boom\","
@@ -90,12 +82,6 @@ class LegacyWireCompatTest {
 
 	private static final String PREFLIGHT_RESP_AUTHORIZED =
 			"{\"a\":true,\"t\":\"trk-1\",\"d\":null,\"i\":4}";
-	private static final String PREFLIGHT_RESP_AUTHORIZED_MP =
-			"84a161c3a174a574726b2d31a164c0a16904";
-
-	private static byte[] hex(String s) {
-		return HexFormat.of().parseHex(s);
-	}
 
 	// ---- inbound: what the monolith sends, read by 2.0.0 --------------------------------
 
@@ -138,38 +124,6 @@ class LegacyWireCompatTest {
 		assertEquals(Optional.of(78), request.audioOutputTokens());
 	}
 
-	/**
-	 * msgpack is served by a hand-built Jackson 2 mapper because no Jackson 3 msgpack
-	 * dataformat exists. That mapper needs {@code Jdk8Module} registered explicitly — without
-	 * it these payloads bind literal nulls into the records instead of empty Optionals.
-	 *
-	 * <p>The monolith itself has moved to CBOR ({@code AiUsageGateClient}), so msgpack is no
-	 * longer the transport it speaks; web-global still advertises it on
-	 * {@code application/x-msgpack}, and the hand-built mapper is the one place where Jackson
-	 * 2's unknown-property strictness still applies, so it stays pinned here.</p>
-	 */
-	@Test
-	void legacyPreflightRequestMsgpackBindsToEmptyOptionals() throws Exception {
-		AiPreflightRequest request =
-				MSGPACK.readValue(hex(PREFLIGHT_REQ_NULLS_MP), AiPreflightRequest.class);
-
-		assertEquals("acme", request.tenantId());
-		assertEquals("org-1", request.unitId());
-		assertEquals(Optional.empty(), request.flag());
-		assertEquals(Optional.empty(), request.triggeringProcess());
-	}
-
-	@Test
-	void legacyCompletionRequestMsgpackBindsToEmptyOptionals() throws Exception {
-		AiCompletionRequest request =
-				MSGPACK.readValue(hex(COMPLETION_REQ_NULLS_MP), AiCompletionRequest.class);
-
-		assertEquals("trk-7", request.trackingId());
-		assertEquals(1500L, request.totalLatencyMs());
-		assertEquals(Optional.empty(), request.stopReason());
-		assertEquals(Optional.empty(), request.audioOutputTokens());
-	}
-
 	// ---- outbound: what 2.0.0 emits, read by a 1.2.2 client -----------------------------
 
 	/**
@@ -185,17 +139,6 @@ class LegacyWireCompatTest {
 
 		assertEquals(PREFLIGHT_RESP_AUTHORIZED, JACKSON3.writeValueAsString(response),
 				"Jackson 3 output must match what web-shared 1.2.2 emitted");
-		assertEquals(PREFLIGHT_RESP_AUTHORIZED, JACKSON2.writeValueAsString(response),
-				"Jackson 2 output must match what web-shared 1.2.2 emitted");
-	}
-
-	@Test
-	void currentResponseMsgpackIsByteIdenticalToLegacy() throws Exception {
-		AiPreflightResponse response =
-				new AiPreflightResponse(true, "trk-1", Optional.empty(), Optional.of(4));
-
-		assertArrayEquals(hex(PREFLIGHT_RESP_AUTHORIZED_MP), MSGPACK.writeValueAsBytes(response),
-				"an empty Optional must encode as msgpack nil, exactly as the nullable component did");
 	}
 
 	@Test
@@ -204,8 +147,6 @@ class LegacyWireCompatTest {
 				"acme", "org-1", "user-9", Optional.empty(), Optional.empty(),
 				"anthropic", "claude-opus-4");
 		assertEquals(PREFLIGHT_REQ_NULLS, JACKSON3.writeValueAsString(preflight));
-		assertArrayEquals(hex(PREFLIGHT_REQ_NULLS_MP), MSGPACK.writeValueAsBytes(preflight));
-
 	}
 
 	/**
@@ -246,14 +187,13 @@ class LegacyWireCompatTest {
 				"trk-7", 100, 200, 1500L, 3, Optional.empty(), Optional.empty(), Optional.empty(),
 				Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
 
-		JsonNode legacy = JACKSON2.readTree(COMPLETION_REQ_NULLS);
-		JsonNode current =
-				JACKSON2.readTree(JACKSON3.writeValueAsString(completion));
+		JsonNode legacy = JACKSON3.readTree(COMPLETION_REQ_NULLS);
+		JsonNode current = JACKSON3.readTree(JACKSON3.writeValueAsString(completion));
 
 		List<String> legacyKeys = new ArrayList<>();
-		legacy.fieldNames().forEachRemaining(legacyKeys::add);
+		legacy.properties().forEach(entry -> legacyKeys.add(entry.getKey()));
 		List<String> currentKeys = new ArrayList<>();
-		current.fieldNames().forEachRemaining(currentKeys::add);
+		current.properties().forEach(entry -> currentKeys.add(entry.getKey()));
 
 		List<String> added = new ArrayList<>(currentKeys);
 		added.removeAll(legacyKeys);
@@ -289,9 +229,9 @@ class LegacyWireCompatTest {
 				JACKSON3.readValue(JACKSON3.writeValueAsString(completion), AiCompletionRequest.class);
 		assertEquals(Optional.of(expected), viaJson.unitAmounts());
 
-		AiCompletionRequest viaMsgpack =
-				MSGPACK.readValue(MSGPACK.writeValueAsBytes(completion), AiCompletionRequest.class);
-		assertEquals(Optional.of(expected), viaMsgpack.unitAmounts(),
+		AiCompletionRequest viaCbor =
+				CBOR.readValue(CBOR.writeValueAsBytes(completion), AiCompletionRequest.class);
+		assertEquals(Optional.of(expected), viaCbor.unitAmounts(),
 				"amounts are longs; a transport that narrowed them would bill a different number");
 	}
 

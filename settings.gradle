@@ -1,1 +1,6 @@
 rootProject.name = 'web-shared'
+
+// A separately published library with its own coordinate (dev.bluestep:secret-files) and its own
+// version line. It shares this repository and its build conventions, not the root library's version:
+// that number is also the API path web-global serves, so it moves only for the DTO contract.
+include 'secret-files'
