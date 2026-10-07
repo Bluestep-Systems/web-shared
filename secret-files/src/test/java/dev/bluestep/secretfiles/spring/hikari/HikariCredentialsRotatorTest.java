@@ -151,11 +151,12 @@ class HikariCredentialsRotatorTest {
 	void jdbcUrlPoolAppliesAWorkingPassword(final CapturedOutput output) throws SQLException {
 		final HikariDataSource rotated = jdbcUrlPool();
 		assertThat(currentUserOfANewConnection(rotated)).isEqualTo(USER);
+		final HikariCredentialsRotator rotator = rotator(rotated);
 
 		execute("ALTER USER " + USER + " SET PASSWORD '" + SECOND + "'");
 		environment.setProperty(PASSWORD_PROPERTY, SECOND);
 
-		assertThat(rotator(rotated).rotate()).isEqualTo(Outcome.APPLIED);
+		assertThat(rotator.rotate()).isEqualTo(Outcome.APPLIED);
 		assertThat(rotated.getCredentials().getPassword()).isEqualTo(SECOND);
 		assertThat(currentUserOfANewConnection(rotated))
 				.as("the old password is no longer the user's, so only the new one can open this")
@@ -205,11 +206,12 @@ class HikariCredentialsRotatorTest {
 	void suppliedDataSourcePoolAppliesAWorkingPassword() throws SQLException {
 		final HikariDataSource rotated = suppliedDataSourcePool();
 		assertThat(currentUserOfANewConnection(rotated)).isEqualTo(USER);
+		final HikariCredentialsRotator rotator = rotator(rotated);
 
 		execute("ALTER USER " + USER + " SET PASSWORD '" + SECOND + "'");
 		environment.setProperty(PASSWORD_PROPERTY, SECOND);
 
-		assertThat(rotator(rotated).rotate()).isEqualTo(Outcome.APPLIED);
+		assertThat(rotator.rotate()).isEqualTo(Outcome.APPLIED);
 		assertThat(rotated.getCredentials().getUsername()).isEqualTo(USER);
 		assertThat(rotated.getCredentials().getPassword()).isEqualTo(SECOND);
 		assertThat(currentUserOfANewConnection(rotated))
@@ -243,13 +245,14 @@ class HikariCredentialsRotatorTest {
 	@DisplayName("as a bean, it rotates on SecretsReloadedEvent")
 	void rotatesOnTheEvent() throws SQLException {
 		final HikariDataSource rotated = jdbcUrlPool();
-		execute("ALTER USER " + USER + " SET PASSWORD '" + SECOND + "'");
-		environment.setProperty(PASSWORD_PROPERTY, SECOND);
 		try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
 			context.setEnvironment(environment);
 			context.registerBean(SecretsReloadedListenerFactory.class);
 			context.registerBean(HikariCredentialsRotator.class, () -> rotator(rotated));
 			context.refresh();
+			// Changed after the rotator exists, so only the event can apply it.
+			execute("ALTER USER " + USER + " SET PASSWORD '" + SECOND + "'");
+			environment.setProperty(PASSWORD_PROPERTY, SECOND);
 
 			context.publishEvent(new SecretsReloadedEvent(Path.of("/var/lib/bluestep/secrets")));
 
@@ -345,8 +348,6 @@ class HikariCredentialsRotatorTest {
 	void onAppliedHearsTheEventPath(final CapturedOutput output) throws SQLException {
 		final HikariDataSource rotated = jdbcUrlPool();
 		final List<Credentials> applied = new CopyOnWriteArrayList<>();
-		execute("ALTER USER " + USER + " SET PASSWORD '" + SECOND + "'");
-		environment.setProperty(PASSWORD_PROPERTY, SECOND);
 		try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
 			context.setEnvironment(environment);
 			context.registerBean(SecretsReloadedListenerFactory.class);
@@ -356,6 +357,9 @@ class HikariCredentialsRotatorTest {
 					})
 					.onApplied(applied::add));
 			context.refresh();
+			// Changed after the rotator exists, so only the event can apply it.
+			execute("ALTER USER " + USER + " SET PASSWORD '" + SECOND + "'");
+			environment.setProperty(PASSWORD_PROPERTY, SECOND);
 
 			context.publishEvent(new SecretsReloadedEvent(Path.of("/var/lib/bluestep/secrets")));
 		}
@@ -406,6 +410,151 @@ class HikariCredentialsRotatorTest {
 		assertThat(rotator(pool).rotate()).isEqualTo(Outcome.REFUSED);
 		assertThat(output).contains("could not be tested (java.lang.IllegalStateException <- "
 				+ "java.lang.IllegalArgumentException)").doesNotContain(SECOND).doesNotContain("driver quoting");
+	}
+
+	@Test
+	@DisplayName("dataSourceClassName pool: the probe connects where the pool does, not to the jdbcUrl Hikari ignores")
+	void dataSourceClassNamePoolIsProbedThroughItsOwnDataSource() throws SQLException {
+		// Two databases with the same user. The pool's jdbcUrl names the first, but its dataSourceClassName
+		// wins in Hikari and connects to the second.
+		final String classBacked = "jdbc:h2:mem:" + UUID.randomUUID();
+		try (Connection classBackedAdmin = DriverManager.getConnection(classBacked, "SA", "admin-pw")) {
+			execute(classBackedAdmin, "CREATE USER " + USER + " PASSWORD '" + FIRST + "'");
+			pool = new HikariDataSource();
+			pool.setPoolName("rotation-probe-class");
+			pool.setJdbcUrl(url);
+			pool.setDataSourceClassName(JdbcDataSource.class.getName());
+			pool.addDataSourceProperty("url", classBacked);
+			pool.setUsername(USER);
+			pool.setPassword(FIRST);
+			pool.setMaximumPoolSize(2);
+			final HikariCredentialsRotator rotator = rotator(pool);
+
+			// Valid on the jdbcUrl's database only.
+			execute("ALTER USER " + USER + " SET PASSWORD '" + SECOND + "'");
+			environment.setProperty(PASSWORD_PROPERTY, SECOND);
+			assertThat(rotator.rotate()).as("the pool's own database still wants the old password")
+					.isEqualTo(Outcome.REFUSED);
+			assertThat(pool.getCredentials().getPassword()).isEqualTo(FIRST);
+
+			execute(classBackedAdmin, "ALTER USER " + USER + " SET PASSWORD '" + SECOND + "'");
+			assertThat(rotator.rotate()).isEqualTo(Outcome.APPLIED);
+			assertThat(currentUserOfANewConnection(pool)).isEqualTo(USER);
+			execute(classBackedAdmin, "SHUTDOWN");
+		}
+	}
+
+	@Test
+	@DisplayName("a pool configured by dataSourceClassName alone is accepted and rotated")
+	void dataSourceClassNameOnlyPoolRotates() throws SQLException {
+		pool = new HikariDataSource();
+		pool.setPoolName("rotation-probe-class-only");
+		pool.setDataSourceClassName(JdbcDataSource.class.getName());
+		pool.addDataSourceProperty("url", url);
+		pool.setUsername(USER);
+		pool.setPassword(FIRST);
+		pool.setMaximumPoolSize(2);
+		final HikariCredentialsRotator rotator = rotator(pool);
+
+		execute("ALTER USER " + USER + " SET PASSWORD '" + SECOND + "'");
+		environment.setProperty(PASSWORD_PROPERTY, SECOND);
+
+		assertThat(rotator.rotate()).isEqualTo(Outcome.APPLIED);
+		assertThat(currentUserOfANewConnection(pool)).isEqualTo(USER);
+	}
+
+	@Test
+	@DisplayName("the probe runs the pool's connectionInitSql: credentials it fails for are refused, and retried")
+	void connectionInitSqlFailingIsARefusal(final CapturedOutput output) throws Exception {
+		final String other = "ROTATOR_TWO";
+		execute("CREATE TABLE PROBE_T (ID INT)");
+		execute("GRANT SELECT ON PROBE_T TO " + USER);
+		// Logs in fine, but may not run the pool's init SQL.
+		execute("CREATE USER " + other + " PASSWORD '" + SECOND + "'");
+		final HikariDataSource rotated = jdbcUrlPool();
+		rotated.setConnectionInitSql("SELECT COUNT(*) FROM PUBLIC.PROBE_T");
+		final HikariCredentialsRotator rotator = quicklyRetrying(rotated);
+
+		environment.setProperty(USERNAME_PROPERTY, other);
+		environment.setProperty(PASSWORD_PROPERTY, SECOND);
+		assertThat(rotator.rotate()).isEqualTo(Outcome.REFUSED);
+		assertThat(rotator.retryPending()).isTrue();
+		assertThat(rotated.getCredentials().getUsername()).isEqualTo(USER);
+		assertThat(output).contains("a test connection with them failed").doesNotContain(SECOND);
+
+		execute("GRANT SELECT ON PROBE_T TO " + other);
+		await(() -> other.equals(rotated.getCredentials().getUsername()), "a retry applied the offer");
+		assertThat(currentUserOfANewConnection(rotated)).isEqualTo(other);
+	}
+
+	@Test
+	@DisplayName("with no username property, the password rotates against the pool's own username")
+	void passwordOnlyRotates() throws SQLException {
+		final MockEnvironment passwordOnly = new MockEnvironment().withProperty(PASSWORD_PROPERTY, FIRST);
+		final HikariDataSource rotated = jdbcUrlPool();
+		final HikariCredentialsRotator rotator = track(new HikariCredentialsRotator(rotated, passwordOnly,
+				USERNAME_PROPERTY, PASSWORD_PROPERTY, ExistingConnections.SOFT_EVICT));
+
+		execute("ALTER USER " + USER + " SET PASSWORD '" + SECOND + "'");
+		passwordOnly.setProperty(PASSWORD_PROPERTY, SECOND);
+
+		assertThat(rotator.rotate()).isEqualTo(Outcome.APPLIED);
+		assertThat(rotated.getCredentials().getUsername()).isEqualTo(USER);
+		assertThat(rotated.getCredentials().getPassword()).isEqualTo(SECOND);
+		assertThat(currentUserOfANewConnection(rotated)).isEqualTo(USER);
+	}
+
+	@Test
+	@DisplayName("with neither a username property nor a pool username, the password is refused untried")
+	void noUsernameAnywhereIsRefused(final CapturedOutput output) {
+		final MockEnvironment passwordOnly = new MockEnvironment().withProperty(PASSWORD_PROPERTY, SECOND);
+		pool = new HikariDataSource();
+		pool.setPoolName("rotation-probe-no-user");
+		pool.setJdbcUrl(url);
+
+		final HikariCredentialsRotator rotator = track(new HikariCredentialsRotator(pool, passwordOnly,
+				USERNAME_PROPERTY, PASSWORD_PROPERTY));
+
+		assertThat(rotator.rotate()).isEqualTo(Outcome.REFUSED);
+		assertThat(rotator.retryPending()).isFalse();
+		assertThat(output).contains(USERNAME_PROPERTY + " is blank or absent and pool rotation-probe-no-user has "
+				+ "no username of its own").doesNotContain("SQLState").doesNotContain(SECOND);
+	}
+
+	@Test
+	@DisplayName("a rotator created after the secret moved catches its pool up, with no reload event at all")
+	void aNewRotatorCatchesUpWithoutAnEvent() throws Exception {
+		// Pool A refused the new password (published before ALTER ROLE) and is retrying; pool B is built
+		// now from the old properties and never hears that earlier event.
+		environment.setProperty(PASSWORD_PROPERTY, SECOND);
+		final HikariDataSource rotated = jdbcUrlPool();
+
+		final HikariCredentialsRotator rotator = quicklyRetrying(rotated);
+		assertThat(rotator.retryPending()).as("refused at construction, and retrying").isTrue();
+
+		execute("ALTER USER " + USER + " SET PASSWORD '" + SECOND + "'");
+		await(() -> SECOND.equals(rotated.getCredentials().getPassword()), "the pool converged");
+		assertThat(currentUserOfANewConnection(rotated)).isEqualTo(USER);
+	}
+
+	@Test
+	@DisplayName("onApplied registered after the construction catch-up applied is told of it at once")
+	void onAppliedHearsTheCatchUp() throws SQLException {
+		execute("ALTER USER " + USER + " SET PASSWORD '" + SECOND + "'");
+		environment.setProperty(PASSWORD_PROPERTY, SECOND);
+		final HikariDataSource rotated = jdbcUrlPool();
+		final List<Credentials> applied = new CopyOnWriteArrayList<>();
+
+		rotator(rotated).onApplied(applied::add);
+
+		assertThat(rotated.getCredentials().getPassword()).isEqualTo(SECOND);
+		assertThat(applied).singleElement().extracting(Credentials::getPassword).isEqualTo(SECOND);
+	}
+
+	private static void execute(final Connection connection, final String sql) throws SQLException {
+		try (Statement statement = connection.createStatement()) {
+			statement.execute(sql);
+		}
 	}
 
 	private static void await(final BooleanSupplier condition, final String what) throws InterruptedException {

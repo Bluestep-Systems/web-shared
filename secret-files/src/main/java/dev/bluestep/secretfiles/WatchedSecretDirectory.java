@@ -12,8 +12,6 @@ import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.file.ClosedWatchServiceException;
-import java.nio.file.DirectoryIteratorException;
-import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.WatchKey;
@@ -49,10 +47,16 @@ import java.util.function.Consumer;
  * <h2>What this class does with that</h2>
  *
  * <ul>
- *   <li><b>Visible keys only.</b> A key is a directory entry whose name does not start with {@code .}
- *       and which resolves, following symlinks, to a regular file. {@code ..data}, the timestamped
- *       directories and any other dot-entry are ignored, and so is a visible link left dangling by a
- *       key the update removed.</li>
+ *   <li><b>One generation per read.</b> {@code ..data} is resolved once to its timestamped directory,
+ *       every key is read from that directory, and the read is kept only if {@code ..data} still names
+ *       it afterwards; otherwise it is discarded and done again ({@link PinnedGeneration}). A swap
+ *       landing mid-read therefore never yields a snapshot holding keys from two versions. A directory
+ *       with no {@code ..data} (a plain directory, as in local development) is read directly.</li>
+ *   <li><b>Keys as Spring Boot's config tree sees them.</b> A key is an entry whose name does not
+ *       start with {@code ..} and which resolves to a regular file ({@link PinnedGeneration#keys}): a
+ *       single leading dot is part of the key ({@code .token}), while the kubelet's {@code ..data},
+ *       {@code ..data_tmp} and timestamped directories are ignored, as is a dangling link. A
+ *       subdirectory is refused: {@link #open} throws, and a later read that meets one fails.</li>
  *   <li><b>Two triggers.</b> A {@link WatchService} on the directory sees the swap as events on
  *       {@code ..data} (and an in-place rewrite of a plain file as a modify). A periodic poll
  *       ({@link #DEFAULT_POLL_INTERVAL} unless told otherwise) re-reads regardless, so a missed event
@@ -61,10 +65,10 @@ import java.util.function.Consumer;
  *       period and then re-reads once.</li>
  *   <li><b>Only real changes notify.</b> Every trigger re-reads the whole directory, and listeners
  *       hear about the result only when its values differ from the published snapshot.</li>
- *   <li><b>A torn read is retried, never published.</b> A file can vanish between listing and
- *       reading while the kubelet is mid-swap. That read is discarded whole — a snapshot missing a
- *       key that still exists would be worse than a late one — and retried once shortly afterwards;
- *       if the retry fails too, the next event or poll tries again.</li>
+ *   <li><b>A failed read is retried, never published.</b> A read that fails — {@code ..data} kept
+ *       moving, or a plain directory's file vanished between listing and reading — is discarded whole
+ *       and retried once shortly afterwards; if the retry fails too, the next event or poll tries
+ *       again.</li>
  *   <li><b>Values never reach a log.</b> Logging names keys, the directory and exception types;
  *       never a value.</li>
  * </ul>
@@ -114,8 +118,9 @@ public final class WatchedSecretDirectory implements SecretDirectory {
 	 *
 	 * @param dir the mounted secret directory, such as {@code /var/lib/bluestep/secrets}
 	 * @return the open directory, already holding its first snapshot
-	 * @throws IllegalArgumentException if {@code dir} does not exist or is not a directory; a caller
-	 *                                  that runs both with and without the mount checks for it first
+	 * @throws IllegalArgumentException if {@code dir} does not exist, is not a directory, or holds a
+	 *                                  subdirectory; a caller that runs both with and without the mount
+	 *                                  checks for it first
 	 * @throws UncheckedIOException     if the directory cannot be read or watched
 	 */
 	public static WatchedSecretDirectory open(final Path dir) {
@@ -128,8 +133,8 @@ public final class WatchedSecretDirectory implements SecretDirectory {
 	 * @param dir          the mounted secret directory
 	 * @param pollInterval the longest a change can go unnoticed if its watch event is missed; positive
 	 * @return the open directory, already holding its first snapshot
-	 * @throws IllegalArgumentException if {@code dir} does not exist or is not a directory, or
-	 *                                  {@code pollInterval} is not positive
+	 * @throws IllegalArgumentException if {@code dir} does not exist, is not a directory or holds a
+	 *                                  subdirectory, or {@code pollInterval} is not positive
 	 * @throws UncheckedIOException     if the directory cannot be read or watched
 	 */
 	public static WatchedSecretDirectory open(final Path dir, final Duration pollInterval) {
@@ -323,6 +328,10 @@ public final class WatchedSecretDirectory implements SecretDirectory {
 			LOG.log(Level.DEBUG, "Reading secret directory {0} failed ({1}); probably caught mid-swap", dir,
 					e.getClass().getSimpleName());
 			return false;
+		} catch (IllegalArgumentException e) {
+			// A subdirectory appeared since open() refused one; the message names the directory only.
+			LOG.log(Level.WARNING, () -> e.getMessage() + " Keeping the current snapshot.");
+			return false;
 		}
 		reads.incrementAndGet();
 		publish(next);
@@ -371,25 +380,32 @@ public final class WatchedSecretDirectory implements SecretDirectory {
 	}
 
 	/**
-	 * Reads every visible key in {@code dir}.
+	 * Reads every key of the generation {@code ..data} names, or of {@code dir} itself where there is no
+	 * {@code ..data} (see {@link PinnedGeneration}).
 	 *
-	 * @throws IOException if the listing fails or a listed file cannot be read, including one that
-	 *                     disappeared after it was listed; the caller discards the whole read
+	 * @throws IOException              if the listing fails, a listed file cannot be read while
+	 *                                  {@code ..data} stayed put, or {@code ..data} kept moving; the
+	 *                                  caller discards the whole read
+	 * @throws IllegalArgumentException if the directory holds a subdirectory
 	 */
 	static SecretSnapshot read(final Path dir) throws IOException {
-		final Map<String, String> values = new HashMap<>();
-		try (DirectoryStream<Path> entries = Files.newDirectoryStream(dir)) {
-			for (Path entry : entries) {
-				final String key = String.valueOf(entry.getFileName());
-				if (key.startsWith(".") || !Files.isRegularFile(entry)) {
-					continue;
-				}
-				decode(dir, key, Files.readAllBytes(entry)).ifPresent(value -> values.put(key, value));
+		return read(dir, key -> { });
+	}
+
+	/**
+	 * Test seam: {@code afterEachKey} runs after each key's file is read, so a test can swap the volume
+	 * between two reads.
+	 */
+	static SecretSnapshot read(final Path dir, final Consumer<String> afterEachKey) throws IOException {
+		return PinnedGeneration.read(dir, generation -> {
+			final Map<String, String> values = new HashMap<>();
+			for (String key : PinnedGeneration.keys(generation)) {
+				final byte[] bytes = Files.readAllBytes(generation.resolve(key));
+				afterEachKey.accept(key);
+				decode(dir, key, bytes).ifPresent(value -> values.put(key, value));
 			}
-		} catch (DirectoryIteratorException e) {
-			throw e.getCause();
-		}
-		return new SecretSnapshot(values);
+			return new SecretSnapshot(values);
+		});
 	}
 
 	/**

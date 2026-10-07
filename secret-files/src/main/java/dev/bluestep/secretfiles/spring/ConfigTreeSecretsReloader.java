@@ -1,5 +1,6 @@
 package dev.bluestep.secretfiles.spring;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -15,6 +16,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -26,6 +28,7 @@ import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.PropertySource;
 
 import dev.bluestep.secretfiles.ExceptionTypes;
+import dev.bluestep.secretfiles.PinnedGeneration;
 import dev.bluestep.secretfiles.SecretDirectory;
 import dev.bluestep.secretfiles.SecretFiles;
 import dev.bluestep.secretfiles.WatchedSecretDirectory;
@@ -53,19 +56,27 @@ import dev.bluestep.secretfiles.WatchedSecretDirectory;
  * <h2>What a change does</h2>
  *
  * <p>The core library's notification is only the trigger. The truth is re-read from disk into a fresh
- * {@link ConfigTreePropertySource} with the same name and the same
- * {@link Option#AUTO_TRIM_TRAILING_NEW_LINE} option Boot's import uses, so a reloaded value is trimmed
- * exactly as the value read at startup was. Every value is read eagerly — the source caches each one —
- * and compared with what the Environment currently serves. Only a real difference replaces the source
+ * {@link ConfigTreePropertySource} with the same name and the same options the source at startup had,
+ * so a reloaded value reads exactly as the value read at startup did: the mount directory untrimmed,
+ * each file's exact bytes ({@link ExactSecretTreePostProcessor}), and any other config tree with the
+ * {@link Option#AUTO_TRIM_TRAILING_NEW_LINE} Boot's import uses. The re-read is pinned to one kubelet generation, as the
+ * core's is ({@link PinnedGeneration}): it is kept only if {@code ..data} named the same timestamped
+ * directory before and after every value was read, and if Boot listed exactly that generation's keys;
+ * a swap landing mid-read discards it, so the Environment is never given values from two versions of
+ * the Secret. Every value is read eagerly — the source caches each one, so it never opens a file again
+ * once it is in the Environment — and compared with what the Environment currently serves. Only a real
+ * difference replaces the source
  * ({@code MutablePropertySources.replace}: same name, same position, so precedence does not move) and
  * publishes the event. Compare, replace and publish happen under one lock, so a listener never sees an
  * older Environment after a newer one.</p>
  *
  * <h2>A re-read that fails is retried until it succeeds</h2>
  *
- * <p>Boot's reader and the core's disagree about one thing that matters: a visible link left dangling
- * by a key the kubelet is removing. The core skips it and reports the consistent new state; Boot lists
- * it and then fails to read it. The core then has nothing further to report — its own view is already
+ * <p>Boot's reader and the core's differ in one way that matters: Boot lists the visible links, the core
+ * reads the timestamped directory itself. Just after the kubelet's rename, a link for a key it is
+ * removing still dangles and a link for a key it is adding may not exist yet. The core reports the
+ * consistent new state; Boot's listing fails to read the one or misses the other, and the re-read is
+ * refused. The core then has nothing further to report — its own view is already
  * current — so a reloader that gave up after a failed re-read stayed stale until the Secret next
  * changed, which may be never. Here a failed re-read schedules another, with backoff doubling from
  * {@code 200 ms} to a ceiling of {@code 5 s}, and keeps retrying at the ceiling until one succeeds or a
@@ -74,9 +85,14 @@ import dev.bluestep.secretfiles.WatchedSecretDirectory;
  *
  * <p>Building the replacement from the core's {@code SecretSnapshot} instead was rejected: the
  * replacement would no longer be a {@code ConfigTreePropertySource}, so it would lose Boot's origin
- * tracking and its {@code InputStreamSource} values, read keys by a different rule (Boot also reads
- * single-dot names and nested directories), and could not be found again by the next {@link #start()}.
- * Retrying keeps the Environment holding exactly what Boot's own import would have built.</p>
+ * tracking and its {@code InputStreamSource} values, and could not be found again by the next
+ * {@link #start()}. Building it over the timestamped directory itself is impossible: Boot skips every
+ * path with a {@code ..}-prefixed element, which is every path inside one. Retrying keeps the
+ * Environment holding exactly what Boot's own import would have built.</p>
+ *
+ * <p>The core and Boot read the same keys: single-dot names such as {@code .token} included, the
+ * kubelet's {@code ..}-prefixed entries skipped. A subdirectory, which Boot would read as dotted keys, is
+ * refused: a Secret volume cannot hold one, and {@link #start()} fails naming it.</p>
  *
  * <h2>Startup and shutdown</h2>
  *
@@ -102,6 +118,8 @@ public final class ConfigTreeSecretsReloader implements SmartLifecycle {
 	private final ApplicationEventPublisher events;
 	private final Path conventionalDirectory;
 	private final Duration pollInterval;
+	/** Test seam; does nothing in production. */
+	private final Consumer<String> afterEachValue;
 
 	/** Guards trees, retries, every Tree's state, and the replace-and-publish. */
 	private final Object lock = new Object();
@@ -130,10 +148,20 @@ public final class ConfigTreeSecretsReloader implements SmartLifecycle {
 	/** Test seam: polls each tree every {@code pollInterval}. */
 	ConfigTreeSecretsReloader(final ConfigurableEnvironment environment, final ApplicationEventPublisher events,
 			final Path conventionalDirectory, final Duration pollInterval) {
+		this(environment, events, conventionalDirectory, pollInterval, property -> { });
+	}
+
+	/**
+	 * Test seam: {@code afterEachValue} runs after each value a re-read takes from disk, so a test can
+	 * swap the volume between two of them.
+	 */
+	ConfigTreeSecretsReloader(final ConfigurableEnvironment environment, final ApplicationEventPublisher events,
+			final Path conventionalDirectory, final Duration pollInterval, final Consumer<String> afterEachValue) {
 		this.environment = Objects.requireNonNull(environment, "environment");
 		this.events = Objects.requireNonNull(events, "events");
 		this.conventionalDirectory = conventionalDirectory.toAbsolutePath().normalize();
 		this.pollInterval = Objects.requireNonNull(pollInterval, "pollInterval");
+		this.afterEachValue = Objects.requireNonNull(afterEachValue, "afterEachValue");
 	}
 
 	/**
@@ -142,6 +170,7 @@ public final class ConfigTreeSecretsReloader implements SmartLifecycle {
 	 *
 	 * @throws IllegalStateException        if the conventional mount directory exists but no config tree
 	 *                                      imports it
+	 * @throws IllegalArgumentException     if an imported directory holds a subdirectory
 	 * @throws java.io.UncheckedIOException if an imported directory cannot be watched
 	 */
 	@Override
@@ -168,7 +197,8 @@ public final class ConfigTreeSecretsReloader implements SmartLifecycle {
 			try {
 				for (ConfigTreePropertySource source : imported) {
 					final SecretDirectory directory = WatchedSecretDirectory.open(source.getSource(), pollInterval);
-					final Tree tree = new Tree(source, directory);
+					final Tree tree = new Tree(source, directory,
+							ExactSecretTreePostProcessor.isSecretsDirectory(source.getSource(), conventionalDirectory));
 					trees.add(tree);
 					// Subscribe, then catch up below: a swap since Boot read the tree is seen now or notified later.
 					directory.subscribe(snapshot -> refresh(tree));
@@ -265,16 +295,15 @@ public final class ConfigTreeSecretsReloader implements SmartLifecycle {
 			if (!running || !tree.active) {
 				return;
 			}
-			final ConfigTreePropertySource fresh;
-			final Map<String, String> values;
+			final Reread reread;
 			try {
-				fresh = new ConfigTreePropertySource(tree.name, tree.path, Option.AUTO_TRIM_TRAILING_NEW_LINE);
-				// Eager, and cached in `fresh`: what the Environment serves is exactly what was compared.
-				values = valuesOf(fresh);
-			} catch (RuntimeException e) {
+				reread = reread(tree);
+			} catch (IOException | RuntimeException e) {
 				scheduleRetry(tree, e);
 				return;
 			}
+			final ConfigTreePropertySource fresh = reread.source();
+			final Map<String, String> values = reread.values();
 			tree.recovered();
 			if (tree.applied.isPresent() && tree.applied.get().equals(values)) {
 				return;
@@ -301,8 +330,35 @@ public final class ConfigTreeSecretsReloader implements SmartLifecycle {
 		}
 	}
 
+	/**
+	 * Builds the replacement source exactly as Boot's import does, pinned to one kubelet generation: it
+	 * is kept only if {@code ..data} named the same timestamped directory before and after every value
+	 * was read — so every read through a {@code KEY -> ..data/KEY} link landed in that one generation —
+	 * and if the keys Boot listed are exactly that generation's keys, which they are not while the
+	 * kubelet is still adding or removing visible links after its rename. Otherwise the read is done
+	 * again ({@link PinnedGeneration#read}) or fails, and a failure is retried by the caller.
+	 *
+	 * <p>Every value is read here and cached by the source (it is built without
+	 * {@link Option#ALWAYS_READ}), so the Environment serves captured values and never opens a file again
+	 * — not even one whose link the kubelet has since deleted.</p>
+	 */
+	private Reread reread(final Tree tree) throws IOException {
+		return PinnedGeneration.read(tree.path, generation -> {
+			// The mount directory exactly, as ExactSecretTreePostProcessor imported it; any other tree as Boot does.
+			final ConfigTreePropertySource fresh = tree.exact
+					? new ConfigTreePropertySource(tree.name, tree.path)
+					: new ConfigTreePropertySource(tree.name, tree.path, Option.AUTO_TRIM_TRAILING_NEW_LINE);
+			final Map<String, String> values = valuesOf(fresh, afterEachValue);
+			if (!values.keySet().equals(PinnedGeneration.keys(generation))) {
+				throw new IOException("The visible keys in " + tree.path + " do not yet match the generation "
+						+ PinnedGeneration.DATA_LINK + " names");
+			}
+			return new Reread(fresh, values);
+		});
+	}
+
 	/** Called under {@link #lock}. */
-	private void scheduleRetry(final Tree tree, final RuntimeException failure) {
+	private void scheduleRetry(final Tree tree, final Exception failure) {
 		tree.failures++;
 		final Duration delay = retryDelay(tree.failures);
 		if (tree.failures == 1) {
@@ -342,11 +398,13 @@ public final class ConfigTreeSecretsReloader implements SmartLifecycle {
 		return delay.compareTo(MAX_RETRY_DELAY) > 0 ? MAX_RETRY_DELAY : delay;
 	}
 
-	private static Map<String, String> valuesOf(final ConfigTreePropertySource source) {
+	private static Map<String, String> valuesOf(final ConfigTreePropertySource source,
+			final Consumer<String> afterEachValue) {
 		final Map<String, String> values = new HashMap<>();
 		for (String property : source.getPropertyNames()) {
 			// toString() reads the file and caches the content in the source.
 			values.put(property, String.valueOf(source.getProperty(property)));
+			afterEachValue.accept(property);
 		}
 		return Map.copyOf(values);
 	}
@@ -357,10 +415,19 @@ public final class ConfigTreeSecretsReloader implements SmartLifecycle {
 	 */
 	private static Optional<Map<String, String>> servedBy(final ConfigTreePropertySource imported) {
 		try {
-			return Optional.of(valuesOf(imported));
+			return Optional.of(valuesOf(imported, property -> { }));
 		} catch (RuntimeException e) {
 			return Optional.empty();
 		}
+	}
+
+	/**
+	 * A re-read source and the values it now caches.
+	 *
+	 * @param source the replacement, every value already read
+	 * @param values those values, as the Environment will serve them
+	 */
+	private record Reread(ConfigTreePropertySource source, Map<String, String> values) {
 	}
 
 	private static String describeChange(final Map<String, String> before, final Map<String, String> after) {
@@ -384,6 +451,8 @@ public final class ConfigTreeSecretsReloader implements SmartLifecycle {
 		private final String name;
 		private final Path path;
 		private final SecretDirectory directory;
+		/** Whether this is the mount directory, served untrimmed ({@link ExactSecretTreePostProcessor}). */
+		private final boolean exact;
 		/** What the Environment serves for this source; empty when that could not be read. */
 		private Optional<Map<String, String>> applied;
 		private boolean active = true;
@@ -391,10 +460,11 @@ public final class ConfigTreeSecretsReloader implements SmartLifecycle {
 		private boolean reportedStuck;
 		private Optional<ScheduledFuture<?>> retry = Optional.empty();
 
-		Tree(final ConfigTreePropertySource imported, final SecretDirectory directory) {
+		Tree(final ConfigTreePropertySource imported, final SecretDirectory directory, final boolean exact) {
 			this.name = imported.getName();
 			this.path = imported.getSource();
 			this.directory = directory;
+			this.exact = exact;
 			this.applied = servedBy(imported);
 		}
 

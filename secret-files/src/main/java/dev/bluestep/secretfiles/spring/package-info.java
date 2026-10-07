@@ -13,7 +13,8 @@
  *       {@code spring.config.import: optional:configtree:/var/lib/bluestep/secrets/}, so each file
  *       becomes a property named after it and placeholders such as {@code ${API_KEY:}} resolve from it.
  *       An environment variable of the same name still wins, which is how local development and tests
- *       pin a value.</li>
+ *       pin a value. {@link dev.bluestep.secretfiles.spring.ExactSecretTreePostProcessor} makes that
+ *       tree serve each file's exact bytes, undoing Boot's trailing-newline trim.</li>
  *   <li>{@link dev.bluestep.secretfiles.spring.ConfigTreeSecretsReloader} watches every config tree the
  *       Environment holds. When the kubelet swaps the volume it replaces that property source with a
  *       freshly read one and publishes {@link dev.bluestep.secretfiles.spring.SecretsReloadedEvent}.</li>
@@ -21,7 +22,9 @@
  *       {@link dev.bluestep.secretfiles.spring.RotatingSecret} from
  *       {@link dev.bluestep.secretfiles.spring.RotatingSecrets}, a
  *       {@code dev.bluestep.secretfiles.spring.hikari.HikariCredentialsRotator}, or its own
- *       {@code @EventListener}.</li>
+ *       {@code @EventListener}. A secret whose property is withdrawn throws
+ *       {@link dev.bluestep.secretfiles.spring.SecretWithdrawnException} from {@code current()}; catch
+ *       it where the secret is checked and deny.</li>
  * </ol>
  *
  * <p>Null-marked: every type here is non-null unless explicitly annotated

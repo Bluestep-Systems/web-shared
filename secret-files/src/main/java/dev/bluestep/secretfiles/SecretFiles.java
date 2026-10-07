@@ -20,11 +20,11 @@ import org.jspecify.annotations.Nullable;
  * utilities, a migration job's own JDBC connection: the file named after the key in the mounted secret
  * directory if there is one, otherwise the environment variable of the same name.
  *
- * <p>A file's contents are trimmed exactly as Spring Boot trims a {@code configtree:} import
- * ({@code ConfigTreePropertySource.Option.AUTO_TRIM_TRAILING_NEW_LINE}): one trailing {@code \n} or
- * {@code \r\n} is removed, and only when it is the file's only line break. A utility and the
- * application it runs beside therefore see one value for one file. An environment variable is used as
- * it is.</p>
+ * <p>A file's contents are returned exactly, decoded as UTF-8: nothing is trimmed, a trailing newline
+ * included, just as the environment variable the file replaces carried the Secret's exact bytes. The
+ * Spring side serves the mount directory the same way ({@code ExactSecretTreePostProcessor}), so a
+ * utility and the application it runs beside see one value for one file. An environment variable is
+ * used as it is.</p>
  *
  * <p>The directory is {@link #DEFAULT_DIRECTORY} unless the system property {@value #DIRECTORY_PROPERTY}
  * or, failing that, the environment variable {@value #DIRECTORY_ENVIRONMENT_VARIABLE} names another — the
@@ -73,7 +73,7 @@ public final class SecretFiles {
 	}
 
 	/**
-	 * The secret {@code key}: the trimmed contents of the file {@code key} in {@link #directory()} if that
+	 * The secret {@code key}: the exact contents of the file {@code key} in {@link #directory()} if that
 	 * file exists, otherwise the environment variable {@code key}.
 	 *
 	 * @param key a Kubernetes Secret key, such as {@code B6P_DB_PASSWORD}
@@ -139,7 +139,7 @@ public final class SecretFiles {
 				return Optional.ofNullable(environment.apply(key));
 			}
 			try {
-				return Optional.of(trimTrailingNewLine(new String(Files.readAllBytes(file), UTF_8)));
+				return Optional.of(new String(Files.readAllBytes(file), UTF_8));
 			} catch (IOException e) {
 				failure = e;
 			}
@@ -149,20 +149,6 @@ public final class SecretFiles {
 		}
 		throw new UncheckedIOException("Secret " + key + " exists in " + directory + " but could not be read",
 				Objects.requireNonNull(failure));
-	}
-
-	/**
-	 * Spring Boot's {@code AUTO_TRIM_TRAILING_NEW_LINE}: drops one trailing {@code \n} (or {@code \r\n}),
-	 * and only when it is the value's only {@code \n}. A multi-line value — a PEM key, say — is left
-	 * exactly as it is.
-	 */
-	static String trimTrailingNewLine(final String value) {
-		if (!value.endsWith("\n") || value.indexOf('\n') != value.length() - 1) {
-			return value;
-		}
-		return value.endsWith("\r\n")
-				? value.substring(0, value.length() - 2)
-				: value.substring(0, value.length() - 1);
 	}
 
 	/** @return false if interrupted, in which case the interrupt is restored and the lookup gives up */

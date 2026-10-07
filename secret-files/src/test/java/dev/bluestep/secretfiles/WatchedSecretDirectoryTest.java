@@ -7,10 +7,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -54,20 +56,125 @@ class WatchedSecretDirectoryTest {
 	Path tmp;
 
 	@Test
-	void theInitialSnapshotReadsOnlyVisibleKeys() throws IOException {
-		final KubeletSecretVolume volume =
-				KubeletSecretVolume.create(tmp, Map.of("DB_PASSWORD", "pw", "API_TOKEN", "tok"));
-		// None of these is a key: a dot-file, a visible directory, and a visible link whose target is gone
-		// (what a removed key looks like for the instant before the kubelet deletes its link).
-		Files.writeString(tmp.resolve(".hidden"), "not a key");
-		Files.createDirectory(tmp.resolve("nested"));
-		Files.writeString(tmp.resolve("nested").resolve("inner"), "not a key either");
+	void theInitialSnapshotReadsTheKeysOfTheCurrentGeneration() throws IOException {
+		final KubeletSecretVolume volume = KubeletSecretVolume.create(tmp,
+				Map.of("DB_PASSWORD", "pw", "API_TOKEN", "tok", ".token", "dot"));
+		// Not keys: the generation is read, not the visible links, so a link left dangling by a removed key
+		// (what one looks like for the instant before the kubelet deletes it) is never even seen.
 		Files.createSymbolicLink(tmp.resolve("GHOST"), Path.of("..data", "GHOST"));
 
 		try (WatchedSecretDirectory dir = WatchedSecretDirectory.open(volume.root())) {
-			assertEquals(Map.of("DB_PASSWORD", "pw", "API_TOKEN", "tok"), dir.current().values());
+			assertEquals(Map.of("DB_PASSWORD", "pw", "API_TOKEN", "tok", ".token", "dot"), dir.current().values(),
+					"a single-dot key is a key, as it is to Boot's config tree; ..data and the generation are not");
 			assertEquals(tmp, dir.path());
 		}
+	}
+
+	@Test
+	void aPlainDirectoryIsReadDirectlyWithBootsKeyRule() throws IOException {
+		Files.writeString(tmp.resolve("KEY"), "k");
+		Files.writeString(tmp.resolve(".token"), "dot");
+		Files.writeString(tmp.resolve("..hidden"), "kubelet-style internal, not a key");
+		Files.createSymbolicLink(tmp.resolve("GHOST"), tmp.resolve("absent"));
+
+		try (WatchedSecretDirectory dir = WatchedSecretDirectory.open(tmp)) {
+			assertEquals(Map.of("KEY", "k", ".token", "dot"), dir.current().values());
+		}
+	}
+
+	@Test
+	void aSubdirectoryIsRefusedAtOpen() throws IOException {
+		Files.writeString(tmp.resolve("KEY"), "k");
+		Files.createDirectory(tmp.resolve("nested"));
+		Files.writeString(tmp.resolve("nested").resolve("inner"), "Boot would read this as nested.inner");
+
+		final IllegalArgumentException refused =
+				assertThrows(IllegalArgumentException.class, () -> WatchedSecretDirectory.open(tmp));
+		assertTrue(refused.getMessage().contains(tmp.toString()), refused.getMessage());
+		assertTrue(refused.getMessage().contains("nested"), refused.getMessage());
+		assertTrue(refused.getMessage().contains("files only"), refused.getMessage());
+	}
+
+	@Test
+	void aSubdirectoryAppearingLaterDoesNotStopTheWatcher() throws Exception {
+		Files.writeString(tmp.resolve("TOKEN"), "v1");
+		try (WatchedSecretDirectory dir = WatchedSecretDirectory.open(tmp, Duration.ofMillis(200))) {
+			final BlockingQueue<SecretSnapshot> heard = recorder(dir);
+			final Path nested = Files.createDirectory(tmp.resolve("nested"));
+			Files.writeString(tmp.resolve("TOKEN"), "v2");
+			// Several polls refuse the directory; none may publish, and the watcher must survive them.
+			Thread.sleep(1000);
+			assertNull(heard.poll(), "a read through the subdirectory was published");
+			assertTrue(dir.isWatching(), "the refused read stopped the watcher");
+
+			Files.delete(nested);
+			SecretSnapshot latest = next(heard);
+			while (!latest.get("TOKEN").equals(Optional.of("v2"))) {
+				latest = next(heard);
+			}
+		}
+	}
+
+	@Test
+	void aRotationOfASingleDotKeyIsNotified() throws Exception {
+		final KubeletSecretVolume volume = KubeletSecretVolume.create(tmp, Map.of("KEY", "k", ".token", "one"));
+		try (WatchedSecretDirectory dir = WatchedSecretDirectory.open(tmp)) {
+			final BlockingQueue<SecretSnapshot> heard = recorder(dir);
+			volume.swap(Map.of("KEY", "k", ".token", "two"));
+			assertEquals(Optional.of("two"), next(heard).get(".token"));
+		}
+	}
+
+	@Test
+	void aSwapBetweenTwoReadsNeverYieldsAMixedSnapshot() throws IOException {
+		final KubeletSecretVolume volume = KubeletSecretVolume.create(tmp, Map.of("A", "old", "B", "old"));
+		final AtomicInteger swaps = new AtomicInteger();
+		// The kubelet's rename lands after the first key was read; the old generation stays on disk, so a
+		// read pinned to it would still succeed — and must still be discarded, since ..data moved.
+		final SecretSnapshot read = WatchedSecretDirectory.read(tmp, key -> {
+			if (swaps.getAndIncrement() == 0) {
+				try {
+					volume.beginSwap(Map.of("A", "new", "B", "new"));
+				} catch (IOException e) {
+					throw new UncheckedIOException(e);
+				}
+			}
+		});
+		assertEquals(Map.of("A", "new", "B", "new"), read.values(),
+				"one generation, and the one ..data names once the read is done");
+	}
+
+	@Test
+	void aSwapThatDeletesThePinnedGenerationMidReadIsRetried() throws IOException {
+		final KubeletSecretVolume volume = KubeletSecretVolume.create(tmp, Map.of("A", "old", "B", "old"));
+		final AtomicInteger swaps = new AtomicInteger();
+		// The whole update lands after the first key was read: the generation being read is deleted.
+		final SecretSnapshot read = WatchedSecretDirectory.read(tmp, key -> {
+			if (swaps.getAndIncrement() == 0) {
+				try {
+					volume.swap(Map.of("A", "new", "B", "new"));
+				} catch (IOException e) {
+					throw new UncheckedIOException(e);
+				}
+			}
+		});
+		assertEquals(Map.of("A", "new", "B", "new"), read.values());
+	}
+
+	@Test
+	void aReadThatDataKeepsMovingUnderGivesUpAfterBoundedAttempts() throws IOException {
+		final KubeletSecretVolume volume = KubeletSecretVolume.create(tmp, Map.of("A", "0", "B", "0"));
+		final AtomicInteger swaps = new AtomicInteger();
+		final IOException refused = assertTimeoutPreemptively(TIMEOUT, () -> assertThrows(IOException.class,
+				() -> WatchedSecretDirectory.read(tmp, key -> {
+					try {
+						volume.swap(Map.of("A", String.valueOf(swaps.incrementAndGet()), "B", "x"));
+					} catch (IOException e) {
+						throw new UncheckedIOException(e);
+					}
+				})));
+		assertTrue(refused.getMessage().contains("moved during each of " + PinnedGeneration.MAX_ATTEMPTS),
+				refused.getMessage());
 	}
 
 	@Test

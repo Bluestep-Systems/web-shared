@@ -21,7 +21,7 @@ import org.junit.jupiter.api.io.TempDir;
 import dev.bluestep.secretfiles.testing.KubeletSecretVolume;
 
 /**
- * {@link SecretFiles}: file first, then the environment, trimmed the way Boot trims a config tree. The
+ * {@link SecretFiles}: file first, then the environment, each value exactly as stored. The
  * environment is a map the test controls, through the package-private seams the public methods
  * delegate to.
  */
@@ -38,7 +38,7 @@ class SecretFilesTest {
 	void aFileInTheMountWinsOverTheEnvironment() throws IOException {
 		KubeletSecretVolume.create(tmp, Map.of("DB_PASSWORD", "from-file\n"));
 
-		assertEquals(Optional.of("from-file"),
+		assertEquals(Optional.of("from-file\n"),
 				SecretFiles.get(tmp, env(Map.of("DB_PASSWORD", "from-env")), "DB_PASSWORD"));
 	}
 
@@ -55,7 +55,7 @@ class SecretFilesTest {
 	}
 
 	@Test
-	void valuesAreTrimmedExactlyAsBootTrimsAConfigTree() throws IOException {
+	void valuesAreTheExactFileContentsTrailingNewlineIncluded() throws IOException {
 		Files.writeString(tmp.resolve("LF"), "v\n", UTF_8);
 		Files.writeString(tmp.resolve("CRLF"), "v\r\n", UTF_8);
 		Files.writeString(tmp.resolve("TWO_LINES"), "a\nb\n", UTF_8);
@@ -63,11 +63,12 @@ class SecretFilesTest {
 		Files.writeString(tmp.resolve("SPACES"), " v ", UTF_8);
 		final Function<String, @Nullable String> none = env(Map.of());
 
-		assertEquals(Optional.of("v"), SecretFiles.get(tmp, none, "LF"));
-		assertEquals(Optional.of("v"), SecretFiles.get(tmp, none, "CRLF"));
+		assertEquals(Optional.of("v\n"), SecretFiles.get(tmp, none, "LF"),
+				"a lone trailing newline is kept, as an env var kept it");
+		assertEquals(Optional.of("v\r\n"), SecretFiles.get(tmp, none, "CRLF"));
 		assertEquals(Optional.of("a\nb\n"), SecretFiles.get(tmp, none, "TWO_LINES"), "multi-line is left alone");
 		assertEquals(Optional.of("v\n\n"), SecretFiles.get(tmp, none, "TWO_NEWLINES"));
-		assertEquals(Optional.of(" v "), SecretFiles.get(tmp, none, "SPACES"), "only a newline is trimmed");
+		assertEquals(Optional.of(" v "), SecretFiles.get(tmp, none, "SPACES"), "nothing is trimmed");
 	}
 
 	@Test
@@ -118,7 +119,7 @@ class SecretFilesTest {
 		System.setProperty(SecretFiles.DIRECTORY_PROPERTY, tmp.toString());
 		try {
 			assertEquals(tmp, SecretFiles.directory());
-			assertEquals("from-file", SecretFiles.require("SECRET_FILES_TEST_KEY"));
+			assertEquals("from-file\n", SecretFiles.require("SECRET_FILES_TEST_KEY"), "exactly, as the env var was");
 			assertFalse(SecretFiles.get("SECRET_FILES_TEST_ABSENT_KEY").isPresent());
 		} finally {
 			if (previous == null) {

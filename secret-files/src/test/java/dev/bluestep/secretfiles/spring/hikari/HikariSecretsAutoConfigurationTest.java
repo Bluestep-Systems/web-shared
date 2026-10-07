@@ -143,7 +143,7 @@ class HikariSecretsAutoConfigurationTest {
 	@DisplayName("end to end: a kubelet swap of the password file moves Boot's pool onto the new password")
 	void endToEnd() throws Exception {
 		final Path mount = Files.createDirectories(tmp.resolve("secrets"));
-		final KubeletSecretVolume volume = KubeletSecretVolume.create(mount, Map.of("DB_PASSWORD", FIRST + "\n"));
+		final KubeletSecretVolume volume = KubeletSecretVolume.create(mount, Map.of("DB_PASSWORD", FIRST));
 		context = new SpringApplicationBuilder(TestApplication.class)
 				.web(WebApplicationType.NONE)
 				.run("--spring.config.import=optional:configtree:" + mount + "/",
@@ -157,7 +157,7 @@ class HikariSecretsAutoConfigurationTest {
 		}
 
 		execute("ALTER USER " + USER + " SET PASSWORD '" + SECOND + "'");
-		volume.swap(Map.of("DB_PASSWORD", SECOND + "\n"));
+		volume.swap(Map.of("DB_PASSWORD", SECOND));
 
 		final long deadline = System.nanoTime() + TIMEOUT.toNanos();
 		while (!SECOND.equals(pool.getCredentials().getPassword())) {

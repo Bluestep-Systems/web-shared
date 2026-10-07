@@ -1,7 +1,5 @@
 package dev.bluestep.secretfiles.spring;
 
-import java.nio.file.Path;
-
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.ApplicationEventPublisher;
@@ -39,9 +37,8 @@ public class SecretFilesAutoConfiguration {
 	@ConditionalOnMissingBean
 	public ConfigTreeSecretsReloader configTreeSecretsReloader(final ConfigurableEnvironment environment,
 			final ApplicationEventPublisher events) {
-		final String directory = environment.getProperty(SecretFiles.DIRECTORY_PROPERTY, "");
 		return new ConfigTreeSecretsReloader(environment, events,
-				directory.isBlank() ? SecretFiles.DEFAULT_DIRECTORY : Path.of(directory));
+				ExactSecretTreePostProcessor.secretsDirectory(environment));
 	}
 
 	/**

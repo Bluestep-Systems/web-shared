@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -11,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -35,6 +37,7 @@ import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.StandardEnvironment;
 
 import dev.bluestep.secretfiles.SecretFiles;
+import dev.bluestep.secretfiles.WatchedSecretDirectory;
 import dev.bluestep.secretfiles.testing.KubeletSecretVolume;
 
 /**
@@ -339,6 +342,137 @@ class ConfigTreeSecretsReloaderTest {
 		await(() -> "second".equals(key.current()), "the secret was rotated");
 	}
 
+	@Test
+	@DisplayName("a swap between two values of a re-read discards it: the Environment never mixes two versions")
+	void aSwapMidRereadNeverPublishesAMixedSnapshot() throws Exception {
+		final KubeletSecretVolume volume = KubeletSecretVolume.create(createMount(), Map.of("A", "old", "B", "old"));
+		final StandardEnvironment environment = environmentImporting(mount());
+		final List<String> served = new CopyOnWriteArrayList<>();
+		final AtomicInteger valuesRead = new AtomicInteger();
+		// The catch-up in start() re-reads A, then the kubelet's whole update lands, then it reads B.
+		final ConfigTreeSecretsReloader reloader = new ConfigTreeSecretsReloader(environment,
+				event -> served.add(environment.getProperty("A") + "/" + environment.getProperty("B")),
+				tmp.resolve("not-mounted"), WatchedSecretDirectory.DEFAULT_POLL_INTERVAL, property -> {
+					if (valuesRead.getAndIncrement() == 0) {
+						swapQuietly(volume, Map.of("A", "new", "B", "new"));
+					}
+				});
+		try {
+			reloader.start();
+			await(() -> !served.isEmpty(), "the swap was published");
+			Thread.sleep(QUIET.toMillis());
+		} finally {
+			reloader.stop();
+		}
+
+		assertThat(served).as("every published Environment holds one version").containsOnly("new/new");
+		assertThat(environment.getProperty("A")).isEqualTo("new");
+		assertThat(environment.getProperty("B")).isEqualTo("new");
+	}
+
+	@Test
+	@DisplayName("a re-read while the kubelet has renamed ..data but not yet linked a new key is refused, then retried")
+	void aRereadMissingANewKeysLinkIsNotPublished() throws Exception {
+		final KubeletSecretVolume volume = KubeletSecretVolume.create(createMount(), Map.of("A", "old"));
+		final StandardEnvironment environment = environmentImporting(mount());
+		final List<String> served = new CopyOnWriteArrayList<>();
+		final AtomicInteger valuesRead = new AtomicInteger();
+		final List<KubeletSecretVolume.PendingSwap> pending = new CopyOnWriteArrayList<>();
+		final ConfigTreeSecretsReloader reloader = new ConfigTreeSecretsReloader(environment,
+				event -> served.add(environment.getProperty("A") + "/" + environment.getProperty("ADDED")),
+				tmp.resolve("not-mounted"), WatchedSecretDirectory.DEFAULT_POLL_INTERVAL, property -> {
+					if (valuesRead.getAndIncrement() == 0) {
+						try {
+							// Renamed, but ADDED's visible link is not there yet: Boot's listing cannot see it.
+							pending.add(volume.beginSwap(Map.of("A", "new", "ADDED", "added")));
+							Files.delete(mount().resolve("ADDED"));
+						} catch (IOException e) {
+							throw new UncheckedIOException(e);
+						}
+					}
+				});
+		try {
+			reloader.start();
+			Thread.sleep(QUIET.toMillis());
+			assertThat(served).as("A from the new version without ADDED is half a version").isEmpty();
+			assertThat(environment.getProperty("A")).isEqualTo("old");
+
+			// The kubelet links the new key; a retry now succeeds without any further notification.
+			Files.createSymbolicLink(mount().resolve("ADDED"), Path.of("..data", "ADDED"));
+			pending.getFirst().complete();
+			await(() -> !served.isEmpty(), "the complete version was published");
+		} finally {
+			reloader.stop();
+		}
+
+		assertThat(served).containsOnly("new/added");
+	}
+
+	@Test
+	@DisplayName("rotating a single-dot key such as .token refreshes the Environment")
+	void aSingleDotKeyRotates() throws Exception {
+		final KubeletSecretVolume volume = KubeletSecretVolume.create(createMount(),
+				Map.of("API_KEY", "key", ".token", "one"));
+		final ConfigurableEnvironment environment = boot().getEnvironment();
+		assertThat(environment.getProperty(".token")).as("Boot imports it").isEqualTo("one");
+
+		volume.swap(Map.of("API_KEY", "key", ".token", "two"));
+
+		assertThat(next(events()).directory()).isEqualTo(mount());
+		assertThat(environment.getProperty(".token")).isEqualTo("two");
+	}
+
+	@Test
+	@DisplayName("a subdirectory in an imported tree refuses startup, naming it")
+	void aSubdirectoryIsRefusedAtStartup() throws IOException {
+		Files.writeString(createMount().resolve("API_KEY"), "key");
+		Files.createDirectory(mount().resolve("nested"));
+		Files.writeString(mount().resolve("nested").resolve("inner"), "Boot reads this as nested.inner");
+
+		assertThatThrownBy(() -> boot())
+				.rootCause()
+				.isInstanceOf(IllegalArgumentException.class)
+				.hasMessageContaining(mount().toString())
+				.hasMessageContaining("nested");
+	}
+
+	@Test
+	@DisplayName("the mount directory serves each file's exact bytes, trailing newline included, at startup and after a reload")
+	void theMountDirectoryKeepsATrailingNewline() throws Exception {
+		final KubeletSecretVolume volume = KubeletSecretVolume.create(createMount(),
+				Map.of("API_KEY", "seed\n", "OTHER", "x"));
+		final ConfigurableEnvironment environment = boot(mount(), "--startup-reader.enabled=true").getEnvironment();
+		assertThat(context.getBean(StartupReader.class).apiKey)
+				.as("read by a bean during startup, before the reloader starts: exactly what the env var carried")
+				.isEqualTo("seed\n");
+		assertThat(events().poll(QUIET.toMillis(), TimeUnit.MILLISECONDS))
+				.as("the import was already exact, so the reloader's catch-up had nothing to change").isNull();
+		assertThat(environment.getProperty("holder.api-key")).isEqualTo("seed\n");
+
+		volume.swap(Map.of("API_KEY", "seed\n", "OTHER", "y"));
+		next(events());
+		assertThat(environment.getProperty("holder.api-key")).as("a reload keeps the bytes too").isEqualTo("seed\n");
+
+		volume.swap(Map.of("API_KEY", "seed2\n", "OTHER", "y"));
+		next(events());
+		assertThat(environment.getProperty("holder.api-key")).isEqualTo("seed2\n");
+	}
+
+	private static StandardEnvironment environmentImporting(final Path directory) {
+		final StandardEnvironment environment = new StandardEnvironment();
+		environment.getPropertySources().addLast(new ConfigTreePropertySource("Config tree '" + directory + "'",
+				directory, Option.AUTO_TRIM_TRAILING_NEW_LINE));
+		return environment;
+	}
+
+	private static void swapQuietly(final KubeletSecretVolume volume, final Map<String, String> next) {
+		try {
+			volume.swap(next);
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
+	}
+
 	/** The smallest Boot application: auto-configuration, plus listeners to observe it. */
 	@Configuration(proxyBeanMethods = false)
 	@EnableAutoConfiguration
@@ -352,6 +486,12 @@ class ConfigTreeSecretsReloaderTest {
 		@Bean
 		Recorder recorder() {
 			return new Recorder();
+		}
+
+		@Bean
+		@ConditionalOnProperty("startup-reader.enabled")
+		StartupReader startupReader(final ConfigurableEnvironment environment) {
+			return new StartupReader(environment.getProperty("holder.api-key"));
 		}
 
 		@Bean
@@ -383,6 +523,16 @@ class ConfigTreeSecretsReloaderTest {
 		@Order(2)
 		void on(final SecretsReloadedEvent event) {
 			events.add(event);
+		}
+	}
+
+	/** What a bean read from the Environment while the context was starting, before any lifecycle bean ran. */
+	static final class StartupReader {
+
+		final String apiKey;
+
+		StartupReader(final String apiKey) {
+			this.apiKey = apiKey;
 		}
 	}
 

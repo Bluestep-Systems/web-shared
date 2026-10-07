@@ -2,6 +2,7 @@ package dev.bluestep.secretfiles.spring.hikari;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
@@ -26,6 +27,8 @@ import com.zaxxer.hikari.HikariDataSource;
 import com.zaxxer.hikari.HikariPoolMXBean;
 import com.zaxxer.hikari.util.Credentials;
 import com.zaxxer.hikari.util.DriverDataSource;
+import com.zaxxer.hikari.util.PropertyElf;
+import com.zaxxer.hikari.util.UtilityElf;
 
 import dev.bluestep.secretfiles.ExceptionTypes;
 import dev.bluestep.secretfiles.spring.SecretsReloadedEvent;
@@ -36,15 +39,30 @@ import dev.bluestep.secretfiles.spring.SecretsReloadedEvent;
  *
  * <h2>Validate, then swap</h2>
  *
- * <p>On each {@link SecretsReloadedEvent} the username and password properties are read back from the
- * Environment. If they are what the pool already holds, nothing happens. Otherwise one connection is
- * opened with them first, exactly as the pool opens its own: for a pool built from a {@code jdbcUrl},
- * through a {@link DriverDataSource} over the same URL, driver class and data-source properties; for a
- * pool wrapping a supplied {@link DataSource} (a {@code PGSimpleDataSource}, say), through that same
- * instance's {@code getConnection(username, password)}, which is the call the pool itself makes. Only
- * if that connection opens and answers a validity check are the credentials handed to the pool,
- * atomically, through {@link HikariDataSource#setCredentials}. Otherwise the refusal is logged as an
- * error and the pool keeps what it has.</p>
+ * <p>On each {@link SecretsReloadedEvent}, and once at construction, the username and password
+ * properties are read back from the Environment. If they are what the pool already holds, nothing
+ * happens. Otherwise one connection is opened with them first, exactly as the pool opens its own, through
+ * the DataSource Hikari itself would use: a supplied {@link DataSource} (a {@code PGSimpleDataSource},
+ * say); else a fresh instance of the pool's {@code dataSourceClassName} given its data-source
+ * properties (Hikari then ignores any {@code jdbcUrl}, and so does the probe); else a
+ * {@link DriverDataSource} over the {@code jdbcUrl}, driver class and data-source properties. The
+ * credentials go to {@code getConnection(username, password)}, the call the pool makes. The pool's
+ * {@code connectionInitSql}, if any, is run on that connection, as the pool runs it on each of its own.
+ * Only if all of that works and the connection answers a validity check are the credentials handed to
+ * the pool, atomically, through {@link HikariDataSource#setCredentials}. Otherwise the refusal is logged
+ * as an error and the pool keeps what it has.</p>
+ *
+ * <p>A blank or absent username property means the password rotates alone, against the username the
+ * pool holds ({@code HikariConfig.getUsername()}); with no username there either, the offer is
+ * refused untried.</p>
+ *
+ * <h2>Catching up at construction</h2>
+ *
+ * <p>A rotator does not wait for the next reload to compare: its constructor runs the same
+ * validate-then-swap, retries included. A pool built from old properties after a rotation it never heard
+ * of — say the password was published before {@code ALTER ROLE}, another pool refused it and is
+ * retrying, and this pool was created since — therefore converges on its own. An offer that cannot be
+ * read at construction is logged and left to the next reload.</p>
  *
  * <p>The asymmetry is deliberate. A pool given credentials that do not work keeps serving from the
  * connections it holds and then fails every new one — a slow, total outage that starts whenever the
@@ -160,6 +178,8 @@ public final class HikariCredentialsRotator implements AutoCloseable {
 	 * was cancelled sees it is stale and does nothing. Guarded by {@code this}.
 	 */
 	private long retryGeneration;
+	/** The credentials this rotator last applied; empty until it applies any. Guarded by {@code this}. */
+	private Optional<Credentials> lastApplied = Optional.empty();
 
 	/**
 	 * Rotates {@code pool}, leaving its open connections to retire at {@code maxLifetime}.
@@ -169,8 +189,8 @@ public final class HikariCredentialsRotator implements AutoCloseable {
 	 * @param usernameProperty the property holding the username, such as {@code spring.datasource.username}
 	 * @param passwordProperty the property holding the password, such as {@code spring.datasource.password}
 	 * @throws IllegalArgumentException if the pool takes its credentials from a credentials provider, or
-	 *                                  is configured by neither a {@code jdbcUrl} nor a supplied
-	 *                                  {@code DataSource} (a {@code dataSourceClassName} or JNDI pool)
+	 *                                  is configured by none of a supplied {@code DataSource}, a
+	 *                                  {@code dataSourceClassName} and a {@code jdbcUrl} (a JNDI pool)
 	 */
 	public HikariCredentialsRotator(final HikariDataSource pool, final PropertyResolver properties,
 			final String usernameProperty, final String passwordProperty) {
@@ -186,8 +206,8 @@ public final class HikariCredentialsRotator implements AutoCloseable {
 	 * @param passwordProperty the property holding the password
 	 * @param existing         what to do with the connections already open after a rotation
 	 * @throws IllegalArgumentException if the pool takes its credentials from a credentials provider, or
-	 *                                  is configured by neither a {@code jdbcUrl} nor a supplied
-	 *                                  {@code DataSource}
+	 *                                  is configured by none of a supplied {@code DataSource}, a
+	 *                                  {@code dataSourceClassName} and a {@code jdbcUrl}
 	 */
 	public HikariCredentialsRotator(final HikariDataSource pool, final PropertyResolver properties,
 			final String usernameProperty, final String passwordProperty, final ExistingConnections existing) {
@@ -211,27 +231,32 @@ public final class HikariCredentialsRotator implements AutoCloseable {
 					+ "HikariCredentialsProvider, which Hikari consults instead of setCredentials; rotate through "
 					+ "the provider, or drop it and let this rotator set the credentials");
 		}
-		if (pool.getDataSource() == null && pool.getJdbcUrl() == null) {
-			throw new IllegalArgumentException("Pool " + pool.getPoolName() + " is configured by neither a jdbcUrl "
-					+ "nor a supplied DataSource, so there is no way to open a validation connection the way it "
-					+ "opens its own");
+		if (pool.getDataSource() == null && pool.getDataSourceClassName() == null && pool.getJdbcUrl() == null) {
+			throw new IllegalArgumentException("Pool " + pool.getPoolName() + " is configured by none of a "
+					+ "supplied DataSource, a dataSourceClassName or a jdbcUrl, so there is no way to open a "
+					+ "validation connection the way it opens its own");
 		}
 		this.retries = Executors.newSingleThreadScheduledExecutor(
 				Thread.ofVirtual().name("secret-files-credentials-retry-" + pool.getPoolName()).factory());
+		catchUp();
 	}
 
 	/**
 	 * Calls {@code listener} after every rotation this rotator applies, whether an event, a call to
-	 * {@link #rotate()} or a retry applied it, with the credentials the pool now holds. It runs on the
-	 * applying thread with this rotator's lock held, so applies reach it in order; keep it quick, and do
-	 * not call back into this rotator from another thread while it runs. A listener that throws is logged
-	 * by exception type and does not undo the rotation or stop the other listeners.
+	 * {@link #rotate()}, a retry or the catch-up at construction applied it, with the credentials the
+	 * pool now holds. If this rotator has already applied credentials, {@code listener} is told of the
+	 * latest at once, before this returns, so state derived from the pool's credentials starts in step
+	 * even when the catch-up applied them. It runs with this rotator's lock held, so applies reach it in
+	 * order; keep it quick, and do not call back into this rotator from another thread while it runs. A
+	 * listener that throws is logged by exception type and does not undo the rotation or stop the other
+	 * listeners.
 	 *
 	 * @param listener told of each applied rotation; never told of a refusal
 	 * @return this rotator, so construction and registration can be one expression
 	 */
-	public HikariCredentialsRotator onApplied(final Consumer<? super Credentials> listener) {
+	public synchronized HikariCredentialsRotator onApplied(final Consumer<? super Credentials> listener) {
 		appliedListeners.add(Objects.requireNonNull(listener, "listener"));
+		lastApplied.ifPresent(credentials -> tell(listener, credentials));
 		return this;
 	}
 
@@ -280,7 +305,7 @@ public final class HikariCredentialsRotator implements AutoCloseable {
 
 	/** One attempt, from {@link #rotate()} or a retry. Called holding {@code this}. */
 	private Outcome attempt(final boolean retrying) {
-		final String username = properties.getProperty(usernameProperty);
+		final String username = offeredUsername();
 		final String password = properties.getProperty(passwordProperty);
 		if (holds(pool.getCredentials(), username, password)) {
 			stopRetrying();
@@ -288,8 +313,11 @@ public final class HikariCredentialsRotator implements AutoCloseable {
 		}
 		if (username == null || username.isBlank() || password == null || password.isBlank()) {
 			stopRetrying();
-			LOG.error(usernameProperty + " or " + passwordProperty + " is now blank or absent, so pool "
-					+ pool.getPoolName() + " keeps the credentials it has");
+			LOG.error((username == null || username.isBlank()
+					? usernameProperty + " is blank or absent and pool " + pool.getPoolName() + " has no username of "
+							+ "its own"
+					: passwordProperty + " is now blank or absent")
+					+ ", so pool " + pool.getPoolName() + " keeps the credentials it has");
 			return Outcome.REFUSED;
 		}
 		final boolean alreadyRefused = refused.filter(offer -> holds(offer, username, password)).isPresent();
@@ -347,19 +375,41 @@ public final class HikariCredentialsRotator implements AutoCloseable {
 			}
 		}
 		stopRetrying();
+		lastApplied = Optional.of(offer);
 		LOG.info("Rotated credentials for pool " + pool.getPoolName() + " verified and applied"
 				+ (afterRefusal ? " after being refused at first (" + failed + " failed retries since)" : "")
 				+ "; new connections use them" + (existing == ExistingConnections.SOFT_EVICT
 						? " and idle ones are being retired now"
 						: " and open ones retire at the pool's maxLifetime"));
 		for (Consumer<? super Credentials> listener : appliedListeners) {
-			try {
-				listener.accept(offer);
-			} catch (RuntimeException e) {
-				LOG.error("A listener told of the credentials applied to pool " + pool.getPoolName() + " failed ("
-						+ ExceptionTypes.of(e) + "); the pool uses them regardless, and the other listeners "
-						+ "were still told");
-			}
+			tell(listener, offer);
+		}
+	}
+
+	/** Tells one listener of an apply, isolating its failure. Called holding {@code this}. */
+	private void tell(final Consumer<? super Credentials> listener, final Credentials applied) {
+		try {
+			listener.accept(applied);
+		} catch (RuntimeException e) {
+			LOG.error("A listener told of the credentials applied to pool " + pool.getPoolName() + " failed ("
+					+ ExceptionTypes.of(e) + "); the pool uses them regardless, and the other listeners "
+					+ "were still told");
+		}
+	}
+
+	/**
+	 * The catch-up at construction: if the secrets already hold credentials other than the pool's — a pool
+	 * built from old properties after a rotation it never heard of — they are validated and applied now,
+	 * or refused and retried, exactly as a reload would. An offer that cannot be read is logged and left
+	 * to the next reload, so construction does not fail on it.
+	 */
+	private synchronized void catchUp() {
+		try {
+			attempt(false);
+		} catch (RuntimeException e) {
+			LOG.error("Pool " + pool.getPoolName() + " could not be caught up with " + usernameProperty + " and "
+					+ passwordProperty + ": they cannot be read (" + ExceptionTypes.of(e) + "). The next change to "
+					+ "the secrets tries again.");
 		}
 	}
 
@@ -414,17 +464,59 @@ public final class HikariCredentialsRotator implements AutoCloseable {
 		return Objects.equals(credentials.getUsername(), username) && Objects.equals(credentials.getPassword(), password);
 	}
 
-	/** Opens, checks and closes one connection exactly as the pool would open it with these credentials. */
+	/**
+	 * The username offered: the username property's value, or — when that is blank or absent, as for a
+	 * configuration that rotates only the password — the username the pool holds now.
+	 */
+	private @Nullable String offeredUsername() {
+		final String configured = properties.getProperty(usernameProperty);
+		if (configured != null && !configured.isBlank()) {
+			return configured;
+		}
+		return pool.getUsername();
+	}
+
+	/**
+	 * Opens one connection exactly as the pool would open it with these credentials, runs the pool's
+	 * {@code connectionInitSql} on it as the pool does on each of its own, checks it answers, and closes
+	 * it.
+	 *
+	 * @throws SQLException if the connection cannot be opened, the init SQL fails, or it does not answer
+	 */
 	private void validate(final String username, final String password) throws SQLException {
-		final DataSource supplied = pool.getDataSource();
-		final DataSource probe = supplied != null
-				? supplied
-				: new DriverDataSource(pool.getJdbcUrl(), pool.getDriverClassName(), pool.getDataSourceProperties(),
-						username, password);
-		try (Connection connection = probe.getConnection(username, password)) {
+		try (Connection connection = probeSource(username, password).getConnection(username, password)) {
+			final String initSql = pool.getConnectionInitSql();
+			if (initSql != null) {
+				try (Statement statement = connection.createStatement()) {
+					statement.execute(initSql);
+				}
+			}
 			if (!connection.isValid(VALIDATION_TIMEOUT_SECONDS)) {
 				throw new SQLException("Test connection opened but did not answer a validity check");
 			}
 		}
+	}
+
+	/**
+	 * The DataSource the pool itself opens connections through, chosen in Hikari's own order
+	 * ({@code PoolBase.initializeDataSource}): a supplied {@code DataSource}; else a fresh instance of
+	 * {@code dataSourceClassName} given the pool's data-source properties, exactly as Hikari builds its
+	 * own (Hikari then ignores any {@code jdbcUrl}); else a {@link DriverDataSource} over the
+	 * {@code jdbcUrl}. The credentials are passed to {@code getConnection(username, password)}, the call
+	 * the pool makes.
+	 */
+	private DataSource probeSource(final String username, final String password) {
+		final DataSource supplied = pool.getDataSource();
+		if (supplied != null) {
+			return supplied;
+		}
+		final String className = pool.getDataSourceClassName();
+		if (className != null) {
+			final DataSource instance = UtilityElf.createInstance(className, DataSource.class);
+			PropertyElf.setTargetFromProperties(instance, pool.getDataSourceProperties());
+			return instance;
+		}
+		return new DriverDataSource(pool.getJdbcUrl(), pool.getDriverClassName(), pool.getDataSourceProperties(),
+				username, password);
 	}
 }

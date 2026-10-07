@@ -9,7 +9,7 @@ One artifact, three layers:
 
 | Package | What | Needs |
 |---|---|---|
-| `dev.bluestep.secretfiles` | The core: `WatchedSecretDirectory`, `SecretSnapshot`, `SecretFiles` | Java 25, nothing else |
+| `dev.bluestep.secretfiles` | The core: `WatchedSecretDirectory`, `SecretSnapshot`, `PinnedGeneration`, `SecretFiles` | Java 25, nothing else |
 | `dev.bluestep.secretfiles.spring` | Config-tree reloader, `RotatingSecret`, auto-configuration | Spring Boot 4.1 (the consumer's) |
 | `dev.bluestep.secretfiles.spring.hikari` | `HikariCredentialsRotator`, auto-configured for Boot's pool | HikariCP 7 (the consumer's) |
 
@@ -42,7 +42,9 @@ imports file; nothing else does), and the Hikari layer only when it also has Hik
    Each file becomes a property named after it, so existing placeholders keep working:
    `my.api-key: ${MY_API_KEY:}` resolves from the file `MY_API_KEY`. `optional:` lets the service start
    where there is no mount (local development, tests). This is the only place the path is written; the
-   reloader finds the import itself.
+   reloader finds the import itself. Each value is the file's **exact bytes**, a trailing newline
+   included, as the environment variable it replaces carried them — see
+   [Exact bytes](#exact-bytes-no-trailing-newline-trim).
 
 3. **Chart** — mount the Secret as a volume at `/var/lib/bluestep/secrets`:
 
@@ -63,9 +65,29 @@ imports file; nothing else does), and the Hikari layer only when it also has Hik
      file of the same name, by design (it is how local development pins a value), so a key still set
      through `env`/`envFrom` would never show a rotation.
    - File names are the Secret's keys; keep them identical to the environment variable names they
-     replace.
+     replace. Keys are flat: no `items[].path` with a `/`, since a subdirectory refuses startup.
 
 That is all the wiring. Everything below is what you then use.
+
+## Exact bytes (no trailing-newline trim)
+
+Spring Boot's `configtree:` import always trims a lone trailing newline
+(`ConfigTreePropertySource.Option.AUTO_TRIM_TRAILING_NEW_LINE`). Secrets used to arrive through
+`envFrom`, which passes the Secret's bytes exactly, so a password or crypt seed stored with a trailing
+newline would silently change on the first rollout that mounts it instead.
+
+This library therefore serves **the mount directory** untrimmed:
+
+- `ExactSecretTreePostProcessor` (an `EnvironmentPostProcessor` registered in `META-INF/spring.factories`,
+  ordered just after Boot's `ConfigDataEnvironmentPostProcessor`) replaces the imported config tree for
+  the mount directory — `bluestep.secrets.directory`, default `/var/lib/bluestep/secrets` — with an
+  untrimmed one of the same name, in the same place.
+- The reloader rebuilds that tree untrimmed too, so a value reads the same before and after a reload.
+- `SecretFiles.get`/`require` return the file's exact contents.
+
+A file `seed\n` is served as `seed\n`. Any **other** config tree a service imports keeps Boot's trimming.
+If you created a Secret with `echo` and relied on Boot dropping the newline, recreate it without one
+(`kubectl create secret generic ... --from-literal`, or `echo -n`).
 
 ## The pieces
 
@@ -80,11 +102,20 @@ That is all the wiring. Everything below is what you then use.
 - **It refuses to start** if the mount directory exists but no config tree imports it — the chart
   mounted secrets the service would never read. The directory is `/var/lib/bluestep/secrets` unless
   `bluestep.secrets.directory` (env `BLUESTEP_SECRETS_DIRECTORY`) says otherwise.
-- **On a change** it builds a fresh `ConfigTreePropertySource` exactly as Boot's import does (same
-  name, `AUTO_TRIM_TRAILING_NEW_LINE`), reads every value, compares with what the Environment serves,
-  and only on a real difference replaces the source in place (`replace`: same position, so precedence
-  does not move) and publishes **`SecretsReloadedEvent(Path directory)`** — directory only, no values.
-  Compare, replace and publish happen under one lock.
+- **On a change** it builds a fresh `ConfigTreePropertySource` with the same name and options as the
+  source it replaces (the mount directory untrimmed, any other tree with Boot's
+  `AUTO_TRIM_TRAILING_NEW_LINE`), reads and caches every value, compares with what the Environment
+  serves, and only on a real difference replaces the source in place (`replace`: same position, so
+  precedence does not move) and publishes **`SecretsReloadedEvent(Path directory)`** — directory only,
+  no values. Compare, replace and publish happen under one lock.
+- **Each re-read is pinned to one kubelet generation**, like the core's (`PinnedGeneration`): it is kept
+  only if `..data` named the same timestamped directory before and after every value was read, and if
+  Boot listed exactly that generation's keys. A swap landing mid-read discards it, so the Environment
+  never holds values from two versions of the Secret. The values are captured, so the source never
+  reopens a file the kubelet has since deleted.
+- **Keys match Boot's**: a single-dot file such as `.token` is a key (rotating it refreshes Spring);
+  the kubelet's `..`-prefixed entries are not. A subdirectory, which Boot would read as dotted keys,
+  refuses startup with an error naming it — a Secret volume cannot produce one.
 - **A re-read that fails is retried until it succeeds**, backing off from 200 ms to a 5 s ceiling. (A
   link the kubelet is about to delete dangles mid-swap; Boot's reader fails on it while the core
   skips it, so the core has nothing more to report. Without retrying, the Environment would stay stale
@@ -132,23 +163,61 @@ class AgentClient {
 ```
 
 - `required(property[, setting])` — blank or absent at startup throws `IllegalStateException` naming
-  the property and the setting to provide. Blank or absent at runtime is logged as an ERROR (property
-  name only) and the current value kept. A changed value replaces the old one at once, no grace window.
-- `optional(property)` — absence is a legitimate state (`current()` is an `Optional`). Going blank at
-  runtime is a **withdrawal** and is applied, logged as a WARN.
+  the property and the setting to provide. Blank, absent, or a placeholder that no longer resolves at
+  runtime **withdraws** it: `current()` throws `SecretWithdrawnException`, logged once as an ERROR
+  (property name only). A later non-blank value restores it. A changed value replaces the old one at
+  once, no grace window.
+- `optional(property)` — absence is a legitimate state (`current()` is an `Optional`). Going blank,
+  absent or unresolvable at runtime is a withdrawal too: `current()` becomes empty, logged as a WARN.
+- `reload()` returns `SecretReload.UNCHANGED`, `ROTATED` (a new value, or one restored after a
+  withdrawal) or `WITHDRAWN`.
 - `RotatingSecret.required(env, property)` / `RotatingSecret.optional(env, property)` build one outside
   the registry; it then reloads only when you call `reload()`.
+- The registry registers each secret before its first read, so a reload landing while it is being
+  created is not missed.
 - Nothing logs a value; `toString()` names the property.
+
+#### Withdrawal
+
+Deleting a key from the Secret (or blanking it) is how an operator revokes a compromised credential,
+and it takes effect in running pods at the next reload: the old value is **not** kept. Catch
+`SecretWithdrawnException` (an `IllegalStateException`) at your auth boundary and **deny** — reject the
+request, skip the outbound call:
+
+```java
+try {
+    return MessageDigest.isEqual(presented, token.current().getBytes(UTF_8));
+} catch (SecretWithdrawnException e) {
+    return false;   // withdrawn: nobody is let in
+}
+```
+
+Its message names the property and setting, never a value. Uncaught, it still fails closed.
 
 ### `HikariCredentialsRotator` — validated database credential rotation
 
 On `SecretsReloadedEvent` it reads the username and password properties back from the Environment. If
 they are what the pool holds, nothing happens. Otherwise it opens **one** connection with them exactly
-as the pool does — through a `DriverDataSource` over the pool's own `jdbcUrl`/driver/properties, or,
-for a pool wrapping a supplied `DataSource` (such as a `PGSimpleDataSource`), through that same
-instance — and only if that works applies them with `HikariDataSource.setCredentials`. A failure is
-logged (SQLState and exception types only) and the pool keeps its credentials. Open connections retire
-at `maxLifetime` unless you ask for `ExistingConnections.SOFT_EVICT`.
+as the pool does, through the DataSource Hikari itself uses, in Hikari's order:
+
+- a supplied `DataSource` (such as a `PGSimpleDataSource`), that same instance;
+- else a fresh `dataSourceClassName` instance given the pool's `dataSourceProperties` (Hikari ignores
+  `jdbcUrl` then, and so does the probe);
+- else a `DriverDataSource` over the pool's `jdbcUrl`/driver/properties.
+
+The credentials are passed to `getConnection(username, password)`, and the pool's `connectionInitSql`,
+if any, is run on the connection. Only if all of that works are they applied with
+`HikariDataSource.setCredentials`. A failure, an init-SQL failure included, is logged (SQLState and
+exception types only) and the pool keeps its credentials. Open connections retire at `maxLifetime`
+unless you ask for `ExistingConnections.SOFT_EVICT`.
+
+**Password-only configurations rotate**: with the username property blank or absent, the password is
+offered with the pool's own username (`HikariConfig.getUsername()`). With no username there either, the
+offer is refused untried.
+
+**A new rotator catches up at once.** Its constructor runs the same validate-then-swap (retries
+included) instead of waiting for the next reload, so a pool created from old properties after a rotation
+it never heard of — the password published before `ALTER ROLE`, say — still converges.
 
 **A refused offer is retried.** A refusal is usually order or timing — the Secret was updated before
 `ALTER ROLE` ran, or the database blinked — and the Secret will not change again to say it is now fine.
@@ -175,8 +244,9 @@ new HikariCredentialsRotator(pool, environment, "tenant.datasource.username", "t
 ```
 
 `onApplied(Consumer<? super Credentials>)` is called after every successful `setCredentials` — from an
-event, a direct `rotate()` or a retry — with exactly the credentials the pool now holds, under the
-rotator's lock (so applies arrive in order). Refusals and unchanged offers never reach it. A callback
+event, a direct `rotate()`, a retry or the construction catch-up — with exactly the credentials the pool
+now holds, under the rotator's lock (so applies arrive in order). A listener registered after the
+rotator has applied anything (the catch-up, in the pattern above) is told of the latest apply at once. Refusals and unchanged offers never reach it. A callback
 that throws is logged by type and neither undoes the rotation nor silences the next callback.
 
 **Boot's own pool is automatic**: when the only `HikariDataSource` is the one Boot's
@@ -222,9 +292,9 @@ Optional<String> token = SecretFiles.get("OPTIONAL_TOKEN");
 ```
 
 It reads the file `KEY` from the mount directory (`/var/lib/bluestep/secrets`, or the system property
-`bluestep.secrets.directory`, or env `BLUESTEP_SECRETS_DIRECTORY`) if it exists, trimmed exactly as
-Boot trims a config tree, and otherwise falls back to the environment variable `KEY`. It reads once and
-does not watch.
+`bluestep.secrets.directory`, or env `BLUESTEP_SECRETS_DIRECTORY`) if it exists, returning its exact
+contents (nothing trimmed, as the Spring side serves the mount), and otherwise falls back to the
+environment variable `KEY`. It reads once and does not watch.
 
 ### `WatchedSecretDirectory` — the core, for anything else
 
@@ -306,27 +376,35 @@ keys, and deletes the old timestamped directory.
 
 `WatchedSecretDirectory`:
 
-- **Reads visible keys only.** A key is an entry whose name does not start with `.` and which
-  resolves, following symlinks, to a regular file. `..data`, the timestamped directories and dangling
-  links are ignored.
+- **Reads one generation at a time.** `..data` is resolved once to its timestamped directory, every key
+  is read from that directory, and the read is kept only if `..data` still names it afterwards;
+  otherwise it is discarded and done again, up to `PinnedGeneration.MAX_ATTEMPTS` (5) times. A swap
+  landing between two key reads therefore never yields a snapshot mixing two versions. A directory
+  with no `..data` (a plain directory, as in local development) is read directly.
+- **Keys as Spring Boot's config tree sees them.** A key is an entry whose name does not start with
+  `..` and which resolves, following symlinks, to a regular file: `.token` is a key; `..data`,
+  `..data_tmp`, the timestamped directories and dangling links are not. A subdirectory is refused:
+  `open` throws `IllegalArgumentException` naming it, and a later read that meets one fails (logged,
+  snapshot kept).
 - **Watches and polls.** A `java.nio` `WatchService` on the directory sees the swap as events on
   `..data`. A poll (every 30 s by default) re-reads anyway, so a missed event delays an update rather
   than losing it. Both run on one virtual thread.
 - **Coalesces and compares.** The events from one swap produce one re-read. Listeners are notified
   only if the values actually changed.
-- **Never publishes a torn read.** If a file disappears between listing and reading (mid-swap), that
-  read is thrown away and retried once shortly afterwards; the poll covers anything later.
+- **Never publishes a failed read.** A read that fails (`..data` kept moving, or a plain directory's
+  file vanished between listing and reading) is thrown away and retried once shortly afterwards; the
+  poll covers anything later.
 - **Isolates listeners.** A listener that throws is logged (by exception type only) and the others still run.
 - **Never logs a value.** Log lines name the directory and keys only. `SecretSnapshot.toString()`
   prints key names, not values.
 
-Values are the file contents decoded as UTF-8, **exactly**: nothing is trimmed (the Spring layer and
-`SecretFiles` trim the way Boot does). A file that is not valid UTF-8 is left out of the snapshot, with
-a warning naming the key.
+Values are the file contents decoded as UTF-8, **exactly**: nothing is trimmed (nor does the Spring
+layer trim the mount directory, nor `SecretFiles`). A file that is not valid UTF-8 is left out of the
+snapshot, with a warning naming the key.
 
-`open` throws `IllegalArgumentException` when the path is missing or is not a directory. Subscribe
-first and then read `current()`, so a change that lands between the two calls is seen rather than
-missed. Listeners run in subscription order on the watcher thread, so keep them quick.
+`open` throws `IllegalArgumentException` when the path is missing, is not a directory, or holds a
+subdirectory. Subscribe first and then read `current()`, so a change that lands between the two calls
+is seen rather than missed. Listeners run in subscription order on the watcher thread, so keep them quick.
 
 ## Versioning and releases
 

@@ -2,6 +2,7 @@ package dev.bluestep.secretfiles.spring;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import org.apache.commons.logging.Log;
@@ -37,8 +38,12 @@ import dev.bluestep.secretfiles.ExceptionTypes;
  * <p>Create each secret once, at construction, as above: this holds every secret it created for the
  * life of the context.</p>
  *
- * <p>One secret failing to reload — a placeholder that no longer resolves, say — is logged by property
- * name and does not stop the others.</p>
+ * <p>A secret whose property goes blank, absent or unresolvable is withdrawn
+ * ({@link SecretWithdrawnException}); see {@link RotatingSecret}. One whose reload throws anyway — a
+ * broken property resolver — is logged by property name and does not stop the others.</p>
+ *
+ * <p>Each secret is registered before its first read, so a reload that lands while it is being created
+ * is not missed.</p>
  */
 public final class RotatingSecrets {
 
@@ -60,11 +65,12 @@ public final class RotatingSecrets {
 	 *
 	 * @param property the Spring property holding it
 	 * @return the secret
-	 * @throws IllegalStateException if the property is absent or blank now; the message names it
+	 * @throws IllegalStateException    if the property is absent or blank now; the message names it
+	 * @throws IllegalArgumentException if its value holds a placeholder that does not resolve
 	 * @see RotatingSecret#required(PropertyResolver, String)
 	 */
 	public RotatingSecret required(final String property) {
-		return register(RotatingSecret.required(properties, property));
+		return register(RotatingSecret.unread(properties, property, Optional.empty()));
 	}
 
 	/**
@@ -73,12 +79,13 @@ public final class RotatingSecrets {
 	 * @param property the Spring property holding it
 	 * @param setting  what an operator sets to provide it (the environment variable and file name)
 	 * @return the secret
-	 * @throws IllegalStateException if the property is absent or blank now; the message names the
-	 *                               property and {@code setting}
+	 * @throws IllegalStateException    if the property is absent or blank now; the message names the
+	 *                                  property and {@code setting}
+	 * @throws IllegalArgumentException if its value holds a placeholder that does not resolve
 	 * @see RotatingSecret#required(PropertyResolver, String, String)
 	 */
 	public RotatingSecret required(final String property, final String setting) {
-		return register(RotatingSecret.required(properties, property, setting));
+		return register(RotatingSecret.unread(properties, property, Optional.of(setting)));
 	}
 
 	/**
@@ -86,12 +93,19 @@ public final class RotatingSecrets {
 	 *
 	 * @param property the Spring property holding it
 	 * @return the secret, empty now if the property is absent or blank
+	 * @throws IllegalArgumentException if its value holds a placeholder that does not resolve
 	 * @see OptionalRotatingSecret
 	 */
 	public OptionalRotatingSecret optional(final String property) {
-		final OptionalRotatingSecret secret = RotatingSecret.optional(properties, property);
+		final OptionalRotatingSecret secret = new OptionalRotatingSecret(properties, property);
+		// Registered before its first read, so a reload landing in between reloads it.
 		optional.add(secret);
-		return secret;
+		try {
+			return secret.initialize();
+		} catch (RuntimeException e) {
+			optional.remove(secret);
+			throw e;
+		}
 	}
 
 	/**
@@ -117,14 +131,24 @@ public final class RotatingSecrets {
 		}
 	}
 
+	/**
+	 * Registers {@code secret} and only then reads it. A reload landing between the two either finds it
+	 * registered and reloads it after the read (both are synchronized on the secret), or ran entirely
+	 * before the read, which then sees the reloaded Environment: either way none is missed.
+	 */
 	private RotatingSecret register(final RotatingSecret secret) {
 		required.add(secret);
-		return secret;
+		try {
+			return secret.initialize();
+		} catch (RuntimeException e) {
+			required.remove(secret);
+			throw e;
+		}
 	}
 
 	private static void failed(final String property, final RuntimeException e) {
-		// The type only: a placeholder resolution message can quote the text it was resolving.
-		LOG.error("Reloading " + property + " failed (" + ExceptionTypes.of(e) + "); it keeps the value in force "
+		// The type only: a resolver's message can quote the text it was resolving.
+		LOG.error("Reloading " + property + " failed (" + ExceptionTypes.of(e) + "); it keeps the state it had "
 				+ "and the other secrets were still reloaded");
 	}
 }
