@@ -1,0 +1,128 @@
+plugins {
+    id 'java-library'
+    // Publishes src/testFixtures as a second variant of this same coordinate, so a consumer's tests
+    // say testImplementation(testFixtures('dev.bluestep:secret-files:<version>')).
+    id 'java-test-fixtures'
+    id 'maven-publish'
+    // No version here: the root build already puts this plugin on the classpath, and Gradle refuses
+    // a second, versioned request for a plugin that is already resolved.
+    id 'net.ltgt.errorprone'
+    id 'checkstyle'
+}
+
+// Same ruleset as the root library (unused and redundant imports, nothing else).
+checkstyle {
+    toolVersion = '10.21.4'
+    configFile = rootProject.file('config/checkstyle/checkstyle.xml')
+    maxWarnings = 0
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            // The java component carries the test-fixtures variants too (Gradle module metadata
+            // only: a POM has no way to say "a second jar with its own dependencies"). Every consumer
+            // is a Gradle build, so the warning that Maven cannot see them is expected and silenced.
+            from components.java
+            suppressPomMetadataWarningsFor('testFixturesApiElements')
+            suppressPomMetadataWarningsFor('testFixturesRuntimeElements')
+        }
+    }
+    repositories {
+        mavenLocal()
+
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/bluestep-systems/web-shared")
+            credentials {
+                username = project.findProperty("gpr.user") ?: System.getenv("USERNAME")
+                password = project.findProperty("gpr.key") ?: System.getenv("TOKEN")
+            }
+        }
+    }
+}
+
+group = 'dev.bluestep'
+// This artifact's OWN version line, independent of the root library's. The root number is also the
+// API path web-global serves, so it must not move for a change that has nothing to do with the DTO
+// contract — and this library's releases must not have to wait on, or invent, a DTO release either.
+//
+// Released by a GitHub release tagged `secret-files-<version>` (e.g. secret-files-1.0.0); the publish
+// workflow routes that prefix here and refuses a tag whose number disagrees with this line. A bare
+// version tag (4.1.7) still publishes the root library and only the root library.
+//
+// 1.0.0: SecretSnapshot, SecretDirectory, WatchedSecretDirectory and SecretFiles (plain Java) — read a
+// Kubernetes Secret volume and follow the kubelet's atomic `..data` swap without a restart; plus the
+// Spring Boot 4.1 glue every service had been writing for itself (config-tree reloader, RotatingSecret,
+// HikariCredentialsRotator retrying a refused offer with backoff and reporting applies through
+// onApplied), auto-configured — @WebMvcTest slices included — and the KubeletSecretVolume test fixture.
+// Failures are logged by exception type only, never by message or stack trace.
+version = '1.0.0'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+// NullAway in JSpecify mode, exactly as the root library runs it. Every package is @NullMarked.
+// This covers the main and test-fixtures source sets; the fixtures are published code too.
+tasks.withType(JavaCompile).configureEach {
+    options.errorprone {
+        disableAllChecks = true
+        option('NullAway:OnlyNullMarked', 'true')
+        option('NullAway:JSpecifyMode', 'true')
+        error('NullAway')
+    }
+}
+
+tasks.named('compileTestJava') {
+    options.errorprone.enabled = false
+}
+
+test {
+    useJUnitPlatform()
+}
+
+dependencies {
+    errorprone 'com.google.errorprone:error_prone_core:2.50.0'
+    errorprone 'com.uber.nullaway:nullaway:0.13.8'
+
+    // NO runtime dependencies, on purpose. The core is plain Java and logs through System.Logger.
+    // The Spring parts (dev.bluestep.secretfiles.spring..) are compiled against Spring Boot 4.1.1 and
+    // HikariCP, but `compileOnly`: a consumer brings its own Spring Boot, and the auto-configuration
+    // only exists for it when spring-boot-autoconfigure is on its classpath (Boot reads the imports
+    // file; nothing else does), with the Hikari part further guarded by @ConditionalOnClass. A
+    // compileOnly dependency — platform included — appears in neither the POM nor the Gradle module.
+    //
+    // `compileOnly`, not `compileOnlyApi`: the latter publishes as a compile-scope POM dependency,
+    // which a Maven resolver puts on the runtime classpath. The annotations still sit in the class
+    // files, so a consumer that has jspecify on its own classpath (any NullAway user does) sees the
+    // nullness; one that does not loses nothing, since javac tolerates absent member-less annotations.
+    compileOnly 'org.jspecify:jspecify:1.0.1'
+    compileOnly platform('org.springframework.boot:spring-boot-dependencies:4.1.1')
+    compileOnly 'org.springframework.boot:spring-boot'
+    compileOnly 'org.springframework.boot:spring-boot-autoconfigure'
+    compileOnly 'com.zaxxer:HikariCP'
+
+    // The fixture is plain Java over java.nio; it needs nothing beyond the annotations its package
+    // declares.
+    testFixturesCompileOnly 'org.jspecify:jspecify:1.0.1'
+
+    testImplementation platform('org.springframework.boot:spring-boot-dependencies:4.1.1')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    // ApplicationContextRunner, OutputCaptureExtension, AssertJ, and a logging backend.
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    // Boot's own DataSourceAutoConfiguration and HikariCP, so the auto-configured rotator is tested
+    // against the pool Boot really builds; H2 is the in-JVM database whose user passwords the tests
+    // ALTER.
+    testImplementation 'org.springframework.boot:spring-boot-starter-jdbc'
+    testImplementation 'com.h2database:h2'
+    // The @WebMvcTest slice, so the slice registration this artifact ships is tested in a real slice.
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}

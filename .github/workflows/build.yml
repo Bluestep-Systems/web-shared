@@ -34,7 +34,8 @@ jobs:
 
       # `build` rather than `test`: it runs check (tests + the ArchUnit nullness rules) and
       # also assembles the jar, so a source change that compiles under test but breaks the
-      # published artifact fails here rather than at release time.
+      # published artifact fails here rather than at release time. Unqualified on purpose: it
+      # builds every project, so the secret-files subproject is checked here too.
       - name: Build
         run: ./gradlew build --no-daemon
 
@@ -45,5 +46,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: test-results
-          path: build/reports/tests/test/
+          path: |
+            build/reports/tests/test/
+            secret-files/build/reports/tests/test/
           retention-days: 7

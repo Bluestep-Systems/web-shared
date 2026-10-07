@@ -10,8 +10,9 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import dev.bluestep.global.dto.globaluser.CatalogScopeKind;
 import dev.bluestep.global.dto.globaluser.GlobalUserScopeEntry;
@@ -32,22 +33,29 @@ import dev.bluestep.global.dto.tenantaccess.ResellerKey;
  * <p>The consequence that matters is that a record emitting a field it cannot bind back does not
  * round-trip through its own mapper — so this suite asserts the round trip rather than only the
  * absence of the key, because the round trip is the property and the key is just how it broke.</p>
+ *
+ * <p>Jackson 3 only since 5.0.0: the Jackson 2 half and the check that both families agreed were
+ * retired with web-global's Jackson 2 msgpack converter, the last mapper of that family to bind
+ * these shapes.</p>
  */
 @DisplayName("global user scope wire shapes")
 class GlobalUserScopeWireTest {
 
-	private static final ObjectMapper JACKSON2 = new ObjectMapper().registerModule(new Jdk8Module());
-	private static final tools.jackson.databind.ObjectMapper JACKSON3 =
-			new tools.jackson.databind.json.JsonMapper();
+	/**
+	 * Jackson 3 with {@code FAIL_ON_UNKNOWN_PROPERTIES} switched on. Jackson 3 ships it off, and with it
+	 * off a leaked constraint getter reads back without complaint, so the round-trip assertions would
+	 * pass with the {@code @JsonIgnore} removed. Strict is what makes them about the leak.
+	 */
+	private static final ObjectMapper JACKSON3 = JsonMapper.builder()
+			.enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+			.build();
 
 	@Test
-	@DisplayName("no constraint method appears as a JSON property, under either Jackson")
+	@DisplayName("no constraint method appears as a JSON property")
 	void constraintMethodsAreNotSerialized() throws Exception {
 		List<String> payloads = List.of(
-				JACKSON2.writeValueAsString(fleetRequest()),
 				JACKSON3.writeValueAsString(fleetRequest()),
-				JACKSON2.writeValueAsString(resellerRequest()),
-				JACKSON2.writeValueAsString(entry()),
+				JACKSON3.writeValueAsString(resellerRequest()),
 				JACKSON3.writeValueAsString(entry()));
 
 		for (String json : payloads) {
@@ -61,36 +69,22 @@ class GlobalUserScopeWireTest {
 	@DisplayName("both scope shapes round-trip through their own mapper")
 	void scopeShapesRoundTrip() {
 		assertDoesNotThrow(() -> {
-			assertEquals(fleetRequest(), JACKSON2.readValue(
-					JACKSON2.writeValueAsString(fleetRequest()), GlobalUserScopeRequest.class));
-			assertEquals(resellerRequest(), JACKSON2.readValue(
-					JACKSON2.writeValueAsString(resellerRequest()), GlobalUserScopeRequest.class));
-			assertEquals(entry(), JACKSON2.readValue(
-					JACKSON2.writeValueAsString(entry()), GlobalUserScopeEntry.class));
+			assertEquals(fleetRequest(), JACKSON3.readValue(
+					JACKSON3.writeValueAsString(fleetRequest()), GlobalUserScopeRequest.class));
+			assertEquals(resellerRequest(), JACKSON3.readValue(
+					JACKSON3.writeValueAsString(resellerRequest()), GlobalUserScopeRequest.class));
+			assertEquals(entry(), JACKSON3.readValue(
+					JACKSON3.writeValueAsString(entry()), GlobalUserScopeEntry.class));
 		});
-	}
-
-	/**
-	 * The mappers must agree, because both bind these shapes in production: web-global runs Jackson 3
-	 * as its primary and keeps a hand-built Jackson 2 island for msgpack.
-	 */
-	@Test
-	@DisplayName("both Jackson families produce the same scope payload")
-	void mappersAgree() throws Exception {
-		assertEquals(JACKSON2.writeValueAsString(fleetRequest()),
-				JACKSON3.writeValueAsString(fleetRequest()));
-		assertEquals(JACKSON2.writeValueAsString(entry()), JACKSON3.writeValueAsString(entry()));
 	}
 
 	/** An omitted reseller still binds to empty rather than to null — the compact constructor's job. */
 	@Test
-	@DisplayName("an omitted reseller binds to empty, under either Jackson")
+	@DisplayName("an omitted reseller binds to empty")
 	void omittedResellerBindsToEmpty() throws Exception {
 		String json = """
 				{"scope":"FLEET","reason":"onboarding","actor":"platform-admin"}""";
 
-		assertEquals(Optional.empty(),
-				JACKSON2.readValue(json, GlobalUserScopeRequest.class).reseller());
 		assertEquals(Optional.empty(),
 				JACKSON3.readValue(json, GlobalUserScopeRequest.class).reseller());
 	}
