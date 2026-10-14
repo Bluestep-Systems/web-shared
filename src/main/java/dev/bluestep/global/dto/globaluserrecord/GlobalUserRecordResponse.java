@@ -102,4 +102,19 @@ public record GlobalUserRecordResponse(
 		linkedAccounts = linkedAccounts == null ? List.of() : List.copyOf(linkedAccounts);
 		credentialVersion = credentialVersion == null ? Optional.empty() : credentialVersion;
 	}
+
+	/**
+	 * The shape before {@code credentialVersion}, kept so that a consumer taking this patch release
+	 * still compiles. It records the count as not known, which is what a reader treats an absent one as
+	 * — so nothing built through it can bind a device to a credential version.
+	 */
+	public GlobalUserRecordResponse(GlobalUserKey user, Optional<String> firstName,
+			Optional<String> lastName, Optional<String> username, Optional<String> userEmail,
+			Optional<ResellerKey> reseller, boolean superUser, boolean disabled, Optional<String> attribs,
+			Optional<LocalDateTime> passwordExpireStart, boolean emailValidated,
+			Optional<LocalDateTime> emailValidatedExpireStart, List<LinkedAccount> linkedAccounts) {
+		this(user, firstName, lastName, username, userEmail, reseller, superUser, disabled, attribs,
+				passwordExpireStart, emailValidated, emailValidatedExpireStart, linkedAccounts,
+				Optional.empty());
+	}
 }

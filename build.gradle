@@ -359,9 +359,20 @@ group = 'dev.bluestep'
 // `long credentialVersion` would fail every account read by a consumer on this jar against a
 // web-global that predates the column — a sign-in outage for getting the deploy order wrong.
 //
+// Source-compatible as a patch should be: GlobalUserRecordResponse keeps its 13-component constructor
+// (credentialVersion not known) and GlobalUserCredentialUpdateRequest its one-component one (a change).
+//
 // RELEASE ORDER: this artifact, then web-global (changeset adding the column, the counter advanced
-// in its credential UPDATE, the jar resolved), and only then a monolith build that reads the field —
-// before the column exists it would read zero for everyone, which binds nothing to anything.
+// in its credential UPDATE, the jar resolved), and only then a monolith build that reads the field.
+// Out of order is safe, not merely discouraged: a monolith ahead of the column reads the count as not
+// known and mints and honours no device-trust cookie until it lands.
+//
+// DURING THE MONOLITH'S RING ROLLOUT the count over-advances. Rings still on an older build send their
+// sign-in re-encodes (the one-way upgrade, a breach-verdict refresh) without the flag, which reads as
+// a change, so a user who signs in on such a namespace after the breach corpus moves loses the devices
+// they trusted elsewhere — the cookie is scoped to the parent domain and the count is the account's.
+// The cost is one extra verification prompt per user per corpus move, until every ring carries the
+// flag; today every global user is prompted on every sign-in, so it is still strictly better.
 version = '5.0.1'
 
 repositories {

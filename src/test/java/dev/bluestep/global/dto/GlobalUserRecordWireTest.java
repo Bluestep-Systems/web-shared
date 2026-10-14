@@ -176,6 +176,18 @@ class GlobalUserRecordWireTest {
 		assertTrue(bound.credentialVersion().isEmpty());
 	}
 
+	/** The pre-5.0.1 constructor a consumer may still call: the count is not known, never zero. */
+	@Test
+	@DisplayName("the constructor without credentialVersion records it as not known")
+	void compatibilityConstructorIsNotKnown() {
+		GlobalUserRecordResponse response = new GlobalUserRecordResponse(
+				new GlobalUserKey(CLASSID, -51_001L), Optional.of("Del"), Optional.of("Novak"),
+				Optional.of("del.novak"), Optional.empty(), Optional.empty(), false, false,
+				Optional.empty(), Optional.empty(), false, Optional.empty(), List.of());
+
+		assertTrue(response.credentialVersion().isEmpty());
+	}
+
 	@Test
 	@DisplayName("a response's credentialVersion round-trips")
 	void credentialVersionRoundTrips() throws Exception {
