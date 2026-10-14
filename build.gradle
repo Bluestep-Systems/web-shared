@@ -337,7 +337,43 @@ group = 'dev.bluestep'
 //   of any. Release order: this artifact first, then web-global (which serves the new tag), and only
 //   then any consumer that moves to 5.0.0 — a consumer on 5.0.0 talking to a web-global without
 //   V5_0_0 gets 404s, and the AI gate fails closed on a 404.
-version = '5.0.0'
+//
+// 5.0.1 gives a global user a credential change counter (CU-86bbtyzh1): `credentialVersion`, a
+// bigint on global.globaluser, on GlobalUserRecordResponse, and `reencoding` on
+// GlobalUserCredentialUpdateRequest, which says whether a credential write is a different password
+// (advance the counter) or the same one re-encoded (leave it). The monolith binds its 90-day
+// device-trust cookie to the counter, which it could not bind to anything since the credential
+// stopped crossing this contract — so every global user has been asked for the email factor on
+// every sign-in. A change counter rather than any digest of the credential, for the reason
+// GlobalUserRecordResponse's javadoc records.
+//
+// Additive on both sides, so a patch with NO ContractVersion entry, on the 4.1.5 `flags` precedent:
+// the shared records are bound by every live tag's controllers, so the response component is served
+// under every tag at once, and a replica holding an older jar ignores it because the monolith's
+// WebGlobalClient.mapper() disables FAIL_ON_UNKNOWN_PROPERTIES. The request flag is a primitive, so
+// a caller that omits it — every caller built before this — binds `false` and advances the counter
+// on every write: one extra verification prompt is the worst it can cost, and never a device trusted
+// across a password change. The old single-argument constructor is kept and means exactly that.
+// Both new components are Optional rather than primitive for the same reason: Jackson 3 refuses to
+// bind a missing property onto a primitive (FAIL_ON_NULL_FOR_PRIMITIVES is on by default), so a
+// `long credentialVersion` would fail every account read by a consumer on this jar against a
+// web-global that predates the column — a sign-in outage for getting the deploy order wrong.
+//
+// Source-compatible as a patch should be: GlobalUserRecordResponse keeps its 13-component constructor
+// (credentialVersion not known) and GlobalUserCredentialUpdateRequest its one-component one (a change).
+//
+// RELEASE ORDER: this artifact, then web-global (changeset adding the column, the counter advanced
+// in its credential UPDATE, the jar resolved), and only then a monolith build that reads the field.
+// Out of order is safe, not merely discouraged: a monolith ahead of the column reads the count as not
+// known and mints and honours no device-trust cookie until it lands.
+//
+// DURING THE MONOLITH'S RING ROLLOUT the count over-advances. Rings still on an older build send their
+// sign-in re-encodes (the one-way upgrade, a breach-verdict refresh) without the flag, which reads as
+// a change, so a user who signs in on such a namespace after the breach corpus moves loses the devices
+// they trusted elsewhere — the cookie is scoped to the parent domain and the count is the account's.
+// The cost is one extra verification prompt per user per corpus move, until every ring carries the
+// flag; today every global user is prompted on every sign-in, so it is still strictly better.
+version = '5.0.1'
 
 repositories {
     mavenCentral()
