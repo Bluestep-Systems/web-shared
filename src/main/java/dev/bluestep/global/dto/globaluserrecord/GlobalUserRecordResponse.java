@@ -29,7 +29,7 @@ import dev.bluestep.global.dto.tenantaccess.ResellerKey;
  *
  * <p>The monolith binds its 90-day device-trust cookie to the credential, and that check does need
  * <em>something</em> here to bind to. It needs a value that moves when the credential moves and is not
- * derived from it — a change counter, not a digest.</p>
+ * derived from it — a change counter, not a digest. That is {@link #credentialVersion()}.</p>
  *
  * @param user      the account's key
  * @param firstName as stored; the column is nullable and plenty of rows leave it so
@@ -64,6 +64,17 @@ import dev.bluestep.global.dto.tenantaccess.ResellerKey;
  *                  {@code passwordExpireStart}
  * @param linkedAccounts every external identity linked to this account, in the order stored. Empty
  *                  for an account that signs in with a password only.
+ * @param credentialVersion how many times this account's password has been changed: zero for a new
+ *                  account, advanced by every credential write that sets a different password and
+ *                  by none that re-encodes the same one. Its only use is equality — a value captured
+ *                  earlier that no longer matches means the password changed since — so it says
+ *                  nothing about the password itself, and two accounts sharing a value share
+ *                  nothing but a count. The column is {@code NOT NULL DEFAULT 0}, so this service
+ *                  always fills it; it is an {@code Optional} for the reader instead. A consumer on
+ *                  this jar talking to a service that predates the column receives no such
+ *                  property, and Jackson 3 refuses to bind a missing property onto a primitive — so a
+ *                  {@code long} here would fail every account read during that window rather than
+ *                  report the one thing it does not know. Empty means "not known", never zero.
  */
 public record GlobalUserRecordResponse(
 		GlobalUserKey user,
@@ -78,7 +89,8 @@ public record GlobalUserRecordResponse(
 		Optional<LocalDateTime> passwordExpireStart,
 		boolean emailValidated,
 		Optional<LocalDateTime> emailValidatedExpireStart,
-		List<LinkedAccount> linkedAccounts
+		List<LinkedAccount> linkedAccounts,
+		Optional<Long> credentialVersion
 ) {
 
 	/**
@@ -88,5 +100,6 @@ public record GlobalUserRecordResponse(
 	 */
 	public GlobalUserRecordResponse {
 		linkedAccounts = linkedAccounts == null ? List.of() : List.copyOf(linkedAccounts);
+		credentialVersion = credentialVersion == null ? Optional.empty() : credentialVersion;
 	}
 }

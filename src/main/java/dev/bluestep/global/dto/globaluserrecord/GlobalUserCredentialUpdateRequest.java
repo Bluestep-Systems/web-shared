@@ -1,5 +1,7 @@
 package dev.bluestep.global.dto.globaluserrecord;
 
+import java.util.Optional;
+
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import jakarta.validation.constraints.AssertTrue;
@@ -82,12 +84,60 @@ import jakarta.validation.constraints.NotBlank;
  * that population at zero, or an operation that says which generation it is asking about. Either is a
  * decision with its own reasoning rather than a detail of this one.</p>
  *
+ * <h2>A change, or the same password re-encoded</h2>
+ *
+ * <p>Every write here advances {@link GlobalUserRecordResponse#credentialVersion()} unless the caller
+ * says it is re-encoding the password the account already has — moving it to a newer stored form, or
+ * refreshing metadata stored around an unchanged hash. That counter is what the monolith's device-trust
+ * cookie binds to, so advancing it on a re-encode would ask every trusted device for its second factor
+ * again for a password nobody changed.</p>
+ *
+ * <p>This service cannot tell the two apart itself — it never reads the credential, which is the point
+ * of it — so the caller states which it is. Absent reads as {@code false}: an older caller that has never
+ * heard of the flag advances the counter on every write. Wrongly advancing costs a user one extra
+ * verification prompt; wrongly not advancing would let a device trusted under the old password outlive
+ * a change, so the default is the direction that fails safe.</p>
+ *
+ * <p>An {@code Optional} rather than a {@code boolean} because absence has to bind. Jackson 3 refuses
+ * to map a missing creator property onto a primitive ({@code FAIL_ON_NULL_FOR_PRIMITIVES} is on by
+ * default), so a primitive here would turn every request from an older caller into a 400 — the
+ * opposite of the compatible default above.</p>
+ *
  * @param storedCredential the monolith's stored representation of the new password — <b>never a
  *                         password</b>, and never absent. Required, for the reasons above.
+ * @param reencoding       {@code true} only when {@code storedCredential} encodes the same password the
+ *                         account already holds, which leaves the credential version where it is.
+ *                         Empty or {@code false} is a change. Read it through {@link #isReencode()}.
  */
 public record GlobalUserCredentialUpdateRequest(
-		@NotBlank String storedCredential
+		@NotBlank String storedCredential,
+		Optional<Boolean> reencoding
 ) {
+
+	/**
+	 * Jackson binds an omitted {@code Optional} according to mapper configuration this module does not
+	 * control, so absence is normalised here rather than trusted to arrive as empty.
+	 */
+	public GlobalUserCredentialUpdateRequest {
+		reencoding = reencoding == null ? Optional.empty() : reencoding;
+	}
+
+	/**
+	 * A credential change — a different password — which advances the credential version.
+	 */
+	public GlobalUserCredentialUpdateRequest(String storedCredential) {
+		this(storedCredential, Optional.empty());
+	}
+
+	/**
+	 * Whether this write re-encodes the password the account already holds. {@code @JsonIgnore} for
+	 * the reason given on {@link #isStoredCredentialInStoredForm()}: a JavaBeans getter is otherwise a
+	 * property on the wire.
+	 */
+	@JsonIgnore
+	public boolean isReencode() {
+		return reencoding.orElse(false);
+	}
 
 	/**
 	 * Refuses a credential that has plainly not been through the monolith's encoder.

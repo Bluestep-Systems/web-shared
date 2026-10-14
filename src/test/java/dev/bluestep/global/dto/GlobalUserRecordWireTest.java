@@ -18,7 +18,9 @@ import tools.jackson.databind.json.JsonMapper;
 
 import dev.bluestep.global.dto.globaluserrecord.GlobalUserCredentialUpdateRequest;
 import dev.bluestep.global.dto.globaluserrecord.GlobalUserRecordCreateRequest;
+import dev.bluestep.global.dto.globaluserrecord.GlobalUserRecordResponse;
 import dev.bluestep.global.dto.globaluserrecord.GlobalUserRecordUpdateRequest;
+import dev.bluestep.global.dto.tenantaccess.GlobalUserKey;
 
 /**
  * What the global-user record write shapes actually put on the wire.
@@ -68,8 +70,9 @@ class GlobalUserRecordWireTest {
 			assertFalse(json.contains("InStoredForm"),
 					"a @AssertTrue getter leaked onto the wire: " + json);
 		}
-		assertEquals("{\"storedCredential\":\"" + STORED_CREDENTIAL.replace("\n", "\\n") + "\"}",
-				credential, "the credential shape is one component and should serialize as one key");
+		assertEquals("{\"storedCredential\":\"" + STORED_CREDENTIAL.replace("\n", "\\n")
+				+ "\",\"reencoding\":null}",
+				credential, "a change serializes its credential and an absent reencoding flag, nothing else");
 	}
 
 	/**
@@ -125,6 +128,64 @@ class GlobalUserRecordWireTest {
 
 		assertEquals(STORED_CREDENTIAL, bound.storedCredential());
 		assertTrue(bound.isStoredCredentialInStoredForm());
+	}
+
+	// ---------------------------------------------------------------- reencoding
+
+	/**
+	 * A caller built against a jar without the flag sends only the credential. It has to bind as a
+	 * change, because that is the reading that advances the credential version and so cannot leave a
+	 * device trusted across a password change.
+	 */
+	@Test
+	@DisplayName("an omitted reencoding flag binds as a credential change")
+	void omittedReencodingIsAChange() throws Exception {
+		GlobalUserCredentialUpdateRequest bound = JACKSON3.readValue(
+				"{\"storedCredential\":\"" + STORED_CREDENTIAL.replace("\n", "\\n") + "\"}",
+				GlobalUserCredentialUpdateRequest.class);
+
+		assertFalse(bound.isReencode());
+		assertEquals(credentialUpdate(), bound);
+	}
+
+	@Test
+	@DisplayName("a re-encode round-trips as a re-encode")
+	void reencodingRoundTrips() throws Exception {
+		GlobalUserCredentialUpdateRequest reencode =
+				new GlobalUserCredentialUpdateRequest(STORED_CREDENTIAL, Optional.of(true));
+
+		assertTrue(reencode.isReencode());
+		assertEquals(reencode, JACKSON3.readValue(JACKSON3.writeValueAsString(reencode),
+				GlobalUserCredentialUpdateRequest.class));
+	}
+
+	// ---------------------------------------------------------------- credential version
+
+	/**
+	 * A service that predates the column sends no {@code credentialVersion}. The account must still
+	 * bind — every sign-in reads one — and must say it does not know the count rather than claim zero.
+	 */
+	@Test
+	@DisplayName("a response without credentialVersion binds, as not known")
+	void responseWithoutCredentialVersionBinds() throws Exception {
+		GlobalUserRecordResponse bound = JACKSON3.readValue(
+				"{\"user\":{\"classid\":222222,\"seqnum\":-51001},\"superUser\":false,"
+						+ "\"disabled\":false,\"emailValidated\":false,\"linkedAccounts\":[]}",
+				GlobalUserRecordResponse.class);
+
+		assertTrue(bound.credentialVersion().isEmpty());
+	}
+
+	@Test
+	@DisplayName("a response's credentialVersion round-trips")
+	void credentialVersionRoundTrips() throws Exception {
+		GlobalUserRecordResponse response = new GlobalUserRecordResponse(
+				new GlobalUserKey(CLASSID, -51_001L), Optional.of("Del"), Optional.of("Novak"),
+				Optional.of("del.novak"), Optional.empty(), Optional.empty(), false, false,
+				Optional.empty(), Optional.empty(), false, Optional.empty(), List.of(), Optional.of(3L));
+
+		assertEquals(response, JACKSON3.readValue(JACKSON3.writeValueAsString(response),
+				GlobalUserRecordResponse.class));
 	}
 
 	// ---------------------------------------------------------------- fixtures
