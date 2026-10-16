@@ -54,12 +54,8 @@ import jakarta.validation.constraints.NotNull;
  *
  * <p>No key: the reseller being edited is the path.</p>
  *
- * <p>There is no create and no delete either. The monolith's own remote refuses deletion outright
- * ({@code "Cannot delete a reseller."}). Creation is absent for a different reason: a reseller arrives
- * as two rows, a {@code basetable} entry whose sequence number comes from the monolith's generic
- * per-classid allocator and a {@code reseller} entry beside it, and this surface owns neither the
- * allocator nor that table. Adding either verb here would be inventing an operation rather than
- * replacing one.</p>
+ * <p>Creating one is {@link ResellerCreateRequest}, from 5.1.0; a refused delete answers with a
+ * {@link ResellerDeleteRefusal}.</p>
  *
  * <h2>Constraints</h2>
  *
