@@ -373,7 +373,21 @@ group = 'dev.bluestep'
 // they trusted elsewhere — the cookie is scoped to the parent domain and the count is the account's.
 // The cost is one extra verification prompt per user per corpus move, until every ring carries the
 // flag; today every global user is prompted on every sign-in, so it is still strictly better.
-version = '5.0.1'
+//
+// 5.1.0 lets a reseller be created and deleted (CU-86bckhf6k). Since the reseller record moved onto
+// this contract (CU-86bbrr2bc) the monolith's console could neither: its create failed on save and
+// its delete had never been reachable. Adds ResellerCreateRequest (the update's branding columns plus
+// the creator key basetable requires; no key, the service allocates it) and ResellerDeleteRefusal
+// (the 409 body naming which kinds of reference stand in the way — tenants, global users, catalog
+// scopes, or the default reseller itself). Additive: no existing record, component or constraint
+// moved.
+//
+// A MINOR, and unlike 5.0.1 a served tag: the new operations are verbs, and a verb needs a tag to be
+// gated behind. web-global declares V5_1_0 serving 5.0.0's surfaces plus POST /resellers and DELETE
+// /resellers/{classid}/{seqnum}. RELEASE ORDER: this artifact, then web-global serving V5_1_0, then the
+// monolith moving its contract tag to 5.1.0 — a monolith ahead of web-global gets 404s on every
+// gateway, not only the reseller one, because the tag is shared.
+version = '5.1.0'
 
 repositories {
     mavenCentral()
