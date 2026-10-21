@@ -7,25 +7,31 @@ import dev.bluestep.global.dto.basetable.BaseTableKey;
 import dev.bluestep.global.dto.tenantaccess.ResellerKey;
 
 /**
- * A reseller as the monolith holds it: the branding columns, plus everything its
- * {@code global.basetable} row carries about the object itself.
+ * A reseller as the monolith holds it: the branding columns, plus what the monolith's generic object
+ * model asks of any object — its name, creator and creation stamp.
+ *
+ * <h2>Where those come from</h2>
+ *
+ * <p>Until web-global's changeset 017 they lived on the reseller's {@code global.basetable} row, beside
+ * a {@code global.reseller} table that had no name column at all. From 017 on, {@code global.reseller}
+ * is a table web-global owns outright and holds all of them itself; the old table is kept, unwritten,
+ * as {@code global.reseller_archive}, and the old {@code basetable} rows are left as they were. The
+ * shape below did not change with the storage, so its {@code Optional} components stay optional: a
+ * service from before 017 can still answer one empty, though one from 017 on never does.</p>
  *
  * <h2>Why this exists beside {@link ResellerResponse}</h2>
  *
- * <p>{@code ResellerResponse} carries the twelve columns of {@code global.reseller} and nothing else,
- * because that is all that table has: it has no name column at all. The monolith nevertheless renders
- * and sorts resellers by name, and it gets that name from the row's {@code global.basetable} entry —
- * which is why its own listing joins {@code basetable} rather than reading {@code reseller} alone. A
- * response without the display name therefore cannot back a reseller picker, which is what six of the
- * monolith's screens use this data for.</p>
+ * <p>{@code ResellerResponse} carries the twelve branding columns and nothing else. The monolith
+ * renders and sorts resellers by name, so a response without the display name cannot back a reseller
+ * picker, which is what six of the monolith's screens use this data for.</p>
  *
  * <p>A separate record rather than a component added to {@code ResellerResponse}: that record is what
  * the already-released 4.0.0 and 4.1.0 contracts serve, and reshaping it would mean freezing snapshots
  * of it into both of their folders to keep the promise each of them made.</p>
  *
- * <h2>The rest of the basetable row</h2>
+ * <h2>The rest of the object model</h2>
  *
- * <p>The display name is not the only thing the monolith's own join read. Its generic loader populated
+ * <p>The display name is not the only thing the monolith's generic loader read. It populated
  * the version, the creator, the creation and last-modified stamps and the row lock on every read, and
  * every one of those is on the general {@code RemoteObject} interface — so a caller that reaches a
  * reseller generically (a script, a GraphQL field, a debug dump) can ask for any of them. Serving only
@@ -66,18 +72,17 @@ import dev.bluestep.global.dto.tenantaccess.ResellerKey;
  * as instants would invent an offset nobody stored.</p>
  *
  * @param reseller       the key, in the spelling a classification uses
- * @param displayName    the name the monolith shows, from the joined {@code basetable} row. Empty
- *                       when that row carries none — the column is nullable, and a reseller without
- *                       one sorts last rather than being hidden.
+ * @param displayName    the name the monolith shows. Empty only from a service before changeset 017,
+ *                       when the name came from a nullable {@code basetable} column; a reseller
+ *                       without one sorts last rather than being hidden.
  * @param supportEmail   where this reseller's users are told to write
  * @param defaultDomain  the host its tenants front by default
  * @param privacyPageUrl the privacy policy it renders
  * @param termsPageUrl   the terms it renders
  * @param icons          its icon set
  * @param flags          its switch word, verbatim. Zero for a reseller with none set.
- * @param creator        who created the row. Empty exactly when there is no {@code basetable} row at
- *                       all — the reseller row can outlive it, and such a reseller is readable but
- *                       not writable.
+ * @param creator        who created the reseller. Empty only from a service before changeset 017, and
+ *                       there exactly when the reseller had no {@code basetable} row.
  * @param created        when it was created, empty on the same terms as {@code creator}
  */
 public record ResellerRecordResponse(
