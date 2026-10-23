@@ -12,11 +12,17 @@
  *       tenant path carries only the meters web-global's catalog marks tenant-visible.</li>
  *   <li>{@code GET /api/v1/usage/summary} — {@link UsageSummaryResponse}, per-tenant totals of the
  *       {@code /batch} metrics over a time range, folded across every grain web-global keeps.</li>
+ *   <li>{@code GET /api/v1/usage/series} — {@link UsageSeriesResponse}, one tenant's
+ *       {@code /batch} metrics over a time range in uniform {@link UsageGrain} buckets, one
+ *       {@link UsageCategorySeries} of {@link UsageSeriesPoint}s per {@link UsageCategory}.</li>
  *   <li>{@code POST /api/v1/usage/db} — {@link DbUsageBatchRequest} of {@link DbUsageRow}s, one
  *       namespace's {@code pg_stat_statements} diff: per-tenant server-side database work over a
  *       window. Replacing upsert on the window's start; a window overlapping a stored one
  *       of the same namespace with a different start is a 409, every other refusal a 400.</li>
  * </ul>
+ *
+ * <p>{@link UsageMetric} names every figure a tenant is shown, across the request series and the
+ * storage levels, for the consumers that pick or limit one of them by name.</p>
  *
  * <p>These paths are not {@code ContractVersion}-tagged: a change to a shape here is a change
  * to what every deployed producer sends, and no versioned path absorbs it. Each record's javadoc

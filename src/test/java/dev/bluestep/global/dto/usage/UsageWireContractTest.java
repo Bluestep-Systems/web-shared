@@ -5,14 +5,19 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
 
@@ -330,5 +335,199 @@ class UsageWireContractTest {
 				PINNED_DB_BATCH_JSON.replace(",\"entriesMax\":73", ""), DbUsageBatchRequest.class));
 		assertThrows(JacksonException.class, () -> JSON.readValue(
 				PINNED_DB_BATCH_JSON.replace(",\"execMicros\":62", ""), DbUsageBatchRequest.class));
+	}
+
+	private static final Instant HOUR_0 = Instant.parse("2026-09-07T00:00:00Z");
+
+	/** Every value distinct across both series, so a swapped pair of keys or series cannot cancel out. */
+	private static final String PINNED_SERIES_JSON = """
+			{"schemaName":"U1000001","from":"2026-09-07T00:00:00Z","to":"2026-09-07T02:00:00Z","asOf":"2026-09-07T01:30:00Z",
+			 "grain":"HOUR","series":[
+			 {"category":"http","points":[
+			  {"start":"2026-09-07T00:00:00Z","hits":81,"pageMillis":82,"pageMillisMax":83,
+			   "dbMillis":84,"requestBytes":85,"responseBytes":86},
+			  {"start":"2026-09-07T01:00:00Z","hits":0,"pageMillis":0,"pageMillisMax":0,
+			   "dbMillis":0,"requestBytes":0,"responseBytes":0}]},
+			 {"category":"file","points":[
+			  {"start":"2026-09-07T00:00:00Z","hits":91,"pageMillis":92,"pageMillisMax":93,
+			   "dbMillis":94,"requestBytes":95,"responseBytes":96},
+			  {"start":"2026-09-07T01:00:00Z","hits":97,"pageMillis":98,"pageMillisMax":99,
+			   "dbMillis":100,"requestBytes":101,"responseBytes":102}]}]}
+			""";
+
+	private static UsageSeriesResponse series() {
+		final Instant hour1 = HOUR_0.plusSeconds(3_600);
+		return new UsageSeriesResponse("U1000001", HOUR_0, HOUR_0.plusSeconds(7_200),
+				HOUR_0.plusSeconds(5_400), UsageGrain.HOUR,
+				List.of(new UsageCategorySeries(UsageCategory.HTTP, List.of(
+								new UsageSeriesPoint(HOUR_0, 81, 82, 83, 84, 85, 86),
+								UsageSeriesPoint.empty(hour1))),
+						new UsageCategorySeries(UsageCategory.FILE, List.of(
+								new UsageSeriesPoint(HOUR_0, 91, 92, 93, 94, 95, 96),
+								new UsageSeriesPoint(hour1, 97, 98, 99, 100, 101, 102)))));
+	}
+
+	@Test
+	void usageSeriesResponse_pinsKeys() {
+		final JsonNode node = JSON.valueToTree(series());
+
+		assertEquals(Set.of("schemaName", "from", "to", "asOf", "grain", "series"), keysOf(node),
+				"exact key set: the derived categories() must not serialize");
+		final JsonNode http = node.get("series").get(0);
+		assertEquals(Set.of("category", "points"), keysOf(http));
+		assertEquals(Set.of("start", "hits", "pageMillis", "pageMillisMax", "dbMillis", "requestBytes",
+				"responseBytes"), keysOf(http.get("points").get(0)));
+		assertEquals("2026-09-07T00:00:00Z", node.get("from").asString(), "instants are ISO strings");
+		assertEquals("2026-09-07T01:30:00Z", node.get("asOf").asString(), "asOf is not bucket-aligned");
+		assertEquals("2026-09-07T01:00:00Z", http.get("points").get(1).get("start").asString());
+		assertEquals("HOUR", node.get("grain").asString(), "the grain travels as its constant name");
+		assertEquals("http", http.get("category").asString(), "the category travels as its stored key");
+		assertEquals("file", node.get("series").get(1).get("category").asString());
+		assertEquals(JSON.readTree(PINNED_SERIES_JSON), JSON.readTree(JSON.writeValueAsString(series())),
+				"both sides parsed from text, so int and long nodes compare alike");
+	}
+
+	/** The direction web's gateway exercises: what web-global writes binds to the records. */
+	@Test
+	void pinnedSeriesJson_bindsBackToTheRecords() {
+		final UsageSeriesResponse bound = JSON.readValue(PINNED_SERIES_JSON, UsageSeriesResponse.class);
+
+		assertEquals(series(), bound);
+		assertEquals(List.of(UsageCategory.HTTP, UsageCategory.FILE), bound.categories());
+	}
+
+	/** JSON and CBOR must both carry the series unchanged, with traffic, without, and at DAY grain. */
+	@Test
+	void usageSeriesResponse_roundTripsJsonAndCbor() {
+		final UsageSeriesResponse noCategories =
+				new UsageSeriesResponse("U1000001", HOUR_0, HOUR_0, HOUR_0, UsageGrain.DAY, List.of());
+		final UsageSeriesResponse quietDay = new UsageSeriesResponse("U1000001", HOUR_0,
+				HOUR_0.plusSeconds(86_400), HOUR_0.plusSeconds(90_000), UsageGrain.DAY,
+				List.of(new UsageCategorySeries(UsageCategory.HTTP, List.of(UsageSeriesPoint.empty(HOUR_0)))));
+		for (final UsageSeriesResponse response : List.of(series(), noCategories, quietDay)) {
+			assertEquals(response, CBOR.readValue(CBOR.writeValueAsBytes(response),
+					UsageSeriesResponse.class));
+			assertEquals(response, JSON.readValue(JSON.writeValueAsString(response),
+					UsageSeriesResponse.class));
+		}
+	}
+
+	/** An omitted list binds as empty, as a Java caller's null does. */
+	@Test
+	void usageSeries_omittedListsBindAsEmpty() {
+		final UsageSeriesResponse bound = JSON.readValue("""
+				{"schemaName":"U1000001","from":"2026-09-07T00:00:00Z","to":"2026-09-07T00:00:00Z",
+				 "asOf":"2026-09-07T00:00:00Z","grain":"HOUR"}
+				""", UsageSeriesResponse.class);
+
+		assertTrue(bound.series().isEmpty());
+		assertTrue(JSON.readValue("{\"category\":\"http\"}", UsageCategorySeries.class).points().isEmpty());
+		assertTrue(new UsageSeriesResponse("U1000001", HOUR_0, HOUR_0, HOUR_0, UsageGrain.HOUR, null).series().isEmpty());
+		assertTrue(new UsageCategorySeries(UsageCategory.FILE, null).points().isEmpty());
+	}
+
+	@Test
+	void usageSeries_nullElementsAreRefusedDuringBinding() {
+		assertThrows(JacksonException.class, () -> JSON.readValue(
+				PINNED_SERIES_JSON.replace("\"series\":[", "\"series\":[null,"), UsageSeriesResponse.class));
+		assertThrows(JacksonException.class, () -> JSON.readValue(
+				PINNED_SERIES_JSON.replace("\"points\":[", "\"points\":[null,"), UsageSeriesResponse.class));
+	}
+
+	/** Every point figure is required: omitting one is a binding failure, not a silent zero. */
+	@Test
+	void usageSeries_omittedPrimitiveFailsBinding() {
+		assertThrows(JacksonException.class, () -> JSON.readValue(
+				PINNED_SERIES_JSON.replaceFirst("\"dbMillis\":84,", ""), UsageSeriesResponse.class));
+		assertThrows(JacksonException.class, () -> JSON.readValue(
+				PINNED_SERIES_JSON.replaceFirst("\"hits\":81,", ""), UsageSeriesResponse.class));
+	}
+
+	/**
+	 * Every reference component is required: leaving one out fails binding by name, rather than
+	 * binding a null a null-marked consumer would trust.
+	 */
+	@Test
+	void usageSeries_omittedReferenceComponentFailsBinding() {
+		for (final String omitted : List.of("\"schemaName\":\"U1000001\",", "\"grain\":\"HOUR\",",
+				"\"asOf\":\"2026-09-07T01:30:00Z\",", "\"from\":\"2026-09-07T00:00:00Z\",",
+				"\"category\":\"http\",", "\"start\":\"2026-09-07T00:00:00Z\",")) {
+			final String json = PINNED_SERIES_JSON.replaceFirst(Pattern.quote(omitted), "");
+			assertFalse(json.equals(PINNED_SERIES_JSON), "the fixture must contain " + omitted);
+			final JacksonException refused = assertThrows(JacksonException.class,
+					() -> JSON.readValue(json, UsageSeriesResponse.class), omitted);
+			final String name = omitted.substring(1, omitted.indexOf('"', 1));
+			assertTrue(causeMessages(refused).contains(name), omitted + " names the field: " + causeMessages(refused));
+		}
+	}
+
+	private static String causeMessages(final Throwable thrown) {
+		final StringBuilder messages = new StringBuilder();
+		for (Throwable cause = thrown; cause != null; cause = cause.getCause()) {
+			messages.append(cause.getMessage()).append(" | ");
+		}
+		return messages.toString();
+	}
+
+	/** A category key is matched exactly: the constant name, or another case, is not a category. */
+	@Test
+	void usageSeries_unknownCategoryOrGrainFailsBinding() {
+		assertThrows(JacksonException.class, () -> JSON.readValue(
+				PINNED_SERIES_JSON.replace("\"http\"", "\"HTTP\""), UsageSeriesResponse.class));
+		assertThrows(JacksonException.class, () -> JSON.readValue(
+				PINNED_SERIES_JSON.replace("\"http\"", "\"formula.scheduled\""), UsageSeriesResponse.class));
+		assertThrows(JacksonException.class, () -> JSON.readValue(
+				PINNED_SERIES_JSON.replace("\"HOUR\"", "\"MINUTE\""), UsageSeriesResponse.class));
+	}
+
+	/**
+	 * The category values are the keys producers send and {@code tenant_usage.category} stores, so
+	 * a renamed value here would stop a response, a query parameter and a row agreeing.
+	 */
+	@Test
+	void usageCategory_wireValuesArePinned() {
+		assertEquals("http", UsageCategory.HTTP.wireValue());
+		assertEquals("file", UsageCategory.FILE.wireValue());
+		assertEquals(2, UsageCategory.values().length, "a new category needs its own pinned key");
+		for (final UsageCategory category : UsageCategory.values()) {
+			assertEquals("\"" + category.wireValue() + "\"", JSON.writeValueAsString(category));
+			assertEquals(category, JSON.readValue("\"" + category.wireValue() + "\"", UsageCategory.class));
+			assertEquals(category, CBOR.readValue(CBOR.writeValueAsBytes(category), UsageCategory.class));
+			assertEquals(Optional.of(category), UsageCategory.fromWireValue(category.wireValue()));
+		}
+		assertEquals(Optional.empty(), UsageCategory.fromWireValue("HTTP"));
+		assertEquals(Optional.empty(), UsageCategory.fromWireValue("formula.scheduled"));
+	}
+
+	@Test
+	void usageGrain_namesAndWidthsArePinned() {
+		assertEquals(List.of("HOUR", "DAY"), Arrays.stream(UsageGrain.values()).map(Enum::name).toList());
+		assertEquals(Duration.ofHours(1), UsageGrain.HOUR.width());
+		assertEquals(Duration.ofDays(1), UsageGrain.DAY.width());
+		assertEquals("\"DAY\"", JSON.writeValueAsString(UsageGrain.DAY));
+		assertEquals(UsageGrain.HOUR, JSON.readValue("\"HOUR\"", UsageGrain.class));
+	}
+
+	/** Thresholds will persist and send these names, so each one is pinned, and cpu/alloc stay out. */
+	@Test
+	void usageMetric_namesArePinned() {
+		assertEquals(List.of("HITS", "PAGE_MILLIS", "PAGE_MILLIS_AVG", "PAGE_MILLIS_PEAK", "DB_MILLIS",
+				"REQUEST_BYTES", "RESPONSE_BYTES", "STORAGE_DB_BYTES", "STORAGE_FILE_BYTES"),
+				Arrays.stream(UsageMetric.values()).map(Enum::name).toList());
+		assertEquals(List.of(UsageMetric.Aggregation.CUMULATIVE, UsageMetric.Aggregation.CUMULATIVE,
+				UsageMetric.Aggregation.AVERAGE, UsageMetric.Aggregation.PEAK, UsageMetric.Aggregation.CUMULATIVE,
+				UsageMetric.Aggregation.CUMULATIVE, UsageMetric.Aggregation.CUMULATIVE, UsageMetric.Aggregation.LEVEL,
+				UsageMetric.Aggregation.LEVEL),
+				Arrays.stream(UsageMetric.values()).map(UsageMetric::aggregation).toList(),
+				"each metric's window behaviour, in declaration order");
+		assertEquals(List.of(true, true, true, true, true, true, true, false, false),
+				Arrays.stream(UsageMetric.values()).map(UsageMetric::perCategory).toList(),
+				"only the storage levels belong to no category");
+		assertEquals(List.of("CUMULATIVE", "AVERAGE", "PEAK", "LEVEL"),
+				Arrays.stream(UsageMetric.Aggregation.values()).map(Enum::name).toList());
+		for (final UsageMetric metric : UsageMetric.values()) {
+			assertEquals("\"" + metric.name() + "\"", JSON.writeValueAsString(metric));
+			assertEquals(metric, JSON.readValue("\"" + metric.name() + "\"", UsageMetric.class));
+		}
 	}
 }
