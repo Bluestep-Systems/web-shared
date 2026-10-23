@@ -380,7 +380,8 @@ class UsageWireContractTest {
 		assertEquals("HOUR", node.get("grain").asString(), "the grain travels as its constant name");
 		assertEquals("http", http.get("category").asString(), "the category travels as its stored key");
 		assertEquals("file", node.get("series").get(1).get("category").asString());
-		assertEquals(JSON.readTree(PINNED_SERIES_JSON), node);
+		assertEquals(JSON.readTree(PINNED_SERIES_JSON), JSON.readTree(JSON.writeValueAsString(series())),
+				"both sides parsed from text, so int and long nodes compare alike");
 	}
 
 	/** The direction web's gateway exercises: what web-global writes binds to the records. */
@@ -434,7 +435,7 @@ class UsageWireContractTest {
 	@Test
 	void usageSeries_omittedPrimitiveFailsBinding() {
 		assertThrows(JacksonException.class, () -> JSON.readValue(
-				PINNED_SERIES_JSON.replaceFirst(",\"dbMillis\":84", ""), UsageSeriesResponse.class));
+				PINNED_SERIES_JSON.replaceFirst("\"dbMillis\":84,", ""), UsageSeriesResponse.class));
 		assertThrows(JacksonException.class, () -> JSON.readValue(
 				PINNED_SERIES_JSON.replaceFirst("\"hits\":81,", ""), UsageSeriesResponse.class));
 	}

@@ -14,6 +14,12 @@ import java.util.Set;
  * shape hides that: every bucket is one {@link #grain()} wide, and each is the fold of every stored
  * row whose window starts inside it, so a chart's spacing is even across the whole range.</p>
  *
+ * <p><b>A bucket is never finer than the data under it.</b> A stored row is never split: a day row
+ * folded into hour buckets would land whole in its midnight bucket and leave 23 false zeros. So an
+ * {@link UsageGrain#HOUR} range reaches back no further than web-global keeps hour (or finer) rows,
+ * and web-global refuses one that does rather than answering it; a zero point therefore always means
+ * no traffic, never no resolution.</p>
+ *
  * <p><b>Every series covers every bucket.</b> A series holds exactly one point per bucket of
  * {@code [from, to)}, oldest first, and a bucket with no traffic is a zero point rather than a gap.
  * The constructor refuses anything else, so a consumer may pair the categories' points by index and
