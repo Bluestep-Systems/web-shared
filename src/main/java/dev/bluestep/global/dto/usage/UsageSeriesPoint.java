@@ -1,6 +1,7 @@
 package dev.bluestep.global.dto.usage;
 
 import java.time.Instant;
+import java.util.Objects;
 
 /**
  * One bucket of a {@link UsageCategorySeries}: one tenant's request metrics for one category over
@@ -9,7 +10,9 @@ import java.time.Instant;
  *
  * <p>Totals are sums over the bucket. {@code pageMillisMax} is the largest single-request maximum
  * anywhere in the bucket — the slowest single hit, not the slowest minute's total. A bucket with no
- * traffic is present with every figure zero (see {@link #empty(Instant)}), never absent.</p>
+ * traffic is present with every figure zero (see {@link #empty(Instant)}), never absent; a bucket
+ * still open when the figures were folded may also read zero (see
+ * {@link UsageSeriesResponse#isPartial(UsageSeriesPoint)}).</p>
  *
  * <p>The figures mirror {@link UsageWindow}'s tenant-visible metrics; its internal ones (thread CPU
  * time, allocated bytes, and the per-request byte maxima) are not carried.</p>
@@ -31,6 +34,15 @@ public record UsageSeriesPoint(
 		long dbMillis,
 		long requestBytes,
 		long responseBytes) {
+
+	/**
+	 * Refuses a missing bucket start by name, rather than failing later and elsewhere.
+	 *
+	 * @throws NullPointerException when {@code start} is missing
+	 */
+	public UsageSeriesPoint {
+		Objects.requireNonNull(start, "start");
+	}
 
 	/**
 	 * The point for a bucket with no traffic: every figure zero.

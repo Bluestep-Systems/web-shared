@@ -16,6 +16,12 @@ import com.fasterxml.jackson.annotation.JsonValue;
  * what producers send in {@link UsageWindow#category()} and what web-global keeps in
  * {@code tenant_usage.category}, so a category read off a response, a query parameter and a stored
  * row are one spelling. {@code UsageWireContractTest} pins each value.</p>
+ *
+ * <p><b>{@link #name()} and {@link #toString()} are not the wire value.</b> {@code @JsonValue} reaches
+ * Jackson only: Spring MVC binds an enum request parameter through {@code Enum.valueOf}, so
+ * {@code @RequestParam UsageCategory} would refuse {@code ?category=http}. Bind the parameter as a
+ * string and resolve it with {@link #fromWireValue(String)}, and build a URL from
+ * {@link #wireValue()}.</p>
  */
 public enum UsageCategory {
 

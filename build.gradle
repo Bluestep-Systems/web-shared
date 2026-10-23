@@ -395,7 +395,10 @@ group = 'dev.bluestep'
 //     uniform hour or day buckets, one series per category, for GET /api/v1/usage/series. Every
 //     series holds exactly one point per bucket of [from, to), zeros where there was no traffic, and
 //     the response's constructor refuses anything else, so a chart pairs the categories by index and
-//     never fills holes. Only the tenant-visible figures ride: cpu, alloc and the per-request byte
+//     never fills holes. asOf is the server's fold time: a bucket ending after it is partial, so a
+//     zero there is not "no traffic". Only the requested categories and grain come back, and an
+//     omitted category means exactly {http, file} forever, so a later category or grain can never
+//     reach a consumer that cannot bind it. Only the tenant-visible figures ride: cpu, alloc and the per-request byte
 //     maxima stay internal.
 //   * UsageGrain (HOUR, DAY), with each grain's width.
 //   * UsageCategory (HTTP, FILE), serialized as the stored keys `http` and `file` rather than the
@@ -403,8 +406,9 @@ group = 'dev.bluestep'
 //     same way. Closed where UsageWindow.category stays open: the background lanes are not shown to a
 //     tenant and get no constant.
 //   * UsageMetric: every figure a tenant is shown, request metrics and storage levels, each
-//     documented with its unit and whether it accumulates over a window. The chart's metric picker
-//     uses it now, and the usage threshold DTOs planned for 5.3.0 key on it.
+//     documented with its unit, with aggregation() (CUMULATIVE, AVERAGE, PEAK, LEVEL) and
+//     perCategory() stating how it behaves over a window and whether a category applies. The
+//     chart's metric picker uses it now, and the usage threshold DTOs planned for 5.3.0 key on it.
 // A MINOR rather than a patch because it adds a surface, but NO ContractVersion entry, on the 4.1.6
 // precedent: /api/v1/usage/ is not tag-routed, and the monolith's contract tag is its own constant
 // (WebGlobalClient.CONTRACT), not this number. RELEASE ORDER: this artifact, then web-global serving

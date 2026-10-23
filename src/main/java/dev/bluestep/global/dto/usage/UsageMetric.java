@@ -5,10 +5,9 @@ package dev.bluestep.global.dto.usage;
  * offers and that usage thresholds key on.
  *
  * <p>Each constant says its unit and how it behaves over a window, because a threshold on it has to
- * know. A <em>cumulative</em> metric adds up across a window, so a limit on it is a budget; a
- * <em>peak</em> or <em>average</em> is computed over the window rather than summed; a <em>level</em>
- * is a reading at a moment and does not accumulate at all. The request metrics are reported per
- * {@link UsageCategory}; the storage levels belong to no category.</p>
+ * know: {@link #aggregation()} is that behaviour, and {@link #perCategory()} says whether a
+ * {@link UsageCategory} applies. Consumers read both from here rather than each writing its own
+ * switch over the constants.</p>
  *
  * <p>Thread CPU time and allocated bytes are deliberately absent. Producers report them
  * ({@link UsageWindow#cpuMillis()}, {@link UsageWindow#allocBytes()}), but they are internal metrics,
@@ -18,55 +17,169 @@ package dev.bluestep.global.dto.usage;
  */
 public enum UsageMetric {
 
-	/** Completed requests, a count. Cumulative: {@link UsageSeriesPoint#hits()} summed over the window. */
-	HITS,
+	/** Completed requests, a count. {@link UsageSeriesPoint#hits()} summed over the window. */
+	HITS {
+		@Override
+		public Aggregation aggregation() {
+			return Aggregation.CUMULATIVE;
+		}
+
+		@Override
+		public boolean perCategory() {
+			return true;
+		}
+	},
 
 	/**
-	 * Wall-clock time spent serving requests, in milliseconds. Cumulative:
-	 * {@link UsageSeriesPoint#pageMillis()} summed over the window.
+	 * Wall-clock time spent serving requests, in milliseconds. {@link UsageSeriesPoint#pageMillis()}
+	 * summed over the window.
 	 */
-	PAGE_MILLIS,
+	PAGE_MILLIS {
+		@Override
+		public Aggregation aggregation() {
+			return Aggregation.CUMULATIVE;
+		}
+
+		@Override
+		public boolean perCategory() {
+			return true;
+		}
+	},
 
 	/**
 	 * Mean wall-clock time per request, in milliseconds. Derived, not stored: {@link #PAGE_MILLIS}
-	 * divided by {@link #HITS} over the same window, and undefined for a window with no hits. Not
-	 * cumulative — two windows' averages do not add.
+	 * divided by {@link #HITS} over the same window, and undefined for a window with no hits.
 	 */
-	PAGE_MILLIS_AVG,
+	PAGE_MILLIS_AVG {
+		@Override
+		public Aggregation aggregation() {
+			return Aggregation.AVERAGE;
+		}
+
+		@Override
+		public boolean perCategory() {
+			return true;
+		}
+	},
 
 	/**
-	 * The slowest single request's wall-clock time, in milliseconds. A maximum, not cumulative:
+	 * The slowest single request's wall-clock time, in milliseconds.
 	 * {@link UsageSeriesPoint#pageMillisMax()} taken as the largest over the window.
 	 */
-	PAGE_MILLIS_PEAK,
+	PAGE_MILLIS_PEAK {
+		@Override
+		public Aggregation aggregation() {
+			return Aggregation.PEAK;
+		}
+
+		@Override
+		public boolean perCategory() {
+			return true;
+		}
+	},
 
 	/**
 	 * Time spent in database calls while serving requests, in milliseconds, as the request's own
-	 * threads measured it. Cumulative: {@link UsageSeriesPoint#dbMillis()} summed over the window.
+	 * threads measured it. {@link UsageSeriesPoint#dbMillis()} summed over the window.
 	 */
-	DB_MILLIS,
+	DB_MILLIS {
+		@Override
+		public Aggregation aggregation() {
+			return Aggregation.CUMULATIVE;
+		}
+
+		@Override
+		public boolean perCategory() {
+			return true;
+		}
+	},
+
+	/** Request body bytes received. {@link UsageSeriesPoint#requestBytes()} summed over the window. */
+	REQUEST_BYTES {
+		@Override
+		public Aggregation aggregation() {
+			return Aggregation.CUMULATIVE;
+		}
+
+		@Override
+		public boolean perCategory() {
+			return true;
+		}
+	},
+
+	/** Response bytes sent. {@link UsageSeriesPoint#responseBytes()} summed over the window. */
+	RESPONSE_BYTES {
+		@Override
+		public Aggregation aggregation() {
+			return Aggregation.CUMULATIVE;
+		}
+
+		@Override
+		public boolean perCategory() {
+			return true;
+		}
+	},
 
 	/**
-	 * Request body bytes received. Cumulative: {@link UsageSeriesPoint#requestBytes()} summed over
-	 * the window.
+	 * The tenant's database size, in bytes: the {@code db} storage meter, read from the latest
+	 * storage sample.
 	 */
-	REQUEST_BYTES,
+	STORAGE_DB_BYTES {
+		@Override
+		public Aggregation aggregation() {
+			return Aggregation.LEVEL;
+		}
 
-	/**
-	 * Response bytes sent. Cumulative: {@link UsageSeriesPoint#responseBytes()} summed over the
-	 * window.
-	 */
-	RESPONSE_BYTES,
-
-	/**
-	 * The tenant's database size, in bytes: the {@code db} storage meter. A level, read from the
-	 * latest storage sample; it does not accumulate over a window.
-	 */
-	STORAGE_DB_BYTES,
+		@Override
+		public boolean perCategory() {
+			return false;
+		}
+	},
 
 	/**
 	 * The tenant's stored files, in bytes, as the tenant sees them: the {@code file_logical} storage
-	 * meter. A level, read from the latest storage sample; it does not accumulate over a window.
+	 * meter, read from the latest storage sample.
 	 */
-	STORAGE_FILE_BYTES
+	STORAGE_FILE_BYTES {
+		@Override
+		public Aggregation aggregation() {
+			return Aggregation.LEVEL;
+		}
+
+		@Override
+		public boolean perCategory() {
+			return false;
+		}
+	};
+
+	/**
+	 * How this metric behaves over a window: what a limit on it means and which windows suit it.
+	 *
+	 * @return the metric's aggregation
+	 */
+	public abstract Aggregation aggregation();
+
+	/**
+	 * Whether this metric is reported per {@link UsageCategory}. The request metrics are; the
+	 * storage levels belong to no category, so naming one alongside them is incoherent.
+	 *
+	 * @return {@code true} for a metric a category narrows
+	 */
+	public abstract boolean perCategory();
+
+	/** How a {@link UsageMetric} behaves over a window. Serialized under its constant name. */
+	public enum Aggregation {
+
+		/** Adds up across the window, so a limit on it is a budget for the window. */
+		CUMULATIVE,
+
+		/** One cumulative metric over another across the window; two windows' averages do not add. */
+		AVERAGE,
+
+		/** The largest single value anywhere in the window; not summed. */
+		PEAK,
+
+		/** A reading at a moment; it does not accumulate over a window at all. */
+		LEVEL
+	}
 }

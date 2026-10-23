@@ -1,6 +1,7 @@
 package dev.bluestep.global.dto.usage;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * One category's line on a usage chart: the {@link UsageSeriesPoint}s of a
@@ -16,10 +17,14 @@ import java.util.List;
 public record UsageCategorySeries(UsageCategory category, List<UsageSeriesPoint> points) {
 
 	/**
-	 * Folds an absent list into its empty form and takes a defensive copy of a present one, so a
-	 * Java caller passing {@code null} gets what an omitted JSON key binds to.
+	 * Refuses a missing category by name, folds an absent list into its empty form and takes a
+	 * defensive copy of a present one, so a Java caller passing {@code null} gets what an omitted
+	 * JSON key binds to.
+	 *
+	 * @throws NullPointerException when {@code category} is missing
 	 */
 	public UsageCategorySeries {
+		Objects.requireNonNull(category, "category");
 		points = points == null ? List.of() : List.copyOf(points);
 	}
 }
