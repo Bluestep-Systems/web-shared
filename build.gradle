@@ -413,7 +413,37 @@ group = 'dev.bluestep'
 // precedent: /api/v1/usage/ is not tag-routed, and the monolith's contract tag is its own constant
 // (WebGlobalClient.CONTRACT), not this number. RELEASE ORDER: this artifact, then web-global serving
 // the endpoint, then the monolith calling it.
-version = '5.2.0'
+//
+// 5.3.0 adds the usage threshold shapes (CU-86bcqjrku, for usage alerts and circuit breakers,
+// CU-86bcqj6mn), in the new package dto.usage.threshold. Purely additive: no existing record,
+// component or constraint moved.
+//   * UsageThresholdRequest (write) / UsageThreshold (stored, with id, version and timestamps): one
+//     tenant's limit on one UsageMetric, narrowed to a UsageCategory or covering every category,
+//     over a UsageThresholdWindow, with ordered stages. The constructors refuse an incoherent
+//     threshold: a category on a metric with none, a window that does not suit
+//     UsageMetric.aggregation(), no stages, levels out of ascending order, a second break.
+//     expectedVersion absent creates; present replaces only that stored version.
+//   * UsageThresholdWindow (HOURLY, DAILY, WEEKLY, MONTHLY, LEVEL), UTC-aligned for every tenant,
+//     with each window's span. Not BudgetSchedule: that has LIFETIME and a tenant offset, both ruled
+//     out here, and no LEVEL.
+//   * UsageThresholdAction: a positive level plus a sealed Kind, Notify(channels, recipients) or
+//     Break, polymorphic on the wire under "type" ("notify", "break"). NotifyChannel is EMAIL,
+//     IN_APP or OPS; EMAIL and IN_APP name TenantUserKey recipients (keys only, never addresses),
+//     OPS names none.
+//   * UsageTripState (a stage that tripped, its window, whether it cleared, when it last notified),
+//     UsageBreakerList / UsageBreaker (every uncleared break, fleet-wide, for pods to poll), and
+//     UsageNotification / UsageNotificationAckRequest (a queued EMAIL or IN_APP notice for web's
+//     dispatcher, and its acknowledgement).
+//   * Closed vocabularies, with the rule on the server: web-global never sends a caller a metric,
+//     category, window, kind or channel its release does not name, and leaves such rows out of
+//     that caller's answer, so a later value can never fail an older consumer's whole response.
+//   * Absence is a @Nullable component plus an optX() accessor, never Optional, in dto.usage and its
+//     subpackages; DtoNullnessRulesTest now holds those packages to that and the rest to Optional.
+// A MINOR for the new surface. The vocabulary rule needs web-global to know the release a caller was
+// built against; a ContractVersion tag on the threshold paths is how it would (web-global decides
+// the routing, not this artifact). RELEASE ORDER: this artifact, then web-global serving the
+// endpoints, then the monolith calling them.
+version = '5.3.0'
 
 repositories {
     mavenCentral()
