@@ -12,8 +12,9 @@ import dev.bluestep.global.dto.tenantaccess.ResellerKey;
  * @param scope    the answer
  * @param reseller present exactly when {@code scope} is {@code RESELLER}
  * @param decision the stored classification, absent when nobody has classified this user — in which
- *                 case {@code scope} is {@code FLEET} by default rather than by decision, and saying
- *                 so is the point of separating the two
+ *                 case {@code scope} is {@code VOUCHED} by default rather than by decision, and saying
+ *                 so is the point of separating the two. (Before web-global changeset 014 the
+ *                 default was {@code FLEET}.)
  */
 public record GlobalUserScopeResponse(
 		GlobalUserKey user,

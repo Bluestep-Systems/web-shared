@@ -16,6 +16,9 @@ public enum CatalogScopeKind {
 	/** Only the tenants owned by the user's reseller. */
 	RESELLER,
 
-	/** Only the tenants that have named this user in their own access report. */
+	/**
+	 * Only the tenants that have named this user in their own access report. Also what web-global
+	 * shows a user nobody has classified.
+	 */
 	VOUCHED
 }
