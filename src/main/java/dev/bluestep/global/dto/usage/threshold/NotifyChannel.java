@@ -1,5 +1,7 @@
 package dev.bluestep.global.dto.usage.threshold;
 
+import dev.bluestep.global.dto.usage.ContractRelease;
+
 /**
  * Where a {@link UsageThresholdAction.Notify} sends its notice.
  *
@@ -19,6 +21,11 @@ public enum NotifyChannel {
 		public boolean namesRecipients() {
 			return true;
 		}
+
+		@Override
+		public ContractRelease introducedIn() {
+			return ContractRelease.V5_3_0;
+		}
 	},
 
 	/** An in-app alert to each recipient. */
@@ -27,6 +34,11 @@ public enum NotifyChannel {
 		public boolean namesRecipients() {
 			return true;
 		}
+
+		@Override
+		public ContractRelease introducedIn() {
+			return ContractRelease.V5_3_0;
+		}
 	},
 
 	/** Bluestep's operators, through web-global's alerting; no recipients. */
@@ -34,6 +46,11 @@ public enum NotifyChannel {
 		@Override
 		public boolean namesRecipients() {
 			return false;
+		}
+
+		@Override
+		public ContractRelease introducedIn() {
+			return ContractRelease.V5_3_0;
 		}
 	};
 
@@ -44,4 +61,12 @@ public enum NotifyChannel {
 	 * @return {@code true} for {@link #EMAIL} and {@link #IN_APP}
 	 */
 	public abstract boolean namesRecipients();
+
+	/**
+	 * The release that introduced this channel: a caller whose contract tag is older cannot bind it,
+	 * so web-global leaves rows that name it out of that caller's answer. Not on the wire.
+	 *
+	 * @return the release this constant arrived in
+	 */
+	public abstract ContractRelease introducedIn();
 }

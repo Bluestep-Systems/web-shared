@@ -7,40 +7,48 @@ import java.util.OptionalLong;
 
 import org.jspecify.annotations.Nullable;
 
+import dev.bluestep.global.dto.constraints.CodePointSize;
+import dev.bluestep.global.dto.usage.StorageSample;
 import dev.bluestep.global.dto.usage.UsageCategory;
 import dev.bluestep.global.dto.usage.UsageMetric;
+
+import jakarta.validation.constraints.NotBlank;
 
 /**
  * Creating or replacing one tenant's threshold on one metric: the write shape of
  * {@link UsageThreshold}, without the id, version and timestamps web-global assigns.
  *
- * <p>A threshold is identified by {@code (schemaName, metric, category, window)}: a tenant may limit
- * one metric over a day and again over a month, but never twice over the same window, because two
- * such rows would be one limit with its stages split. Stages that belong together go in one
- * {@code actions} list.</p>
+ * <p>Identity is {@code (schemaName, metric, category, window)}, as {@link UsageThreshold} sets out:
+ * a tenant may limit one metric over a day and again over a month, but never twice over the same
+ * window. Stages that belong together go in one {@code actions} list.</p>
  *
  * <p><b>The whole threshold, not a patch.</b> A replace sets every stage to exactly what is sent;
  * a stage left out is deleted.</p>
  *
- * <p><b>{@code expectedVersion} guards against a lost update.</b> Absent, the request creates the
- * threshold, and web-global refuses it if one with the same identity already exists. Present, the
- * request replaces the stored one, and web-global refuses it unless the stored {@link
- * UsageThreshold#version()} is exactly that. Either way a caller never overwrites a threshold it has
- * not seen.</p>
+ * <p><b>Create and replace are addressed differently.</b> With {@code expectedVersion} absent, the
+ * request creates a threshold ({@code POST .../thresholds}), and web-global refuses it (409) if one
+ * with the same identity already exists. With it present, the request replaces the threshold whose
+ * {@link UsageThreshold#id()} the path names ({@code PUT .../thresholds/{id}}), and web-global
+ * refuses it (409) unless the stored {@link UsageThreshold#version()} is exactly that, so a caller
+ * never overwrites a threshold it has not seen. The identity fields are immutable: a replace whose
+ * schema, metric, category or window differs from the stored threshold's is refused (400, "delete
+ * and create").</p>
  *
  * <p>The constructor applies every rule {@link UsageThreshold} documents, so an incoherent request
  * fails binding rather than reaching the service.</p>
  *
- * @param schemaName      the canonical {@code U<seqnum>} of the tenant the threshold limits
+ * @param schemaName      the canonical {@code U<seqnum>} of the tenant the threshold limits; at most
+ *                        {@value StorageSample#MAX_SCHEMA_NAME_LENGTH} code points
  * @param metric          the metric limited
  * @param category        the category narrowing a per-category metric, or {@code null} for every
  *                        category together; always {@code null} on a metric with none
  * @param window          the window the metric is measured over; it must suit the metric
- * @param actions         the stages, at least one, in ascending level order
+ * @param actions         the stages, between one and {@value UsageThreshold#MAX_ACTIONS}, in
+ *                        ascending limit order
  * @param expectedVersion the stored version being replaced, or {@code null} to create
  */
 public record UsageThresholdRequest(
-		String schemaName,
+		@NotBlank @CodePointSize(max = StorageSample.MAX_SCHEMA_NAME_LENGTH) String schemaName,
 		UsageMetric metric,
 		@Nullable UsageCategory category,
 		UsageThresholdWindow window,

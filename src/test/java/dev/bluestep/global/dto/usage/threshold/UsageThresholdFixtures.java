@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 
+import dev.bluestep.global.dto.tenantaccess.TenantUserKey;
 import dev.bluestep.global.dto.usage.UsageCategory;
 import dev.bluestep.global.dto.usage.UsageMetric;
 
@@ -18,11 +19,12 @@ final class UsageThresholdFixtures {
 	static final Instant DAY_START = Instant.parse("2026-09-07T00:00:00Z");
 	static final Instant DAY_END = Instant.parse("2026-09-08T00:00:00Z");
 	static final Instant TRIPPED = Instant.parse("2026-09-07T13:45:00Z");
+	static final UsageThresholdWindow.Span DAY = new UsageThresholdWindow.Span(DAY_START, DAY_END);
 
 	private UsageThresholdFixtures() {}
 
 	static UsageThresholdAction.Notify emailAlice() {
-		return new UsageThresholdAction.Notify(Set.of(NotifyChannel.EMAIL), Set.of(ALICE));
+		return new UsageThresholdAction.Notify(Set.of(NotifyChannel.EMAIL), List.of(ALICE));
 	}
 
 	static List<UsageThresholdAction> notifyThenBreak() {
@@ -41,13 +43,17 @@ final class UsageThresholdFixtures {
 	}
 
 	static UsageTripState trip() {
-		return new UsageTripState(21, 11, 3, 1, DAY_START, TRIPPED, null, TRIPPED.plusSeconds(60));
+		return new UsageTripState(21, 11, 3, 0, 1_000, 1_234, false, DAY, TRIPPED, null,
+				TRIPPED.plusSeconds(60));
 	}
 
 	static UsageNotification notification() {
-		return new UsageNotification(31, SCHEMA, 11, 0, NotifyChannel.EMAIL, ALICE,
-				UsageMetric.HITS, UsageCategory.HTTP, 1_234, 1_000,
-				new UsageThresholdWindow.Span(DAY_START, DAY_END));
+		return new UsageNotification(31, 21, SCHEMA, 11, 0, NotifyChannel.EMAIL, ALICE,
+				UsageMetric.HITS, UsageCategory.HTTP, 1_234, 1_000, false, DAY, TRIPPED);
+	}
+
+	static UsageNotificationBatch batch() {
+		return new UsageNotificationBatch(TRIPPED.plusSeconds(5), List.of(notification()));
 	}
 
 	static UsageBreakerList breakers() {

@@ -415,43 +415,55 @@ group = 'dev.bluestep'
 // the endpoint, then the monolith calling it.
 //
 // 5.3.0 adds the usage threshold shapes (CU-86bcqjrku, for usage alerts and circuit breakers,
-// CU-86bcqj6mn), in the new package dto.usage.threshold. Purely additive: no existing record,
-// component or constraint moved.
+// CU-86bcqj6mn), in the new package dto.usage.threshold. Additive: no existing record component or
+// constraint moved. UsageMetric and UsageCategory gain a method, TenantUserKey and ContractRelease
+// are new beside them.
 //   * UsageThresholdRequest (write) / UsageThreshold (stored, with id, version and timestamps): one
 //     tenant's limit on one UsageMetric, narrowed to a UsageCategory or covering every category,
-//     over a UsageThresholdWindow, with ordered stages. The constructors refuse an incoherent
+//     over a UsageThresholdWindow, with 1-20 ordered stages. The constructors refuse an incoherent
 //     threshold: a category on a metric with none, a window that does not suit
-//     UsageMetric.aggregation(), no stages, levels out of ascending order, a second break.
-//     expectedVersion absent creates; present replaces only that stored version.
-//   * UsageThresholdWindow (HOURLY, DAILY, WEEKLY, MONTHLY, LEVEL), UTC-aligned for every tenant,
-//     with each window's span. Not BudgetSchedule: that has LIFETIME and a tenant offset, both ruled
-//     out here, and no LEVEL.
-//   * UsageThresholdAction: a positive level plus a sealed Kind, Notify(channels, recipients) or
+//     UsageMetric.aggregation(), limits out of ascending order, a second break, a break on a PEAK or
+//     AVERAGE metric (neither can fall while broken, so the break would only lock the tenant out
+//     until rollover), and any stage above the break (ties allowed). The request's schemaName
+//     carries @NotBlank/@CodePointSize(50) as the 5.2.0 write shapes do. Identity is (schemaName,
+//     metric, category, window); expectedVersion absent creates (POST), present replaces the
+//     threshold the path's {id} names (PUT), and a replace that changes an identity field is a 400.
+//   * UsageThresholdWindow (HOURLY, DAILY, WEEKLY, MONTHLY, LATEST), UTC-aligned for every tenant,
+//     with each window's span. Not BudgetSchedule on the wire (LIFETIME and a tenant offset are ruled
+//     out, and it has no LATEST), but the span arithmetic delegates to BudgetSchedule at UTC.
+//   * UsageThresholdAction: a positive limit plus a sealed Kind, Notify(channels, recipients) or
 //     Break, polymorphic on the wire under "type" ("notify", "break"). NotifyChannel is EMAIL,
-//     IN_APP or OPS; EMAIL and IN_APP name TenantUserKey recipients (keys only, never addresses),
-//     OPS names none.
-//   * UsageTripState (a stage that tripped, its window, whether it cleared, when it last notified),
-//     UsageBreakerList / UsageBreaker (every uncleared break, fleet-wide, for pods to poll), and
-//     UsageNotification / UsageNotificationAckRequest (a queued EMAIL or IN_APP notice for web's
-//     dispatcher, and its acknowledgement).
-//   * UsageTripState carries thresholdVersion, the UsageThreshold version the trip was evaluated
-//     against. web-global closes a threshold's open trips when it is replaced, so actionIndex is
-//     only ever read against that version and a replace that reorders stages cannot re-point a trip.
-//   * UsageNotification carries exactly one recipient. web-global queues one per (channel,
-//     recipient), and acks and retries are per notification, so a send that failed for one user is
-//     retried for that user alone.
-//   * Closed vocabularies, with the rule on the server and on the contract tag: web-global serves
-//     the threshold, trip, breaker and notification paths under the /api/v{tag}/ ContractVersion
-//     routing and omits every row whose vocabulary (metric, category, window, kind, channel) is
-//     newer than the caller's tag, so a later value can never fail an older consumer's response. A
-//     5.3.0 caller on /api/v5.3.0/ is answered only in 5.3.0's vocabulary and shapes.
+//     IN_APP or OPS; EMAIL and IN_APP name 1-50 distinct TenantUserKey recipients, a List that
+//     keeps its order on the wire (keys only, never addresses); OPS names none.
+//   * UsageTripState: a stage of one threshold version (thresholdVersion) that tripped, with its
+//     limit, observed value, whether it breaks and its span snapshotted, when it was notified, and
+//     whether it cleared. web-global closes a threshold's open trips when it is replaced, so
+//     actionIndex is only ever read against that version.
+//   * UsageBreakerList / UsageBreaker (every uncleared break, fleet-wide, for pods to poll; clearsAt
+//     is the window end).
+//   * UsageNotification: one queued EMAIL or IN_APP notice for exactly one recipient, with the trip
+//     id, trip time, limit, observed value, span and whether the circuit broke with it. The
+//     dispatcher (one per namespace, on the task pod) asks with a UsageNotificationRequest naming
+//     its namespace's schemas, is answered a UsageNotificationBatch(generatedAt, notifications), and
+//     acknowledges with a UsageNotificationAckRequest of per-id outcomes, DELIVERED or
+//     UNDELIVERABLE. Acks and retries are per notification, so per recipient.
+//   * TenantUserKey lives in dto.tenantaccess beside GlobalUserKey; ContractRelease (dto.usage) is a
+//     release as a contract tag names it, and every growable enum here (UsageMetric, UsageCategory,
+//     UsageThresholdWindow, NotifyChannel, UsageNotificationOutcome) and each action kind says
+//     introducedIn(), pinned in the tests.
+//   * Vocabulary and rules, with the guarantee on the server: web-global serves the threshold, trip,
+//     breaker and notification paths under the /api/v{tag}/ ContractVersion routing, where the tag
+//     is the caller's ContractVersion path tag, and answers a caller only rows that bind under that
+//     tag's vocabulary and rules (a per-tag predicate, reading introducedIn() for vocabulary). A
+//     caller on /api/v5.3.0/ gets only 5.3.0 vocabulary, shapes and rules.
 //   * Absence is a @Nullable component plus an optX() accessor, never Optional, in dto.usage and its
 //     subpackages; DtoNullnessRulesTest now holds those packages to that and the rest to Optional,
 //     which migrate when next touched.
-// A MINOR for the new surface, and unlike /api/v1/usage/ these paths ARE tag-routed: web-global
-// gains a v5.3.0 ContractVersion entry serving them (web-global decides the routing; this artifact
-// states the promise). RELEASE ORDER: this artifact, then web-global serving the endpoints, then the
-// monolith calling them.
+// A MINOR for the new surface, and unlike /api/v1/usage/ these paths ARE tag-routed. Moving to this
+// artifact does not move a caller's tag: the monolith's tag is its own constant
+// (WebGlobalClient.CONTRACT), and moving it moves every gateway at once. RELEASE ORDER: this
+// artifact, then web-global serving a 5.3.0 ContractVersion for these paths and for every surface
+// the earlier tags serve, then the monolith moving its contract tag to 5.3.0.
 version = '5.3.0'
 
 repositories {

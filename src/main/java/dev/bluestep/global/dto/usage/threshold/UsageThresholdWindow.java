@@ -1,14 +1,13 @@
 package dev.bluestep.global.dto.usage.threshold;
 
-import java.time.DayOfWeek;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
-import java.time.temporal.ChronoUnit;
-import java.time.temporal.TemporalAdjusters;
 import java.util.Objects;
 import java.util.Optional;
 
+import dev.bluestep.global.dto.ai.BudgetSchedule;
+import dev.bluestep.global.dto.usage.ContractRelease;
 import dev.bluestep.global.dto.usage.UsageMetric;
 
 /**
@@ -17,12 +16,14 @@ import dev.bluestep.global.dto.usage.UsageMetric;
  * <p>The four calendar windows are UTC-aligned for every tenant: an hour, a day, a week starting
  * Monday, or a calendar month, each starting at a UTC boundary. A threshold's usage is what fell
  * inside the current window, and a tripped stage clears when the window rolls over.
- * {@link #LEVEL} is not a window at all: the metric is a reading at a moment, and a stage clears
- * when the reading falls back below its level.</p>
+ * {@link #LATEST} is not a window at all: the metric is a reading at a moment, the latest one is
+ * compared, and a stage clears when the reading falls back below its limit.</p>
  *
- * <p>Not {@code dev.bluestep.global.dto.ai.BudgetSchedule}, though the four calendar windows match
- * it. That enum also has {@code LIFETIME}, computes its windows in a per-tenant UTC offset, and has
- * nothing for a level; a threshold has no lifetime budget, is UTC-only, and needs the level.</p>
+ * <p>Not {@link BudgetSchedule} on the wire, though the four calendar windows match it. That enum
+ * also has {@code LIFETIME}, computes its windows in a per-tenant UTC offset, and has nothing for a
+ * reading at a moment; a threshold has no lifetime budget, is UTC-only, and needs the reading. The
+ * arithmetic is still {@link BudgetSchedule}'s, anchored at UTC, so the two cannot drift: each
+ * calendar constant delegates to the schedule of the same name.</p>
  *
  * <p>Serialized under its constant name.</p>
  */
@@ -32,8 +33,12 @@ public enum UsageThresholdWindow {
 	HOURLY {
 		@Override
 		public Optional<Span> spanAt(final Instant at) {
-			final ZonedDateTime start = utc(at).truncatedTo(ChronoUnit.HOURS);
-			return Span.of(start, start.plusHours(1));
+			return calendar(BudgetSchedule.HOURLY, at);
+		}
+
+		@Override
+		public ContractRelease introducedIn() {
+			return ContractRelease.V5_3_0;
 		}
 	},
 
@@ -41,8 +46,12 @@ public enum UsageThresholdWindow {
 	DAILY {
 		@Override
 		public Optional<Span> spanAt(final Instant at) {
-			final ZonedDateTime start = utc(at).truncatedTo(ChronoUnit.DAYS);
-			return Span.of(start, start.plusDays(1));
+			return calendar(BudgetSchedule.DAILY, at);
+		}
+
+		@Override
+		public ContractRelease introducedIn() {
+			return ContractRelease.V5_3_0;
 		}
 	},
 
@@ -50,9 +59,12 @@ public enum UsageThresholdWindow {
 	WEEKLY {
 		@Override
 		public Optional<Span> spanAt(final Instant at) {
-			final ZonedDateTime start = utc(at).truncatedTo(ChronoUnit.DAYS)
-					.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-			return Span.of(start, start.plusWeeks(1));
+			return calendar(BudgetSchedule.WEEKLY, at);
+		}
+
+		@Override
+		public ContractRelease introducedIn() {
+			return ContractRelease.V5_3_0;
 		}
 	},
 
@@ -60,19 +72,28 @@ public enum UsageThresholdWindow {
 	MONTHLY {
 		@Override
 		public Optional<Span> spanAt(final Instant at) {
-			final ZonedDateTime start = utc(at).truncatedTo(ChronoUnit.DAYS).withDayOfMonth(1);
-			return Span.of(start, start.plusMonths(1));
+			return calendar(BudgetSchedule.MONTHLY, at);
+		}
+
+		@Override
+		public ContractRelease introducedIn() {
+			return ContractRelease.V5_3_0;
 		}
 	},
 
 	/**
 	 * No window: the threshold compares the latest reading of a {@link UsageMetric.Aggregation#LEVEL}
-	 * metric against each level.
+	 * metric against each limit.
 	 */
-	LEVEL {
+	LATEST {
 		@Override
 		public Optional<Span> spanAt(final Instant at) {
 			return Optional.empty();
+		}
+
+		@Override
+		public ContractRelease introducedIn() {
+			return ContractRelease.V5_3_0;
 		}
 	};
 
@@ -81,12 +102,20 @@ public enum UsageThresholdWindow {
 	 *
 	 * @param at any instant
 	 * @return the window {@code at} falls in, start inclusive and end exclusive, or empty for
-	 *         {@link #LEVEL}, which has no window
+	 *         {@link #LATEST}, which has no window
 	 */
 	public abstract Optional<Span> spanAt(Instant at);
 
 	/**
-	 * Whether this measures usage over a window, which every value but {@link #LEVEL} does.
+	 * The release that introduced this window: a caller whose contract tag is older cannot bind it,
+	 * so web-global leaves rows that name it out of that caller's answer. Not on the wire.
+	 *
+	 * @return the release this constant arrived in
+	 */
+	public abstract ContractRelease introducedIn();
+
+	/**
+	 * Whether this measures usage over a window, which every value but {@link #LATEST} does.
 	 *
 	 * @return {@code true} for the calendar windows
 	 */
@@ -96,8 +125,8 @@ public enum UsageThresholdWindow {
 
 	/**
 	 * Whether a threshold on a metric of this aggregation may use this window. A level is read at a
-	 * moment, so it takes {@link #LEVEL} and only that; every other aggregation is measured over a
-	 * window, so it takes any value but {@link #LEVEL}.
+	 * moment, so it takes {@link #LATEST} and only that; every other aggregation is measured over a
+	 * window, so it takes any value but {@link #LATEST}.
 	 *
 	 * @param aggregation how the metric behaves over a window
 	 * @return {@code true} when the pair is coherent
@@ -106,8 +135,11 @@ public enum UsageThresholdWindow {
 		return isWindowed() != (aggregation == UsageMetric.Aggregation.LEVEL);
 	}
 
-	private static ZonedDateTime utc(final Instant at) {
-		return at.atZone(ZoneOffset.UTC);
+	/** The UTC window of {@code schedule} that holds {@code at}. */
+	private static Optional<Span> calendar(final BudgetSchedule schedule, final Instant at) {
+		final OffsetDateTime start = schedule.windowStart(at.atOffset(ZoneOffset.UTC), ZoneOffset.UTC);
+		final OffsetDateTime end = schedule.windowEnd(start).orElseThrow();
+		return Optional.of(new Span(start.toInstant(), end.toInstant()));
 	}
 
 	/**
@@ -140,10 +172,6 @@ public enum UsageThresholdWindow {
 		 */
 		public boolean contains(final Instant at) {
 			return !at.isBefore(start) && at.isBefore(end);
-		}
-
-		private static Optional<Span> of(final ZonedDateTime start, final ZonedDateTime end) {
-			return Optional.of(new Span(start.toInstant(), end.toInstant()));
 		}
 	}
 }

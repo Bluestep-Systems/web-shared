@@ -530,4 +530,32 @@ class UsageWireContractTest {
 			assertEquals(metric, JSON.readValue("\"" + metric.name() + "\"", UsageMetric.class));
 		}
 	}
+
+	/**
+	 * Each metric and category names the release that introduced it; web-global's per-tag filter
+	 * reads it, so a constant added later must say its own release.
+	 */
+	@Test
+	void introducedIn_isPinnedForEveryMetricAndCategory() {
+		for (final UsageMetric metric : UsageMetric.values()) {
+			assertEquals(ContractRelease.V5_2_0, metric.introducedIn(), metric.name());
+		}
+		for (final UsageCategory category : UsageCategory.values()) {
+			assertEquals(ContractRelease.V5_2_0, category.introducedIn(), category.name());
+		}
+	}
+
+	@Test
+	void contractRelease_parsesOrdersAndRendersATag() {
+		assertEquals(ContractRelease.V5_3_0, ContractRelease.parse("5.3.0"));
+		assertEquals("5.3.0", ContractRelease.V5_3_0.toString());
+		assertTrue(ContractRelease.parse("5.10.0").compareTo(ContractRelease.parse("5.9.0")) > 0,
+				"ordered by number, not text");
+		assertTrue(ContractRelease.V5_3_0.includes(ContractRelease.V5_2_0));
+		assertTrue(ContractRelease.V5_3_0.includes(ContractRelease.V5_3_0));
+		assertFalse(ContractRelease.V5_2_0.includes(ContractRelease.V5_3_0));
+		assertThrows(IllegalArgumentException.class, () -> ContractRelease.parse("v5.3.0"));
+		assertThrows(IllegalArgumentException.class, () -> ContractRelease.parse("5.3"));
+		assertThrows(IllegalArgumentException.class, () -> new ContractRelease(5, -1, 0));
+	}
 }

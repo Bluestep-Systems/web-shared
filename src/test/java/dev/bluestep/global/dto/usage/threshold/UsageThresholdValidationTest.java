@@ -3,6 +3,7 @@ package dev.bluestep.global.dto.usage.threshold;
 import static dev.bluestep.global.dto.usage.threshold.UsageThresholdFixtures.ALICE;
 import static dev.bluestep.global.dto.usage.threshold.UsageThresholdFixtures.BOB;
 import static dev.bluestep.global.dto.usage.threshold.UsageThresholdFixtures.CREATED;
+import static dev.bluestep.global.dto.usage.threshold.UsageThresholdFixtures.DAY;
 import static dev.bluestep.global.dto.usage.threshold.UsageThresholdFixtures.DAY_END;
 import static dev.bluestep.global.dto.usage.threshold.UsageThresholdFixtures.DAY_START;
 import static dev.bluestep.global.dto.usage.threshold.UsageThresholdFixtures.SCHEMA;
@@ -16,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
@@ -24,11 +26,13 @@ import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
+import java.util.stream.LongStream;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
+import dev.bluestep.global.dto.tenantaccess.TenantUserKey;
 import dev.bluestep.global.dto.usage.UsageCategory;
 import dev.bluestep.global.dto.usage.UsageMetric;
 
@@ -37,6 +41,9 @@ class UsageThresholdValidationTest {
 
 	private static final UsageThresholdAction BREAK_AT_2000 =
 			new UsageThresholdAction(2_000, new UsageThresholdAction.Break());
+
+	private static final List<UsageThresholdAction> NOTIFY_ONLY =
+			List.of(new UsageThresholdAction(1_000, emailAlice()));
 
 	private static UsageThreshold threshold(final UsageMetric metric, final UsageCategory category,
 			final UsageThresholdWindow window, final List<UsageThresholdAction> actions) {
@@ -48,11 +55,23 @@ class UsageThresholdValidationTest {
 		return new UsageThresholdRequest(SCHEMA, metric, category, window, actions, null);
 	}
 
+	/** A window the metric's aggregation suits. */
+	private static UsageThresholdWindow windowFor(final UsageMetric metric) {
+		return metric.aggregation() == UsageMetric.Aggregation.LEVEL
+				? UsageThresholdWindow.LATEST
+				: UsageThresholdWindow.DAILY;
+	}
+
 	private static void assertRefused(final String messagePart, final Runnable construct) {
 		final IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
 				construct::run);
 		assertTrue(refused.getMessage().contains(messagePart),
 				"expected a refusal mentioning \"" + messagePart + "\", got: " + refused.getMessage());
+	}
+
+	private static void assertNpe(final String name, final Runnable construct) {
+		final NullPointerException refused = assertThrows(NullPointerException.class, construct::run);
+		assertEquals(name, refused.getMessage());
 	}
 
 	// --- window suits the metric's aggregation --------------------------------------------------
@@ -62,16 +81,64 @@ class UsageThresholdValidationTest {
 	void everyMetric_acceptsExactlyTheWindowsItsAggregationSuits(final UsageMetric metric) {
 		for (final UsageThresholdWindow window : UsageThresholdWindow.values()) {
 			final boolean level = metric.aggregation() == UsageMetric.Aggregation.LEVEL;
-			final boolean suits = level == (window == UsageThresholdWindow.LEVEL);
+			final boolean suits = level == (window == UsageThresholdWindow.LATEST);
 			assertEquals(suits, window.suits(metric.aggregation()), metric + " over " + window);
 			if (suits) {
-				assertDoesNotThrow(() -> threshold(metric, null, window, notifyThenBreak()));
-				assertDoesNotThrow(() -> request(metric, null, window, notifyThenBreak()));
+				assertDoesNotThrow(() -> threshold(metric, null, window, NOTIFY_ONLY));
+				assertDoesNotThrow(() -> request(metric, null, window, NOTIFY_ONLY));
 			} else {
-				assertRefused("does not suit", () -> threshold(metric, null, window, notifyThenBreak()));
-				assertRefused("does not suit", () -> request(metric, null, window, notifyThenBreak()));
+				assertRefused("does not suit", () -> threshold(metric, null, window, NOTIFY_ONLY));
+				assertRefused("does not suit", () -> request(metric, null, window, NOTIFY_ONLY));
 			}
 		}
+	}
+
+	// --- a break only where refusing usage holds the metric still --------------------------------
+
+	@ParameterizedTest
+	@EnumSource(UsageMetric.class)
+	void everyMetric_notifiesAlways_andBreaksOnlyWhenCumulativeOrALevel(final UsageMetric metric) {
+		final UsageThresholdWindow window = windowFor(metric);
+		final List<UsageThresholdAction> notifyThenBreak = notifyThenBreak();
+		assertDoesNotThrow(() -> threshold(metric, null, window, NOTIFY_ONLY), metric + " notify");
+		final boolean breakable = metric.aggregation() == UsageMetric.Aggregation.CUMULATIVE
+				|| metric.aggregation() == UsageMetric.Aggregation.LEVEL;
+		if (breakable) {
+			assertDoesNotThrow(() -> threshold(metric, null, window, notifyThenBreak), metric + " break");
+			assertDoesNotThrow(() -> request(metric, null, window, notifyThenBreak), metric + " break");
+		} else {
+			assertRefused("only locks the tenant out", () -> threshold(metric, null, window, notifyThenBreak));
+			assertRefused("only locks the tenant out", () -> request(metric, null, window, notifyThenBreak));
+		}
+	}
+
+	@Test
+	void theBreakableAggregations_areExactlyCumulativeAndLevel() {
+		final List<UsageMetric> breakable = new ArrayList<>();
+		for (final UsageMetric metric : UsageMetric.values()) {
+			try {
+				threshold(metric, null, windowFor(metric), List.of(BREAK_AT_2000));
+				breakable.add(metric);
+			} catch (final IllegalArgumentException refused) {
+				// not breakable
+			}
+		}
+		assertEquals(Arrays.stream(UsageMetric.values()).filter(m -> m != UsageMetric.PAGE_MILLIS_AVG
+				&& m != UsageMetric.PAGE_MILLIS_PEAK).toList(), breakable);
+	}
+
+	// --- nothing above the break -----------------------------------------------------------------
+
+	@Test
+	void aStageAboveTheBreak_isRefused_butOneAtItsLimitIsNot() {
+		final List<UsageThresholdAction> above = List.of(BREAK_AT_2000,
+				new UsageThresholdAction(5_000, emailAlice()));
+		assertRefused("above the break", () -> threshold(UsageMetric.HITS, null, UsageThresholdWindow.DAILY, above));
+		assertRefused("above the break", () -> request(UsageMetric.HITS, null, UsageThresholdWindow.DAILY, above));
+		final List<UsageThresholdAction> tiedAfter = List.of(BREAK_AT_2000,
+				new UsageThresholdAction(2_000, emailAlice()));
+		assertEquals(tiedAfter,
+				threshold(UsageMetric.HITS, null, UsageThresholdWindow.DAILY, tiedAfter).actions());
 	}
 
 	// --- category fits the metric ----------------------------------------------------------------
@@ -89,9 +156,9 @@ class UsageThresholdValidationTest {
 	@Test
 	void aMetricWithNoCategory_refusesOne() {
 		assertRefused("has no category", () -> threshold(UsageMetric.STORAGE_DB_BYTES, UsageCategory.HTTP,
-				UsageThresholdWindow.LEVEL, notifyThenBreak()));
+				UsageThresholdWindow.LATEST, notifyThenBreak()));
 		assertRefused("has no category", () -> request(UsageMetric.STORAGE_DB_BYTES, UsageCategory.HTTP,
-				UsageThresholdWindow.LEVEL, notifyThenBreak()));
+				UsageThresholdWindow.LATEST, notifyThenBreak()));
 		assertRefused("has no category",
 				() -> new UsageBreaker(SCHEMA, UsageMetric.STORAGE_FILE_BYTES, UsageCategory.FILE, null));
 	}
@@ -107,17 +174,31 @@ class UsageThresholdValidationTest {
 	}
 
 	@Test
-	void actionsOutOfLevelOrder_areRefused() {
-		final List<UsageThresholdAction> descending = List.of(BREAK_AT_2000,
+	void atMostTwentyActions() {
+		assertEquals(20, UsageThreshold.MAX_ACTIONS);
+		final List<UsageThresholdAction> twenty = LongStream.rangeClosed(1, 20)
+				.mapToObj(limit -> new UsageThresholdAction(limit, emailAlice())).toList();
+		assertDoesNotThrow(() -> threshold(UsageMetric.HITS, null, UsageThresholdWindow.DAILY, twenty));
+		final List<UsageThresholdAction> twentyOne = new ArrayList<>(twenty);
+		twentyOne.add(new UsageThresholdAction(21, emailAlice()));
+		assertRefused("21 actions is more than 20",
+				() -> threshold(UsageMetric.HITS, null, UsageThresholdWindow.DAILY, twentyOne));
+		assertRefused("21 actions is more than 20",
+				() -> request(UsageMetric.HITS, null, UsageThresholdWindow.DAILY, twentyOne));
+	}
+
+	@Test
+	void actionsOutOfLimitOrder_areRefused() {
+		final List<UsageThresholdAction> descending = List.of(new UsageThresholdAction(2_000, emailAlice()),
 				new UsageThresholdAction(1_000, emailAlice()));
-		assertRefused("below the level before it",
+		assertRefused("below the limit before it",
 				() -> threshold(UsageMetric.HITS, null, UsageThresholdWindow.DAILY, descending));
-		assertRefused("below the level before it",
+		assertRefused("below the limit before it",
 				() -> request(UsageMetric.HITS, null, UsageThresholdWindow.DAILY, descending));
 	}
 
 	@Test
-	void actionsMayShareALevel_toNotifyAndBreakTogether() {
+	void actionsMayShareALimit_toNotifyAndBreakTogether() {
 		final List<UsageThresholdAction> tied = List.of(new UsageThresholdAction(2_000, emailAlice()),
 				BREAK_AT_2000);
 		assertEquals(tied, threshold(UsageMetric.HITS, null, UsageThresholdWindow.DAILY, tied).actions());
@@ -125,8 +206,7 @@ class UsageThresholdValidationTest {
 
 	@Test
 	void aSecondBreak_isRefused() {
-		final List<UsageThresholdAction> twoBreaks = List.of(
-				new UsageThresholdAction(1_000, new UsageThresholdAction.Break()), BREAK_AT_2000);
+		final List<UsageThresholdAction> twoBreaks = List.of(BREAK_AT_2000, BREAK_AT_2000);
 		assertRefused("second break",
 				() -> threshold(UsageMetric.HITS, null, UsageThresholdWindow.DAILY, twoBreaks));
 		assertRefused("second break",
@@ -150,7 +230,7 @@ class UsageThresholdValidationTest {
 	}
 
 	@Test
-	void levels_arePositive() {
+	void limits_arePositive() {
 		assertRefused("not positive", () -> new UsageThresholdAction(0, new UsageThresholdAction.Break()));
 		assertRefused("not positive", () -> new UsageThresholdAction(-1, new UsageThresholdAction.Break()));
 		assertDoesNotThrow(() -> new UsageThresholdAction(1, new UsageThresholdAction.Break()));
@@ -160,7 +240,7 @@ class UsageThresholdValidationTest {
 
 	@Test
 	void notify_needsAChannel() {
-		assertRefused("at least one channel", () -> new UsageThresholdAction.Notify(Set.of(), Set.of(ALICE)));
+		assertRefused("at least one channel", () -> new UsageThresholdAction.Notify(Set.of(), List.of(ALICE)));
 	}
 
 	@ParameterizedTest
@@ -168,7 +248,7 @@ class UsageThresholdValidationTest {
 	void aChannelThatNamesRecipients_needsOne(final NotifyChannel channel) {
 		assertTrue(channel.namesRecipients());
 		assertRefused("need at least one recipient",
-				() -> new UsageThresholdAction.Notify(Set.of(channel), Set.of()));
+				() -> new UsageThresholdAction.Notify(Set.of(channel), List.of()));
 		assertRefused("need at least one recipient",
 				() -> new UsageThresholdAction.Notify(EnumSet.of(channel, NotifyChannel.OPS), null));
 	}
@@ -176,20 +256,20 @@ class UsageThresholdValidationTest {
 	@Test
 	void ops_namesNobody() {
 		assertFalse(NotifyChannel.OPS.namesRecipients());
-		assertEquals(Set.of(), new UsageThresholdAction.Notify(Set.of(NotifyChannel.OPS), null).recipients());
+		assertEquals(List.of(), new UsageThresholdAction.Notify(Set.of(NotifyChannel.OPS), null).recipients());
 		assertRefused("name no recipients",
-				() -> new UsageThresholdAction.Notify(Set.of(NotifyChannel.OPS), Set.of(ALICE)));
+				() -> new UsageThresholdAction.Notify(Set.of(NotifyChannel.OPS), List.of(ALICE)));
 	}
 
 	@Test
 	void notify_keepsChannelsInConstantOrderAndRecipientsInTheOrderGiven() {
 		final LinkedHashSet<NotifyChannel> channels = new LinkedHashSet<>(
 				List.of(NotifyChannel.OPS, NotifyChannel.IN_APP, NotifyChannel.EMAIL));
-		final LinkedHashSet<TenantUserKey> recipients = new LinkedHashSet<>(List.of(BOB, ALICE));
+		final List<TenantUserKey> recipients = new ArrayList<>(List.of(BOB, ALICE));
 		final UsageThresholdAction.Notify notify = new UsageThresholdAction.Notify(channels, recipients);
 		assertEquals(List.of(NotifyChannel.EMAIL, NotifyChannel.IN_APP, NotifyChannel.OPS),
 				List.copyOf(notify.channels()));
-		assertEquals(List.of(BOB, ALICE), List.copyOf(notify.recipients()));
+		assertEquals(List.of(BOB, ALICE), notify.recipients());
 		channels.clear();
 		recipients.clear();
 		assertEquals(3, notify.channels().size());
@@ -197,8 +277,29 @@ class UsageThresholdValidationTest {
 	}
 
 	@Test
-	void notify_refusesMissingChannels() {
-		assertThrows(NullPointerException.class, () -> new UsageThresholdAction.Notify(null, Set.of(ALICE)));
+	void notify_refusesARecipientNamedTwice() {
+		assertRefused("names " + ALICE + " twice", () -> new UsageThresholdAction.Notify(
+				Set.of(NotifyChannel.EMAIL), List.of(ALICE, BOB, ALICE)));
+	}
+
+	@Test
+	void notify_namesAtMostFiftyRecipients() {
+		assertEquals(50, UsageThresholdAction.Notify.MAX_RECIPIENTS);
+		final List<TenantUserKey> fifty = LongStream.rangeClosed(1, 50)
+				.mapToObj(seqnum -> new TenantUserKey(7001, seqnum)).toList();
+		assertEquals(fifty,
+				new UsageThresholdAction.Notify(Set.of(NotifyChannel.EMAIL), fifty).recipients());
+		final List<TenantUserKey> fiftyOne = new ArrayList<>(fifty);
+		fiftyOne.add(new TenantUserKey(7001, 51));
+		assertRefused("51 recipients is more than 50",
+				() -> new UsageThresholdAction.Notify(Set.of(NotifyChannel.EMAIL), fiftyOne));
+	}
+
+	@Test
+	void notify_refusesMissingChannelsAndANullRecipient() {
+		assertThrows(NullPointerException.class, () -> new UsageThresholdAction.Notify(null, List.of(ALICE)));
+		assertThrows(NullPointerException.class, () -> new UsageThresholdAction.Notify(
+				Set.of(NotifyChannel.EMAIL), Arrays.asList(ALICE, null)));
 	}
 
 	// --- request ---------------------------------------------------------------------------------
@@ -248,48 +349,61 @@ class UsageThresholdValidationTest {
 
 	// --- trip state ------------------------------------------------------------------------------
 
+	private static UsageTripState trip(final long thresholdVersion, final int actionIndex, final long limit,
+			final long observed, final UsageThresholdWindow.Span span, final Instant clearedAt,
+			final Instant notifiedAt) {
+		return new UsageTripState(1, 1, thresholdVersion, actionIndex, limit, observed, false, span, TRIPPED,
+				clearedAt, notifiedAt);
+	}
+
 	@Test
 	void trip_ordersItsMoments() {
-		assertRefused("after trippedAt",
-				() -> new UsageTripState(1, 1, 3, 0, TRIPPED.plusSeconds(1), TRIPPED, null, null));
-		assertRefused("clearedAt", () -> new UsageTripState(1, 1, 3, 0, null, TRIPPED,
-				TRIPPED.minusSeconds(1), null));
-		assertRefused("lastNotifiedAt", () -> new UsageTripState(1, 1, 3, 0, null, TRIPPED, null,
-				TRIPPED.minusSeconds(1)));
-		assertRefused("actionIndex -1 is negative",
-				() -> new UsageTripState(1, 1, 3, -1, null, TRIPPED, null, null));
-		assertRefused("thresholdVersion -1 is negative",
-				() -> new UsageTripState(1, 1, -1, 0, null, TRIPPED, null, null));
-		assertEquals(3, new UsageTripState(1, 1, 3, 0, null, TRIPPED, null, null).thresholdVersion());
-		assertNpe("trippedAt", () -> new UsageTripState(1, 1, 3, 0, null, null, null, null));
-		assertDoesNotThrow(() -> new UsageTripState(1, 1, 3, 0, TRIPPED, TRIPPED, TRIPPED, TRIPPED));
+		final UsageThresholdWindow.Span later = new UsageThresholdWindow.Span(TRIPPED.plusSeconds(1), DAY_END);
+		assertRefused("is before span start", () -> trip(3, 0, 1, 1, later, null, null));
+		assertRefused("clearedAt", () -> trip(3, 0, 1, 1, null, TRIPPED.minusSeconds(1), null));
+		assertRefused("notifiedAt", () -> trip(3, 0, 1, 1, null, null, TRIPPED.minusSeconds(1)));
+		assertNpe("trippedAt", () -> new UsageTripState(1, 1, 3, 0, 1, 1, false, null, null, null, null));
+		assertDoesNotThrow(() -> trip(3, 0, 1, 1,
+				new UsageThresholdWindow.Span(TRIPPED, DAY_END), TRIPPED, TRIPPED));
+	}
+
+	@Test
+	void trip_refusesNegativeIndicesAndAnUnreachedLimit() {
+		assertRefused("actionIndex -1 is negative", () -> trip(3, -1, 1, 1, null, null, null));
+		assertRefused("thresholdVersion -1 is negative", () -> trip(-1, 0, 1, 1, null, null, null));
+		assertRefused("limit 0 is not positive", () -> trip(3, 0, 0, 1, null, null, null));
+		assertRefused("observed 999 is below limit 1000", () -> trip(3, 0, 1_000, 999, null, null, null));
+		final UsageTripState trip = trip(3, 2, 1_000, 1_000, DAY, null, null);
+		assertEquals(3, trip.thresholdVersion());
+		assertEquals(2, trip.actionIndex());
 	}
 
 	@Test
 	void trip_isActiveUntilCleared() {
-		final UsageTripState standing = new UsageTripState(1, 1, 3, 0, DAY_START, TRIPPED, null, null);
+		final UsageTripState standing = trip(3, 0, 1, 1, DAY, null, null);
 		assertTrue(standing.isActive());
-		assertEquals(Optional.of(DAY_START), standing.optWindowStart());
+		assertEquals(Optional.of(DAY), standing.optSpan());
 		assertEquals(Optional.empty(), standing.optClearedAt());
-		assertEquals(Optional.empty(), standing.optLastNotifiedAt());
-		final UsageTripState cleared = new UsageTripState(1, 1, 3, 0, null, TRIPPED, DAY_END, TRIPPED);
+		assertEquals(Optional.empty(), standing.optNotifiedAt());
+		final UsageTripState cleared = trip(3, 0, 1, 1, null, DAY_END, TRIPPED);
 		assertFalse(cleared.isActive());
 		assertEquals(Optional.of(DAY_END), cleared.optClearedAt());
-		assertEquals(Optional.empty(), cleared.optWindowStart());
+		assertEquals(Optional.of(TRIPPED), cleared.optNotifiedAt());
+		assertEquals(Optional.empty(), cleared.optSpan());
 	}
 
 	// --- breakers --------------------------------------------------------------------------------
 
 	@Test
-	void breaker_retryAfterIsPresentExactlyOnAWindowedMetric() {
-		assertRefused("retryAfter is required",
+	void breaker_clearsAtIsPresentExactlyOnAWindowedMetric() {
+		assertRefused("clearsAt is required",
 				() -> new UsageBreaker(SCHEMA, UsageMetric.HITS, UsageCategory.HTTP, null));
-		assertRefused("has no window to end",
+		assertRefused("has no clearsAt",
 				() -> new UsageBreaker(SCHEMA, UsageMetric.STORAGE_DB_BYTES, null, DAY_END));
 		assertEquals(Optional.of(DAY_END),
-				new UsageBreaker(SCHEMA, UsageMetric.PAGE_MILLIS_PEAK, null, DAY_END).optRetryAfter());
+				new UsageBreaker(SCHEMA, UsageMetric.HITS, null, DAY_END).optClearsAt());
 		assertEquals(Optional.empty(),
-				new UsageBreaker(SCHEMA, UsageMetric.STORAGE_DB_BYTES, null, null).optRetryAfter());
+				new UsageBreaker(SCHEMA, UsageMetric.STORAGE_DB_BYTES, null, null).optClearsAt());
 	}
 
 	@Test
@@ -304,12 +418,11 @@ class UsageThresholdValidationTest {
 	// --- notifications ---------------------------------------------------------------------------
 
 	private static UsageNotification notification(final NotifyChannel channel, final TenantUserKey to,
-			final UsageMetric metric, final UsageCategory category, final long observed, final long level,
-			final UsageThresholdWindow.Span window) {
-		return new UsageNotification(1, SCHEMA, 1, 0, channel, to, metric, category, observed, level, window);
+			final UsageMetric metric, final UsageCategory category, final long observed, final long limit,
+			final UsageThresholdWindow.Span span) {
+		return new UsageNotification(1, 2, SCHEMA, 1, 0, channel, to, metric, category, observed, limit, false,
+				span, TRIPPED);
 	}
-
-	private static final UsageThresholdWindow.Span DAY = new UsageThresholdWindow.Span(DAY_START, DAY_END);
 
 	@Test
 	void notification_isOnlyForAChannelWebSends() {
@@ -326,8 +439,8 @@ class UsageThresholdValidationTest {
 	}
 
 	@Test
-	void notification_observedReachesAPositiveLevel() {
-		assertRefused("below level", () -> notification(NotifyChannel.EMAIL, ALICE, UsageMetric.HITS,
+	void notification_observedReachesAPositiveLimit() {
+		assertRefused("below limit", () -> notification(NotifyChannel.EMAIL, ALICE, UsageMetric.HITS,
 				null, 999, 1_000, DAY));
 		assertRefused("not positive", () -> notification(NotifyChannel.EMAIL, ALICE, UsageMetric.HITS,
 				null, 0, 0, DAY));
@@ -336,32 +449,67 @@ class UsageThresholdValidationTest {
 	}
 
 	@Test
-	void notification_windowIsPresentExactlyOnAWindowedMetric() {
-		assertRefused("window is required", () -> notification(NotifyChannel.EMAIL, ALICE,
+	void notification_spanIsPresentExactlyOnAWindowedMetric_andHoldsTheTrip() {
+		assertRefused("span is required", () -> notification(NotifyChannel.EMAIL, ALICE,
 				UsageMetric.HITS, null, 1, 1, null));
-		assertRefused("has no window", () -> notification(NotifyChannel.EMAIL, ALICE,
+		assertRefused("has no span", () -> notification(NotifyChannel.EMAIL, ALICE,
 				UsageMetric.STORAGE_DB_BYTES, null, 1, 1, DAY));
 		assertEquals(Optional.empty(), notification(NotifyChannel.EMAIL, ALICE,
-				UsageMetric.STORAGE_DB_BYTES, null, 1, 1, null).optWindow());
+				UsageMetric.STORAGE_DB_BYTES, null, 1, 1, null).optSpan());
+		assertRefused("is before span start", () -> notification(NotifyChannel.EMAIL, ALICE,
+				UsageMetric.HITS, null, 1, 1, new UsageThresholdWindow.Span(TRIPPED.plusSeconds(1), DAY_END)));
 	}
 
 	@Test
 	void notification_categoryFitsTheMetricAndTheIndexIsNonNegative() {
 		assertRefused("has no category", () -> notification(NotifyChannel.EMAIL, ALICE,
 				UsageMetric.STORAGE_FILE_BYTES, UsageCategory.FILE, 1, 1, null));
-		assertRefused("negative", () -> new UsageNotification(1, SCHEMA, 1, -1, NotifyChannel.EMAIL,
-				ALICE, UsageMetric.HITS, null, 1, 1, DAY));
+		assertRefused("negative", () -> new UsageNotification(1, 2, SCHEMA, 1, -1, NotifyChannel.EMAIL,
+				ALICE, UsageMetric.HITS, null, 1, 1, false, DAY, TRIPPED));
 	}
 
-	// --- acknowledgement -------------------------------------------------------------------------
+	@Test
+	void notification_refusesMissingRequiredComponentsByName() {
+		assertNpe("schemaName", () -> new UsageNotification(1, 2, null, 1, 0, NotifyChannel.EMAIL, ALICE,
+				UsageMetric.HITS, null, 1, 1, false, DAY, TRIPPED));
+		assertNpe("channel", () -> new UsageNotification(1, 2, SCHEMA, 1, 0, null, ALICE,
+				UsageMetric.HITS, null, 1, 1, false, DAY, TRIPPED));
+		assertNpe("metric", () -> new UsageNotification(1, 2, SCHEMA, 1, 0, NotifyChannel.EMAIL, ALICE,
+				null, null, 1, 1, false, DAY, TRIPPED));
+		assertNpe("trippedAt", () -> new UsageNotification(1, 2, SCHEMA, 1, 0, NotifyChannel.EMAIL, ALICE,
+				UsageMetric.HITS, null, 1, 1, false, DAY, null));
+	}
+
+	// --- notification request, batch and acknowledgement -----------------------------------------
 
 	@Test
-	void ack_namesAtLeastOneNotificationInOrder() {
-		assertRefused("at least one", () -> new UsageNotificationAckRequest(Set.of()));
-		assertNpe("ids", () -> new UsageNotificationAckRequest(null));
-		final UsageNotificationAckRequest ack =
-				new UsageNotificationAckRequest(new LinkedHashSet<>(List.of(9L, 3L, 5L)));
-		assertEquals(List.of(9L, 3L, 5L), List.copyOf(ack.ids()));
+	void notificationRequest_namesAtLeastOneSchema() {
+		assertRefused("at least one schema", () -> new UsageNotificationRequest(Set.of()));
+		assertNpe("schemaNames", () -> new UsageNotificationRequest(null));
+		assertEquals(Set.of(SCHEMA, "U1000002"),
+				new UsageNotificationRequest(Set.of(SCHEMA, "U1000002")).schemaNames());
+	}
+
+	@Test
+	void notificationBatch_refusesAnAbsentListOrTime_butTakesAnExplicitEmptyOne() {
+		assertEquals(List.of(), new UsageNotificationBatch(TRIPPED, List.of()).notifications());
+		assertNpe("notifications", () -> new UsageNotificationBatch(TRIPPED, null));
+		assertNpe("generatedAt", () -> new UsageNotificationBatch(null, List.of()));
+	}
+
+	private static UsageNotificationAck delivered(final long id) {
+		return new UsageNotificationAck(id, UsageNotificationOutcome.DELIVERED);
+	}
+
+	@Test
+	void ack_namesEachNotificationOnceInOrder() {
+		assertRefused("at least one", () -> new UsageNotificationAckRequest(List.of()));
+		assertNpe("acks", () -> new UsageNotificationAckRequest(null));
+		assertNpe("outcome", () -> new UsageNotificationAck(1, null));
+		assertRefused("notification 3 is acknowledged twice", () -> new UsageNotificationAckRequest(List.of(
+				delivered(3), new UsageNotificationAck(3, UsageNotificationOutcome.UNDELIVERABLE))));
+		final List<UsageNotificationAck> acks = List.of(delivered(9), delivered(3), delivered(5));
+		assertEquals(acks, new UsageNotificationAckRequest(new ArrayList<>(acks)).acks());
 	}
 
 	// --- span ------------------------------------------------------------------------------------
@@ -376,11 +524,6 @@ class UsageThresholdValidationTest {
 		assertFalse(DAY.contains(DAY_START.minusNanos(1)));
 	}
 
-	private static void assertNpe(final String name, final Runnable construct) {
-		final NullPointerException refused = assertThrows(NullPointerException.class, construct::run);
-		assertEquals(name, refused.getMessage());
-	}
-
 	/** The shared fixtures every wire test starts from are themselves valid. */
 	@Test
 	void fixturesAreValid() {
@@ -388,6 +531,7 @@ class UsageThresholdValidationTest {
 		assertDoesNotThrow(UsageThresholdFixtures::request);
 		assertDoesNotThrow(UsageThresholdFixtures::trip);
 		assertDoesNotThrow(UsageThresholdFixtures::notification);
+		assertDoesNotThrow(UsageThresholdFixtures::batch);
 		assertDoesNotThrow(UsageThresholdFixtures::breakers);
 	}
 }

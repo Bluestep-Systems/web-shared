@@ -5,12 +5,15 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
+import dev.bluestep.global.dto.ai.BudgetSchedule;
 import dev.bluestep.global.dto.usage.UsageMetric;
 
 /** The UTC window arithmetic each {@link UsageThresholdWindow} carries. */
@@ -54,16 +57,54 @@ class UsageThresholdWindowTest {
 		assertEquals(Optional.of(span("2028-02-01T00:00:00Z", "2028-03-01T00:00:00Z")),
 				UsageThresholdWindow.MONTHLY.spanAt(Instant.parse("2028-02-29T12:00:00Z")),
 				"a leap February is 29 days");
+		assertEquals(Optional.of(span("2027-02-01T00:00:00Z", "2027-03-01T00:00:00Z")),
+				UsageThresholdWindow.MONTHLY.spanAt(Instant.parse("2027-02-28T23:59:59Z")),
+				"a non-leap February is 28 days");
+		assertEquals(Optional.of(span("2026-12-01T00:00:00Z", "2027-01-01T00:00:00Z")),
+				UsageThresholdWindow.MONTHLY.spanAt(Instant.parse("2026-12-31T23:59:59.999Z")),
+				"December rolls into January");
+		assertEquals(Optional.of(span("2026-10-01T00:00:00Z", "2026-11-01T00:00:00Z")),
+				UsageThresholdWindow.MONTHLY.spanAt(Instant.parse("2026-10-31T12:00:00Z")),
+				"the 31st is in its own month");
 	}
 
 	@Test
-	void level_hasNoWindow() {
-		assertEquals(Optional.empty(), UsageThresholdWindow.LEVEL.spanAt(AT));
-		assertFalse(UsageThresholdWindow.LEVEL.isWindowed());
+	void weekly_crossesAYearBoundary() {
+		assertEquals(Optional.of(span("2025-12-29T00:00:00Z", "2026-01-05T00:00:00Z")),
+				UsageThresholdWindow.WEEKLY.spanAt(Instant.parse("2026-01-01T09:00:00Z")),
+				"2026-01-01 is a Thursday, so its week starts Monday 2025-12-29");
+	}
+
+	@Test
+	void hourlyAndDaily_rollOverAtTheYearEnd() {
+		final Instant lastMoment = Instant.parse("2026-12-31T23:59:59.999Z");
+		assertEquals(Optional.of(span("2026-12-31T23:00:00Z", "2027-01-01T00:00:00Z")),
+				UsageThresholdWindow.HOURLY.spanAt(lastMoment));
+		assertEquals(Optional.of(span("2026-12-31T00:00:00Z", "2027-01-01T00:00:00Z")),
+				UsageThresholdWindow.DAILY.spanAt(lastMoment));
+	}
+
+	/**
+	 * Each calendar window delegates to the {@link BudgetSchedule} of the same name, anchored at UTC,
+	 * so the names must keep lining up.
+	 */
+	@ParameterizedTest
+	@EnumSource(value = UsageThresholdWindow.class, names = "LATEST", mode = EnumSource.Mode.EXCLUDE)
+	void everyCalendarWindow_matchesTheBudgetScheduleOfItsName(final UsageThresholdWindow window) {
+		final BudgetSchedule schedule = BudgetSchedule.valueOf(window.name());
+		final OffsetDateTime start = schedule.windowStart(AT.atOffset(ZoneOffset.UTC), ZoneOffset.UTC);
+		assertEquals(Optional.of(new UsageThresholdWindow.Span(start.toInstant(),
+				schedule.windowEnd(start).orElseThrow().toInstant())), window.spanAt(AT));
+	}
+
+	@Test
+	void latest_hasNoWindow() {
+		assertEquals(Optional.empty(), UsageThresholdWindow.LATEST.spanAt(AT));
+		assertFalse(UsageThresholdWindow.LATEST.isWindowed());
 	}
 
 	@ParameterizedTest
-	@EnumSource(value = UsageThresholdWindow.class, names = "LEVEL", mode = EnumSource.Mode.EXCLUDE)
+	@EnumSource(value = UsageThresholdWindow.class, names = "LATEST", mode = EnumSource.Mode.EXCLUDE)
 	void everyCalendarWindow_containsItsMomentAndAbutsTheNext(final UsageThresholdWindow window) {
 		assertTrue(window.isWindowed());
 		final UsageThresholdWindow.Span span = window.spanAt(AT).orElseThrow();
@@ -75,10 +116,10 @@ class UsageThresholdWindowTest {
 	}
 
 	@Test
-	void suits_pairsLevelWithLevelOnly() {
+	void suits_pairsLevelWithLatestOnly() {
 		for (final UsageMetric.Aggregation aggregation : UsageMetric.Aggregation.values()) {
 			final boolean level = aggregation == UsageMetric.Aggregation.LEVEL;
-			assertEquals(level, UsageThresholdWindow.LEVEL.suits(aggregation), "LEVEL / " + aggregation);
+			assertEquals(level, UsageThresholdWindow.LATEST.suits(aggregation), "LATEST / " + aggregation);
 			assertEquals(!level, UsageThresholdWindow.MONTHLY.suits(aggregation), "MONTHLY / " + aggregation);
 		}
 	}

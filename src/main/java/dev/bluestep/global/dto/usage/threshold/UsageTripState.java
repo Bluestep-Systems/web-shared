@@ -9,16 +9,20 @@ import org.jspecify.annotations.Nullable;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 /**
- * One stage of a {@link UsageThreshold} that has tripped: when, in which window, and whether it has
- * cleared since.
+ * One stage of a {@link UsageThreshold} that has tripped: when, in which window, against what limit,
+ * and whether it has cleared since.
  *
  * <p>A trip belongs to the {@linkplain UsageThreshold#version() version} of its threshold it was
  * evaluated against. web-global closes a threshold's open trips when the threshold is replaced, so
  * {@code actionIndex} is only ever read against {@code thresholdVersion}: a replace that reorders or
  * drops stages never re-points a trip at a different stage.</p>
  *
- * <p>A stage trips at most once per window. It clears when its window rolls over, when a level
- * falls back below the stage's level, or when a writer resets it; a cleared trip is history, and the
+ * <p>The stage's limit, what was observed and whether it breaks are snapshotted onto the trip, with
+ * the window it tripped in, so a banner or a history row renders from the trip alone, even after the
+ * threshold has moved on to a later version.</p>
+ *
+ * <p>A stage trips at most once per window. It clears when its window rolls over, when a reading
+ * falls back below the stage's limit, or when a writer resets it; a cleared trip is history, and the
  * stage may trip again. While a {@link UsageThresholdAction.Break} stage's trip is uncleared, the
  * circuit it guards is broken.</p>
  *
@@ -27,57 +31,63 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
  * @param thresholdVersion the {@link UsageThreshold#version()} the trip was evaluated against;
  *                         never negative
  * @param actionIndex      the stage that tripped: its index in {@link UsageThreshold#actions()} of
- *                         that version
- * @param windowStart      the start of the window the stage tripped in, or {@code null} for a
- *                         {@link UsageThresholdWindow#LEVEL} threshold, which has no window; never
- *                         after {@code trippedAt}
+ *                         that version; never negative
+ * @param limit            the stage's {@link UsageThresholdAction#limit()}; positive
+ * @param observed         the value observed when it tripped, in the metric's unit; at least
+ *                         {@code limit}
+ * @param breaks           whether the stage is a {@link UsageThresholdAction.Break}
+ * @param span             the window the stage tripped in, or {@code null} for a
+ *                         {@link UsageThresholdWindow#LATEST} threshold, which has none; never
+ *                         starting after {@code trippedAt}
  * @param trippedAt        when the stage tripped
  * @param clearedAt        when the trip cleared, or {@code null} while it stands; never before
  *                         {@code trippedAt}
- * @param lastNotifiedAt   when a notice for the trip was last queued, or {@code null} if never, as
- *                         for a stage that only breaks; never before {@code trippedAt}
+ * @param notifiedAt       when the stage's notice went out (queued for web, or raised to operators
+ *                         for {@link NotifyChannel#OPS}), or {@code null} for a stage that only
+ *                         breaks; never before {@code trippedAt}
  */
 public record UsageTripState(
 		long id,
 		long thresholdId,
 		long thresholdVersion,
 		int actionIndex,
-		@Nullable Instant windowStart,
+		long limit,
+		long observed,
+		boolean breaks,
+		UsageThresholdWindow.@Nullable Span span,
 		Instant trippedAt,
 		@Nullable Instant clearedAt,
-		@Nullable Instant lastNotifiedAt) {
+		@Nullable Instant notifiedAt) {
 
 	/**
-	 * Refuses a missing trip time by name and moments out of order.
+	 * Refuses a missing trip time by name, a value that does not reach its limit, and moments out of
+	 * order.
 	 *
 	 * @throws NullPointerException     when {@code trippedAt} is missing
 	 * @throws IllegalArgumentException when {@code thresholdVersion} or {@code actionIndex} is
-	 *                                  negative, {@code windowStart} is after {@code trippedAt}, or
-	 *                                  {@code clearedAt} or {@code lastNotifiedAt} is before it
+	 *                                  negative, {@code limit} is not positive, {@code observed} is
+	 *                                  below it, {@code span} starts after {@code trippedAt}, or
+	 *                                  {@code clearedAt} or {@code notifiedAt} is before it
 	 */
 	public UsageTripState {
 		Objects.requireNonNull(trippedAt, "trippedAt");
-		if (thresholdVersion < 0) {
-			throw new IllegalArgumentException("thresholdVersion " + thresholdVersion + " is negative");
-		}
-		if (actionIndex < 0) {
-			throw new IllegalArgumentException("actionIndex " + actionIndex + " is negative");
-		}
-		if (windowStart != null && windowStart.isAfter(trippedAt)) {
-			throw new IllegalArgumentException("windowStart " + windowStart + " is after trippedAt "
-					+ trippedAt);
+		ThresholdRules.requireNotNegative("thresholdVersion", thresholdVersion);
+		ThresholdRules.requireNotNegative("actionIndex", actionIndex);
+		ThresholdRules.requireReached(observed, limit);
+		if (span != null) {
+			ThresholdRules.requireNotBefore("trippedAt", trippedAt, "span start", span.start());
 		}
 		ThresholdRules.requireNotBefore("clearedAt", clearedAt, "trippedAt", trippedAt);
-		ThresholdRules.requireNotBefore("lastNotifiedAt", lastNotifiedAt, "trippedAt", trippedAt);
+		ThresholdRules.requireNotBefore("notifiedAt", notifiedAt, "trippedAt", trippedAt);
 	}
 
 	/**
-	 * The start of the window the stage tripped in.
+	 * The window the stage tripped in.
 	 *
-	 * @return the window start, or empty for a level threshold
+	 * @return the window, or empty for a threshold on the latest reading
 	 */
-	public Optional<Instant> optWindowStart() {
-		return Optional.ofNullable(windowStart);
+	public Optional<UsageThresholdWindow.Span> optSpan() {
+		return Optional.ofNullable(span);
 	}
 
 	/**
@@ -90,12 +100,12 @@ public record UsageTripState(
 	}
 
 	/**
-	 * When a notice for the trip was last queued.
+	 * When the stage's notice went out.
 	 *
-	 * @return the time, or empty if none ever was
+	 * @return the time, or empty for a stage that only breaks
 	 */
-	public Optional<Instant> optLastNotifiedAt() {
-		return Optional.ofNullable(lastNotifiedAt);
+	public Optional<Instant> optNotifiedAt() {
+		return Optional.ofNullable(notifiedAt);
 	}
 
 	/**

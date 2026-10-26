@@ -8,6 +8,7 @@ import java.lang.reflect.AnnotatedArrayType;
 import java.lang.reflect.AnnotatedParameterizedType;
 import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Method;
+import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.RecordComponent;
 import java.util.ArrayList;
 import java.util.List;
@@ -141,7 +142,7 @@ class DtoNullnessRulesTest {
 					nullableComponents++;
 					if (!hasOptAccessor(record, component)) {
 						offenders.add(name + " is @Nullable without a public opt"
-								+ capitalized(component.getName()) + "() returning Optional");
+								+ capitalized(component.getName()) + "() returning an Optional of its type");
 					}
 				}
 			}
@@ -208,12 +209,24 @@ class DtoNullnessRulesTest {
 		return false;
 	}
 
+	/**
+	 * Whether the record has a public {@code optX()} returning the component wrapped: an
+	 * {@code Optional} of exactly the component's type, or the primitive optional matching a boxed
+	 * {@code Integer}, {@code Long} or {@code Double}. An {@code Optional<String>} accessor for a
+	 * {@code UsageCategory} component does not count.
+	 */
 	private static boolean hasOptAccessor(Class<?> record, RecordComponent component) {
 		try {
 			Method accessor = record.getMethod("opt" + capitalized(component.getName()));
 			Class<?> returned = accessor.getReturnType();
-			return returned == Optional.class || returned == OptionalInt.class
-					|| returned == OptionalLong.class || returned == OptionalDouble.class;
+			if (returned == Optional.class) {
+				return accessor.getGenericReturnType() instanceof ParameterizedType parameterized
+						&& parameterized.getActualTypeArguments()[0].equals(component.getGenericType());
+			}
+			Class<?> type = component.getType();
+			return (returned == OptionalInt.class && type == Integer.class)
+					|| (returned == OptionalLong.class && type == Long.class)
+					|| (returned == OptionalDouble.class && type == Double.class);
 		} catch (NoSuchMethodException absent) {
 			return false;
 		}

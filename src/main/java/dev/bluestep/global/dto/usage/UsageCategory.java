@@ -31,6 +31,11 @@ public enum UsageCategory {
 		public String wireValue() {
 			return "http";
 		}
+
+		@Override
+		public ContractRelease introducedIn() {
+			return ContractRelease.V5_2_0;
+		}
 	},
 
 	/** Stored-file traffic — downloads, previews, WebDAV — counted apart from page traffic. */
@@ -38,6 +43,11 @@ public enum UsageCategory {
 		@Override
 		public String wireValue() {
 			return "file";
+		}
+
+		@Override
+		public ContractRelease introducedIn() {
+			return ContractRelease.V5_2_0;
 		}
 	};
 
@@ -48,6 +58,14 @@ public enum UsageCategory {
 	 */
 	@JsonValue
 	public abstract String wireValue();
+
+	/**
+	 * The release that introduced this category: a caller whose contract tag is older cannot bind it,
+	 * so web-global leaves rows that name it out of that caller's answer. Not on the wire.
+	 *
+	 * @return the release this constant arrived in
+	 */
+	public abstract ContractRelease introducedIn();
 
 	/**
 	 * Resolves a stored or requested category key to its constant.
