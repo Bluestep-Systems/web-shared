@@ -55,6 +55,7 @@ class DtoNullnessRulesTest {
 	 * The packages, each with its subpackages, whose absent-able record components are a
 	 * {@code @Nullable} value plus an {@code optX()} accessor rather than {@code Optional<T>}.
 	 * A package joins once it holds no {@code Optional} component; the rest keep the older rule.
+	 * The other packages migrate when they are next touched, not in a sweep.
 	 */
 	private static final Set<String> NULLABLE_COMPONENT_PACKAGES = Set.of(DTO_ROOT + ".usage");
 

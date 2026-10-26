@@ -10,10 +10,12 @@
  *       reached, a {@link UsageThresholdAction.Notify} or a {@link UsageThresholdAction.Break}.</li>
  *   <li>{@link UsageThresholdWindow} is the stretch of time a threshold measures, UTC-aligned, or
  *       {@link UsageThresholdWindow#LEVEL} for a reading at a moment.</li>
- *   <li>{@link UsageTripState} is a stage that has tripped, and whether it has cleared.</li>
+ *   <li>{@link UsageTripState} is a stage of one threshold version that has tripped, and whether it
+ *       has cleared.</li>
  *   <li>{@link UsageBreakerList} is every circuit currently broken, fleet-wide, for the pods that
  *       enforce them.</li>
- *   <li>{@link UsageNotification} is one notice waiting for web's dispatcher to send, and
+ *   <li>{@link UsageNotification} is one notice, for one recipient on one channel, waiting for web's
+ *       dispatcher to send, and
  *       {@link UsageNotificationAckRequest} tells web-global which ones were sent.</li>
  * </ul>
  *
@@ -29,11 +31,17 @@
  * <p>{@link dev.bluestep.global.dto.usage.UsageMetric}, {@link
  * dev.bluestep.global.dto.usage.UsageCategory}, {@link UsageThresholdWindow}, {@link NotifyChannel}
  * and the action kinds bind only the values this release names; an unknown one fails the whole
- * payload. So the rule is on the server, not the reader: <b>web-global never sends a caller a value
- * the caller's release does not name.</b> A threshold, trip, breaker or notification that uses
- * vocabulary added after the caller's release is left out of what that caller is answered, not sent
- * for it to fail on. A newer metric or channel therefore reaches only consumers built against the
- * release that adds it, and an older pod keeps reading every row it can understand.</p>
+ * payload. So the rule is on the server, not the reader, and it rides the contract tag: web-global
+ * serves the threshold, trip, breaker and notification paths under the {@code /api/v{tag}/}
+ * {@code ContractVersion} routing, where the tag is the release of this artifact the caller was built
+ * against, and <b>omits every row whose vocabulary is newer than the caller's tag.</b> A row is
+ * left out of that caller's answer, not sent for it to fail on.</p>
+ *
+ * <p>So a caller built against 5.3.0 calls {@code /api/v5.3.0/...} and is promised that every
+ * threshold, trip, breaker and notification it is answered names only the metrics, categories,
+ * windows, action kinds and channels 5.3.0 names, in the shapes 5.3.0 declares, for as long as
+ * web-global serves that tag. A later release's vocabulary reaches only callers on that release's
+ * tag, and a 5.3.0 pod keeps reading every row it can understand.</p>
  *
  * <p>For a breaker that is fail-open, which matches the enforcement design: a pod that cannot name a
  * metric cannot enforce it either. For a notification it means the notice waits, pending, for a

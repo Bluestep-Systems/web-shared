@@ -1,10 +1,7 @@
 package dev.bluestep.global.dto.usage.threshold;
 
-import java.util.Collections;
-import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 
 import org.jspecify.annotations.Nullable;
 
@@ -13,10 +10,11 @@ import dev.bluestep.global.dto.usage.UsageMetric;
 
 /**
  * One notice web-global has queued for web's dispatcher to send: a {@link UsageThresholdAction.Notify}
- * stage tripped, on one channel that names recipients.
+ * stage tripped, on one channel that names recipients, for one recipient.
  *
- * <p>One notification per channel, so each is sent and acknowledged on its own: an email that
- * failed is retried without sending the in-app alert twice. {@link NotifyChannel#OPS} is never
+ * <p>web-global queues one notification per (channel, recipient), and acknowledgements and retries
+ * are per notification, so per recipient: an email that failed for one user is retried without
+ * mailing the others again or sending anyone's in-app alert twice. {@link NotifyChannel#OPS} is never
  * queued here; web-global alerts its operators itself. The dispatcher sends, then names the
  * notification in a {@link UsageNotificationAckRequest}; until then it stays pending and is offered
  * again.</p>
@@ -30,7 +28,7 @@ import dev.bluestep.global.dto.usage.UsageMetric;
  * @param actionIndex the stage: its index in {@link UsageThreshold#actions()}
  * @param channel     how to send the notice; always one that {@linkplain NotifyChannel#namesRecipients
  *                    names recipients}
- * @param recipients  the tenant users to send it to, in the stage's order; at least one
+ * @param recipient   the tenant user to send it to, one of the stage's recipients
  * @param metric      the metric limited
  * @param category    the category the threshold narrows to, or {@code null} for every category;
  *                    always {@code null} on a metric with none
@@ -46,7 +44,7 @@ public record UsageNotification(
 		long thresholdId,
 		int actionIndex,
 		NotifyChannel channel,
-		Set<TenantUserKey> recipients,
+		TenantUserKey recipient,
 		UsageMetric metric,
 		@Nullable UsageCategory category,
 		long observed,
@@ -54,12 +52,11 @@ public record UsageNotification(
 		UsageThresholdWindow.@Nullable Span window) {
 
 	/**
-	 * Refuses a missing component by name and a notice that could not be sent or does not add up,
-	 * and copies the recipients in order.
+	 * Refuses a missing component by name and a notice that could not be sent or does not add up.
 	 *
-	 * @throws NullPointerException     when {@code schemaName}, {@code channel}, {@code recipients} or
-	 *                                  {@code metric} is missing, or a recipient is null
-	 * @throws IllegalArgumentException when the channel names no recipients, there are none, the
+	 * @throws NullPointerException     when {@code schemaName}, {@code channel}, {@code recipient} or
+	 *                                  {@code metric} is missing
+	 * @throws IllegalArgumentException when the channel names no recipients, the
 	 *                                  category does not fit the metric, {@code actionIndex} is
 	 *                                  negative, {@code level} is not positive, {@code observed} is
 	 *                                  below it, or {@code window} is absent on a windowed metric or
@@ -68,17 +65,10 @@ public record UsageNotification(
 	public UsageNotification {
 		Objects.requireNonNull(schemaName, "schemaName");
 		Objects.requireNonNull(channel, "channel");
-		Objects.requireNonNull(recipients, "recipients");
+		Objects.requireNonNull(recipient, "recipient");
 		Objects.requireNonNull(metric, "metric");
 		if (!channel.namesRecipients()) {
 			throw new IllegalArgumentException("channel " + channel + " is not sent by web");
-		}
-		for (final TenantUserKey recipient : recipients) {
-			Objects.requireNonNull(recipient, "recipients element");
-		}
-		recipients = Collections.unmodifiableSet(new LinkedHashSet<>(recipients));
-		if (recipients.isEmpty()) {
-			throw new IllegalArgumentException("a notification needs at least one recipient");
 		}
 		ThresholdRules.requireCategoryFits(metric, category);
 		if (actionIndex < 0) {

@@ -41,11 +41,11 @@ final class UsageThresholdFixtures {
 	}
 
 	static UsageTripState trip() {
-		return new UsageTripState(21, 11, 1, DAY_START, TRIPPED, null, TRIPPED.plusSeconds(60));
+		return new UsageTripState(21, 11, 3, 1, DAY_START, TRIPPED, null, TRIPPED.plusSeconds(60));
 	}
 
 	static UsageNotification notification() {
-		return new UsageNotification(31, SCHEMA, 11, 0, NotifyChannel.EMAIL, Set.of(ALICE),
+		return new UsageNotification(31, SCHEMA, 11, 0, NotifyChannel.EMAIL, ALICE,
 				UsageMetric.HITS, UsageCategory.HTTP, 1_234, 1_000,
 				new UsageThresholdWindow.Span(DAY_START, DAY_END));
 	}

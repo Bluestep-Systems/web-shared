@@ -57,13 +57,14 @@ class UsageThresholdWireTest {
 			""".formatted(NOTIFY_THEN_BREAK);
 
 	private static final String PINNED_TRIP = """
-			{"id":21,"thresholdId":11,"actionIndex":1,"windowStart":"2026-09-07T00:00:00Z",
-			 "trippedAt":"2026-09-07T13:45:00Z","clearedAt":null,"lastNotifiedAt":"2026-09-07T13:46:00Z"}
+			{"id":21,"thresholdId":11,"thresholdVersion":3,"actionIndex":1,
+			 "windowStart":"2026-09-07T00:00:00Z","trippedAt":"2026-09-07T13:45:00Z",
+			 "clearedAt":null,"lastNotifiedAt":"2026-09-07T13:46:00Z"}
 			""";
 
 	private static final String PINNED_NOTIFICATION = """
 			{"id":31,"schemaName":"U1000001","thresholdId":11,"actionIndex":0,"channel":"EMAIL",
-			 "recipients":[{"classid":7001,"seqnum":42}],"metric":"HITS","category":"http",
+			 "recipient":{"classid":7001,"seqnum":42},"metric":"HITS","category":"http",
 			 "observed":1234,"level":1000,
 			 "window":{"start":"2026-09-07T00:00:00Z","end":"2026-09-08T00:00:00Z"}}
 			""";
@@ -121,10 +122,12 @@ class UsageThresholdWireTest {
 	@Test
 	void anAbsentKeyAndAnExplicitNull_bothBindAsAbsent() {
 		final UsageTripState omitted = JSON.readValue("""
-				{"id":1,"thresholdId":2,"actionIndex":0,"trippedAt":"2026-09-07T13:45:00Z"}""",
+				{"id":1,"thresholdId":2,"thresholdVersion":0,"actionIndex":0,
+				 "trippedAt":"2026-09-07T13:45:00Z"}""",
 				UsageTripState.class);
 		final UsageTripState nulled = JSON.readValue("""
-				{"id":1,"thresholdId":2,"actionIndex":0,"trippedAt":"2026-09-07T13:45:00Z",
+				{"id":1,"thresholdId":2,"thresholdVersion":0,"actionIndex":0,
+				 "trippedAt":"2026-09-07T13:45:00Z",
 				 "windowStart":null,"clearedAt":null,"lastNotifiedAt":null}""", UsageTripState.class);
 		assertEquals(omitted, nulled);
 		assertTrue(omitted.optWindowStart().isEmpty());

@@ -251,24 +251,28 @@ class UsageThresholdValidationTest {
 	@Test
 	void trip_ordersItsMoments() {
 		assertRefused("after trippedAt",
-				() -> new UsageTripState(1, 1, 0, TRIPPED.plusSeconds(1), TRIPPED, null, null));
-		assertRefused("clearedAt", () -> new UsageTripState(1, 1, 0, null, TRIPPED,
+				() -> new UsageTripState(1, 1, 3, 0, TRIPPED.plusSeconds(1), TRIPPED, null, null));
+		assertRefused("clearedAt", () -> new UsageTripState(1, 1, 3, 0, null, TRIPPED,
 				TRIPPED.minusSeconds(1), null));
-		assertRefused("lastNotifiedAt", () -> new UsageTripState(1, 1, 0, null, TRIPPED, null,
+		assertRefused("lastNotifiedAt", () -> new UsageTripState(1, 1, 3, 0, null, TRIPPED, null,
 				TRIPPED.minusSeconds(1)));
-		assertRefused("negative", () -> new UsageTripState(1, 1, -1, null, TRIPPED, null, null));
-		assertNpe("trippedAt", () -> new UsageTripState(1, 1, 0, null, null, null, null));
-		assertDoesNotThrow(() -> new UsageTripState(1, 1, 0, TRIPPED, TRIPPED, TRIPPED, TRIPPED));
+		assertRefused("actionIndex -1 is negative",
+				() -> new UsageTripState(1, 1, 3, -1, null, TRIPPED, null, null));
+		assertRefused("thresholdVersion -1 is negative",
+				() -> new UsageTripState(1, 1, -1, 0, null, TRIPPED, null, null));
+		assertEquals(3, new UsageTripState(1, 1, 3, 0, null, TRIPPED, null, null).thresholdVersion());
+		assertNpe("trippedAt", () -> new UsageTripState(1, 1, 3, 0, null, null, null, null));
+		assertDoesNotThrow(() -> new UsageTripState(1, 1, 3, 0, TRIPPED, TRIPPED, TRIPPED, TRIPPED));
 	}
 
 	@Test
 	void trip_isActiveUntilCleared() {
-		final UsageTripState standing = new UsageTripState(1, 1, 0, DAY_START, TRIPPED, null, null);
+		final UsageTripState standing = new UsageTripState(1, 1, 3, 0, DAY_START, TRIPPED, null, null);
 		assertTrue(standing.isActive());
 		assertEquals(Optional.of(DAY_START), standing.optWindowStart());
 		assertEquals(Optional.empty(), standing.optClearedAt());
 		assertEquals(Optional.empty(), standing.optLastNotifiedAt());
-		final UsageTripState cleared = new UsageTripState(1, 1, 0, null, TRIPPED, DAY_END, TRIPPED);
+		final UsageTripState cleared = new UsageTripState(1, 1, 3, 0, null, TRIPPED, DAY_END, TRIPPED);
 		assertFalse(cleared.isActive());
 		assertEquals(Optional.of(DAY_END), cleared.optClearedAt());
 		assertEquals(Optional.empty(), cleared.optWindowStart());
@@ -299,7 +303,7 @@ class UsageThresholdValidationTest {
 
 	// --- notifications ---------------------------------------------------------------------------
 
-	private static UsageNotification notification(final NotifyChannel channel, final Set<TenantUserKey> to,
+	private static UsageNotification notification(final NotifyChannel channel, final TenantUserKey to,
 			final UsageMetric metric, final UsageCategory category, final long observed, final long level,
 			final UsageThresholdWindow.Span window) {
 		return new UsageNotification(1, SCHEMA, 1, 0, channel, to, metric, category, observed, level, window);
@@ -309,45 +313,44 @@ class UsageThresholdValidationTest {
 
 	@Test
 	void notification_isOnlyForAChannelWebSends() {
-		assertRefused("not sent by web", () -> notification(NotifyChannel.OPS, Set.of(ALICE), UsageMetric.HITS,
+		assertRefused("not sent by web", () -> notification(NotifyChannel.OPS, ALICE, UsageMetric.HITS,
 				null, 1, 1, DAY));
-		assertDoesNotThrow(() -> notification(NotifyChannel.IN_APP, Set.of(ALICE), UsageMetric.HITS, null, 1, 1,
+		assertDoesNotThrow(() -> notification(NotifyChannel.IN_APP, ALICE, UsageMetric.HITS, null, 1, 1,
 				DAY));
 	}
 
 	@Test
-	void notification_needsARecipient() {
-		assertRefused("at least one recipient", () -> notification(NotifyChannel.EMAIL, Set.of(),
-				UsageMetric.HITS, null, 1, 1, DAY));
-		assertNpe("recipients", () -> notification(NotifyChannel.EMAIL, null, UsageMetric.HITS, null, 1, 1, DAY));
+	void notification_isForExactlyOneRecipient() {
+		assertNpe("recipient", () -> notification(NotifyChannel.EMAIL, null, UsageMetric.HITS, null, 1, 1, DAY));
+		assertEquals(BOB, notification(NotifyChannel.EMAIL, BOB, UsageMetric.HITS, null, 1, 1, DAY).recipient());
 	}
 
 	@Test
 	void notification_observedReachesAPositiveLevel() {
-		assertRefused("below level", () -> notification(NotifyChannel.EMAIL, Set.of(ALICE), UsageMetric.HITS,
+		assertRefused("below level", () -> notification(NotifyChannel.EMAIL, ALICE, UsageMetric.HITS,
 				null, 999, 1_000, DAY));
-		assertRefused("not positive", () -> notification(NotifyChannel.EMAIL, Set.of(ALICE), UsageMetric.HITS,
+		assertRefused("not positive", () -> notification(NotifyChannel.EMAIL, ALICE, UsageMetric.HITS,
 				null, 0, 0, DAY));
-		assertDoesNotThrow(() -> notification(NotifyChannel.EMAIL, Set.of(ALICE), UsageMetric.HITS, null,
+		assertDoesNotThrow(() -> notification(NotifyChannel.EMAIL, ALICE, UsageMetric.HITS, null,
 				1_000, 1_000, DAY));
 	}
 
 	@Test
 	void notification_windowIsPresentExactlyOnAWindowedMetric() {
-		assertRefused("window is required", () -> notification(NotifyChannel.EMAIL, Set.of(ALICE),
+		assertRefused("window is required", () -> notification(NotifyChannel.EMAIL, ALICE,
 				UsageMetric.HITS, null, 1, 1, null));
-		assertRefused("has no window", () -> notification(NotifyChannel.EMAIL, Set.of(ALICE),
+		assertRefused("has no window", () -> notification(NotifyChannel.EMAIL, ALICE,
 				UsageMetric.STORAGE_DB_BYTES, null, 1, 1, DAY));
-		assertEquals(Optional.empty(), notification(NotifyChannel.EMAIL, Set.of(ALICE),
+		assertEquals(Optional.empty(), notification(NotifyChannel.EMAIL, ALICE,
 				UsageMetric.STORAGE_DB_BYTES, null, 1, 1, null).optWindow());
 	}
 
 	@Test
 	void notification_categoryFitsTheMetricAndTheIndexIsNonNegative() {
-		assertRefused("has no category", () -> notification(NotifyChannel.EMAIL, Set.of(ALICE),
+		assertRefused("has no category", () -> notification(NotifyChannel.EMAIL, ALICE,
 				UsageMetric.STORAGE_FILE_BYTES, UsageCategory.FILE, 1, 1, null));
 		assertRefused("negative", () -> new UsageNotification(1, SCHEMA, 1, -1, NotifyChannel.EMAIL,
-				Set.of(ALICE), UsageMetric.HITS, null, 1, 1, DAY));
+				ALICE, UsageMetric.HITS, null, 1, 1, DAY));
 	}
 
 	// --- acknowledgement -------------------------------------------------------------------------

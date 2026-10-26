@@ -434,15 +434,24 @@ group = 'dev.bluestep'
 //     UsageBreakerList / UsageBreaker (every uncleared break, fleet-wide, for pods to poll), and
 //     UsageNotification / UsageNotificationAckRequest (a queued EMAIL or IN_APP notice for web's
 //     dispatcher, and its acknowledgement).
-//   * Closed vocabularies, with the rule on the server: web-global never sends a caller a metric,
-//     category, window, kind or channel its release does not name, and leaves such rows out of
-//     that caller's answer, so a later value can never fail an older consumer's whole response.
+//   * UsageTripState carries thresholdVersion, the UsageThreshold version the trip was evaluated
+//     against. web-global closes a threshold's open trips when it is replaced, so actionIndex is
+//     only ever read against that version and a replace that reorders stages cannot re-point a trip.
+//   * UsageNotification carries exactly one recipient. web-global queues one per (channel,
+//     recipient), and acks and retries are per notification, so a send that failed for one user is
+//     retried for that user alone.
+//   * Closed vocabularies, with the rule on the server and on the contract tag: web-global serves
+//     the threshold, trip, breaker and notification paths under the /api/v{tag}/ ContractVersion
+//     routing and omits every row whose vocabulary (metric, category, window, kind, channel) is
+//     newer than the caller's tag, so a later value can never fail an older consumer's response. A
+//     5.3.0 caller on /api/v5.3.0/ is answered only in 5.3.0's vocabulary and shapes.
 //   * Absence is a @Nullable component plus an optX() accessor, never Optional, in dto.usage and its
-//     subpackages; DtoNullnessRulesTest now holds those packages to that and the rest to Optional.
-// A MINOR for the new surface. The vocabulary rule needs web-global to know the release a caller was
-// built against; a ContractVersion tag on the threshold paths is how it would (web-global decides
-// the routing, not this artifact). RELEASE ORDER: this artifact, then web-global serving the
-// endpoints, then the monolith calling them.
+//     subpackages; DtoNullnessRulesTest now holds those packages to that and the rest to Optional,
+//     which migrate when next touched.
+// A MINOR for the new surface, and unlike /api/v1/usage/ these paths ARE tag-routed: web-global
+// gains a v5.3.0 ContractVersion entry serving them (web-global decides the routing; this artifact
+// states the promise). RELEASE ORDER: this artifact, then web-global serving the endpoints, then the
+// monolith calling them.
 version = '5.3.0'
 
 repositories {

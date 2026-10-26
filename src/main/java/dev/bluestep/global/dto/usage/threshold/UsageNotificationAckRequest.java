@@ -9,6 +9,10 @@ import java.util.Set;
  * web's dispatcher telling web-global which {@link UsageNotification}s it has sent, so they stop
  * being offered.
  *
+ * <p>Each notification is one (channel, recipient), so an acknowledgement is per recipient: the
+ * dispatcher names exactly the notices it delivered, and any it left out, a failed send to one user
+ * on one channel, stay pending and are offered again without resending the rest.</p>
+ *
  * <p>Idempotent: acknowledging a notification already acknowledged, or one web-global no longer
  * holds, changes nothing and is not an error, so a dispatcher that lost the answer to an
  * acknowledgement simply sends it again.</p>

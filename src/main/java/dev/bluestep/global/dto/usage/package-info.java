@@ -26,7 +26,8 @@
  *
  * <p>These paths are not {@code ContractVersion}-tagged: a change to a shape here is a change
  * to what every deployed producer sends, and no versioned path absorbs it. Each record's javadoc
- * says what is pinned; {@code UsageWireContractTest} holds the keys in place.</p>
+ * says what is pinned; {@code UsageWireContractTest} holds the keys in place. The threshold paths
+ * in {@link dev.bluestep.global.dto.usage.threshold} are tagged; that package says why.</p>
  *
  * <p>Null-marked: every type in this package is non-null unless explicitly annotated
  * {@link org.jspecify.annotations.Nullable}. A record component that may be absent is a
