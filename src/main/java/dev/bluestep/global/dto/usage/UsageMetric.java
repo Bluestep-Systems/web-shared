@@ -28,6 +28,11 @@ public enum UsageMetric {
 		public boolean perCategory() {
 			return true;
 		}
+
+		@Override
+		public ContractRelease introducedIn() {
+			return ContractRelease.V5_2_0;
+		}
 	},
 
 	/**
@@ -43,6 +48,11 @@ public enum UsageMetric {
 		@Override
 		public boolean perCategory() {
 			return true;
+		}
+
+		@Override
+		public ContractRelease introducedIn() {
+			return ContractRelease.V5_2_0;
 		}
 	},
 
@@ -60,6 +70,11 @@ public enum UsageMetric {
 		public boolean perCategory() {
 			return true;
 		}
+
+		@Override
+		public ContractRelease introducedIn() {
+			return ContractRelease.V5_2_0;
+		}
 	},
 
 	/**
@@ -75,6 +90,11 @@ public enum UsageMetric {
 		@Override
 		public boolean perCategory() {
 			return true;
+		}
+
+		@Override
+		public ContractRelease introducedIn() {
+			return ContractRelease.V5_2_0;
 		}
 	},
 
@@ -92,6 +112,11 @@ public enum UsageMetric {
 		public boolean perCategory() {
 			return true;
 		}
+
+		@Override
+		public ContractRelease introducedIn() {
+			return ContractRelease.V5_2_0;
+		}
 	},
 
 	/** Request body bytes received. {@link UsageSeriesPoint#requestBytes()} summed over the window. */
@@ -105,6 +130,11 @@ public enum UsageMetric {
 		public boolean perCategory() {
 			return true;
 		}
+
+		@Override
+		public ContractRelease introducedIn() {
+			return ContractRelease.V5_2_0;
+		}
 	},
 
 	/** Response bytes sent. {@link UsageSeriesPoint#responseBytes()} summed over the window. */
@@ -117,6 +147,11 @@ public enum UsageMetric {
 		@Override
 		public boolean perCategory() {
 			return true;
+		}
+
+		@Override
+		public ContractRelease introducedIn() {
+			return ContractRelease.V5_2_0;
 		}
 	},
 
@@ -134,6 +169,11 @@ public enum UsageMetric {
 		public boolean perCategory() {
 			return false;
 		}
+
+		@Override
+		public ContractRelease introducedIn() {
+			return ContractRelease.V5_2_0;
+		}
 	},
 
 	/**
@@ -149,6 +189,11 @@ public enum UsageMetric {
 		@Override
 		public boolean perCategory() {
 			return false;
+		}
+
+		@Override
+		public ContractRelease introducedIn() {
+			return ContractRelease.V5_2_0;
 		}
 	};
 
@@ -166,6 +211,14 @@ public enum UsageMetric {
 	 * @return {@code true} for a metric a category narrows
 	 */
 	public abstract boolean perCategory();
+
+	/**
+	 * The release that introduced this metric: a caller whose contract tag is older cannot bind it, so
+	 * web-global leaves rows that name it out of that caller's answer. Not on the wire.
+	 *
+	 * @return the release this constant arrived in
+	 */
+	public abstract ContractRelease introducedIn();
 
 	/** How a {@link UsageMetric} behaves over a window. Serialized under its constant name. */
 	public enum Aggregation {
