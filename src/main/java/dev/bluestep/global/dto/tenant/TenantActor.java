@@ -12,6 +12,9 @@ import dev.bluestep.global.dto.tenantaccess.TenantUserKey;
  * the system acting on its own behalf is no actor at all, an absent component where this type is
  * held, not a third kind (web-global's changeset 023 retired the "System User" {@code (222222, -1)}).
  *
+ * <p>Despite the name, not only a tenant's: it is the actor model's wire type wherever an actor is
+ * carried, {@code ResellerUpdateRequest.actor} included.</p>
+ *
  * <p>On the wire the kind is the {@code "kind"} property: {@code "global-user"} or
  * {@code "tenant-user"}. An unknown kind fails binding, so a later kind arrives with a release.</p>
  */

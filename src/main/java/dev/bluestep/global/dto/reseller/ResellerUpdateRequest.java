@@ -3,6 +3,7 @@ package dev.bluestep.global.dto.reseller;
 import java.util.Optional;
 
 import dev.bluestep.global.dto.constraints.CodePointSize;
+import dev.bluestep.global.dto.tenant.TenantActor;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -50,6 +51,15 @@ import jakarta.validation.constraints.NotNull;
  * did not know about the field erase the name of every reseller it saved. A caller that omits it is
  * refused instead.</p>
  *
+ * <h2>{@code actor}: who is making the edit (from 5.5.0)</h2>
+ *
+ * <p>The edit's actor, in the actor model's three cases: a global user, a user of one tenant, or
+ * none (absent). The monolith's {@code ResellerGatewayDAO} sends the acting global super, so the
+ * reseller row records who changed it. Absent is no actor rather than "leave the stored one": a caller
+ * on a tag that predates the component (the shared records are bound by every live version's
+ * controllers) is recorded as no actor, which is what the row recorded for it before. Nothing reads it
+ * before web-global's reseller-actor changeset consumes it.</p>
+ *
  * <h2>What is not here</h2>
  *
  * <p>No key: the reseller being edited is the path.</p>
@@ -81,6 +91,7 @@ import jakarta.validation.constraints.NotNull;
  *                       something inferred from a missing field.
  * @param flags          the switch word to store, or empty to leave the stored one alone. The one
  *                       component here that an absent value does not clear — see above.
+ * @param actor          who is making the edit, or empty for no actor
  */
 public record ResellerUpdateRequest(
 		@NotBlank @CodePointSize(max = 1000) String displayName,
@@ -89,7 +100,8 @@ public record ResellerUpdateRequest(
 		Optional<String> privacyPageUrl,
 		Optional<String> termsPageUrl,
 		@NotNull ResellerIcons icons,
-		Optional<Long> flags
+		Optional<Long> flags,
+		Optional<TenantActor> actor
 ) {
 
 	/**
@@ -108,5 +120,22 @@ public record ResellerUpdateRequest(
 		privacyPageUrl = privacyPageUrl == null ? Optional.empty() : privacyPageUrl;
 		termsPageUrl = termsPageUrl == null ? Optional.empty() : termsPageUrl;
 		flags = flags == null ? Optional.empty() : flags;
+		actor = actor == null ? Optional.empty() : actor;
+	}
+
+	/**
+	 * The 5.4.0 shape, with no actor: kept so Java callers written before 5.5.0 still compile.
+	 *
+	 * @param displayName    as on the canonical constructor
+	 * @param supportEmail   as on the canonical constructor
+	 * @param defaultDomain  as on the canonical constructor
+	 * @param privacyPageUrl as on the canonical constructor
+	 * @param termsPageUrl   as on the canonical constructor
+	 * @param icons          as on the canonical constructor
+	 * @param flags          as on the canonical constructor
+	 */
+	public ResellerUpdateRequest(String displayName, Optional<String> supportEmail, Optional<String> defaultDomain,
+			Optional<String> privacyPageUrl, Optional<String> termsPageUrl, ResellerIcons icons, Optional<Long> flags) {
+		this(displayName, supportEmail, defaultDomain, privacyPageUrl, termsPageUrl, icons, flags, Optional.empty());
 	}
 }
