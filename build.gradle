@@ -473,7 +473,18 @@ group = 'dev.bluestep'
 // narrowed key validation, credentialVersion absent for an account with no credential, is declared
 // in web-global's ContractVersion.V5_4_0. RELEASE ORDER: web-global serving 5.4.0, then this
 // artifact, then the monolith moving its contract tag to 5.4.0.
-version = '5.4.0'
+//
+// 5.5.0 adds the tenant read contract (CU-86bcuwzun): dto.tenant, the monolith's Association,
+// root organization and sign-in type as one TenantRecordResponse, read from web-global's global.tenant
+// (its changeset 025). web-global serves GET /api/v5.5.0/tenants (paged, filterable by name, reseller
+// and namespace), /tenants/{classid}/{seqnum} (ETag = the row's version), /tenants/snapshot (what a
+// monolith pod keeps in memory: per-tenant switches, namespace, lock status) and
+// /tenants/{classid}/{seqnum}/lock. Read only; writes still go through the monolith's own rows, which
+// 025 keeps in step with global.tenant by trigger. TenantActor is the typed actor (global user | tenant
+// user, none = absent) on the wire. dto.tenant joins the @Nullable + optX() rule. A MINOR: new
+// shapes only, nothing existing changed. RELEASE ORDER: this artifact, then web-global serving 5.5.0
+// for these paths and every surface 5.4.0 serves, then the monolith moving its contract tag to 5.5.0.
+version = '5.5.0'
 
 repositories {
     mavenCentral()
