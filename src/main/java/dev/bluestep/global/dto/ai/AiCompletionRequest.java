@@ -2,6 +2,9 @@ package dev.bluestep.global.dto.ai;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
+
+import org.jspecify.annotations.Nullable;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
@@ -16,7 +19,7 @@ import jakarta.validation.constraints.Size;
  * <p>{@code totalInputTokens}/{@code totalOutputTokens} are the released aggregates, recorded whatever else is
  * reported. {@code unitAmounts} is what the turn is <em>priced</em> from: an open map from a metered key
  * ({@link UnitKeys}) to the amount consumed under it, emitted by each provider adapter under the keys that provider
- * actually meters. {@code stopReason} and {@code errorMessage} are empty on turns that ended without one.</p>
+ * actually meters. {@code stopReason} and {@code errorMessage} are absent on turns that ended without one.</p>
  *
  * <p><b>The vector is open because the provider decides what it charges for.</b> The four fixed breakdown
  * components below were the previous shape, and their fixedness was the defect: a charge with no component to land
@@ -58,15 +61,15 @@ public record AiCompletionRequest(
 		@JsonProperty("o") int totalOutputTokens,
 		@JsonProperty("l") long totalLatencyMs,
 		@JsonProperty("n") int iterationsUsed,
-		@JsonProperty("s") Optional<String> stopReason,
-		@JsonProperty("e") Optional<String> errorMessage,
-		@JsonProperty("u") Optional<@Size(max = MAX_UNIT_KEYS) Map<
+		@JsonProperty("s") @Nullable String stopReason,
+		@JsonProperty("e") @Nullable String errorMessage,
+		@JsonProperty("u") @Size(max = MAX_UNIT_KEYS) @Nullable Map<
 				@NotBlank @Size(max = UnitKeys.MAX_KEY_LENGTH) @Pattern(regexp = UnitKeys.KEY_PATTERN) String,
-				@PositiveOrZero Long>> unitAmounts,
-		@JsonProperty("a") Optional<Integer> audioSeconds,
-		@JsonProperty("ai") Optional<Integer> audioInputTokens,
-		@JsonProperty("ci") Optional<Integer> cachedInputTokens,
-		@JsonProperty("ao") Optional<Integer> audioOutputTokens) {
+				@PositiveOrZero Long> unitAmounts,
+		@JsonProperty("a") @Nullable Integer audioSeconds,
+		@JsonProperty("ai") @Nullable Integer audioInputTokens,
+		@JsonProperty("ci") @Nullable Integer cachedInputTokens,
+		@JsonProperty("ao") @Nullable Integer audioOutputTokens) {
 
 	/**
 	 * How many distinct keys one turn may report.
@@ -78,11 +81,10 @@ public record AiCompletionRequest(
 	public static final int MAX_UNIT_KEYS = 64;
 
 	/**
-	 * Normalises the vector's absence and takes a defensive copy of a present one.
+	 * Takes a checked, defensive copy of a present vector; an absent one (a pre-vector caller omits {@code "u"}
+	 * on every report) stays absent.
 	 *
-	 * <p>Jackson binds an omitted {@code "u"} to {@code null} whatever this package's null-marking says, and a
-	 * pre-vector caller omits it on every single report — so the normalisation is not defensive style, it is the
-	 * only thing standing between the legacy lane and a null component. Copying is the same decision the map
+	 * <p>Copying is the same decision the map
 	 * itself forces: the amounts are what a turn is priced from, and a caller that could mutate them after
 	 * reporting could change a bill after it was rendered.</p>
 	 *
@@ -96,7 +98,7 @@ public record AiCompletionRequest(
 	 * @throws IllegalArgumentException if any key or amount is null, or any amount is negative
 	 */
 	public AiCompletionRequest {
-		unitAmounts = unitAmounts == null ? Optional.empty() : unitAmounts.map(AiCompletionRequest::checkedCopy);
+		unitAmounts = unitAmounts == null ? null : checkedCopy(unitAmounts);
 	}
 
 	private static Map<String, Long> checkedCopy(Map<String, Long> amounts) {
@@ -132,7 +134,45 @@ public record AiCompletionRequest(
 			int iterationsUsed, Optional<String> stopReason, Optional<String> errorMessage,
 			Map<String, Long> unitAmounts) {
 		return new AiCompletionRequest(trackingId, totalInput, totalOutput, totalLatencyMs, iterationsUsed,
-				stopReason, errorMessage, Optional.of(unitAmounts), Optional.empty(), Optional.empty(),
-				Optional.empty(), Optional.empty());
+				stopReason.orElse(null), errorMessage.orElse(null), unitAmounts, null, null, null, null);
+	}
+
+	/** {@link #stopReason}, as an {@code Optional}: empty when the provider gave none. */
+	public Optional<String> optStopReason() {
+		return Optional.ofNullable(stopReason);
+	}
+
+	/** {@link #errorMessage}, as an {@code Optional}: empty on a turn that did not fail. */
+	public Optional<String> optErrorMessage() {
+		return Optional.ofNullable(errorMessage);
+	}
+
+	/** {@link #unitAmounts}, as an {@code Optional}: empty on a legacy caller that sends no vector. */
+	public Optional<Map<String, Long>> optUnitAmounts() {
+		return Optional.ofNullable(unitAmounts);
+	}
+
+	/** {@link #audioSeconds}, as an {@code OptionalInt}: legacy lane. */
+	public OptionalInt optAudioSeconds() {
+		return optInt(audioSeconds);
+	}
+
+	/** {@link #audioInputTokens}, as an {@code OptionalInt}: legacy lane. */
+	public OptionalInt optAudioInputTokens() {
+		return optInt(audioInputTokens);
+	}
+
+	/** {@link #cachedInputTokens}, as an {@code OptionalInt}: legacy lane. */
+	public OptionalInt optCachedInputTokens() {
+		return optInt(cachedInputTokens);
+	}
+
+	/** {@link #audioOutputTokens}, as an {@code OptionalInt}: legacy lane. */
+	public OptionalInt optAudioOutputTokens() {
+		return optInt(audioOutputTokens);
+	}
+
+	private static OptionalInt optInt(@Nullable Integer value) {
+		return value == null ? OptionalInt.empty() : OptionalInt.of(value);
 	}
 }

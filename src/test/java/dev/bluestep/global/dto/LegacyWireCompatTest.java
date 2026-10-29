@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 import org.junit.jupiter.api.Test;
 
@@ -91,8 +92,8 @@ class LegacyWireCompatTest {
 
 		assertEquals("acme", request.tenantId());
 		assertEquals("org-1", request.unitId());
-		assertEquals(Optional.empty(), request.flag());
-		assertEquals(Optional.empty(), request.triggeringProcess());
+		assertEquals(Optional.empty(), request.optFlag());
+		assertEquals(Optional.empty(), request.optTriggeringProcess());
 		assertEquals("claude-opus-4", request.model());
 	}
 
@@ -102,13 +103,13 @@ class LegacyWireCompatTest {
 
 		assertEquals("trk-7", request.trackingId());
 		assertEquals(100, request.totalInputTokens());
-		assertEquals(Optional.empty(), request.stopReason());
-		assertEquals(Optional.empty(), request.errorMessage());
-		assertEquals(Optional.empty(), request.audioSeconds());
-		assertEquals(Optional.empty(), request.audioInputTokens());
-		assertEquals(Optional.empty(), request.cachedInputTokens());
-		assertEquals(Optional.empty(), request.audioOutputTokens());
-		assertEquals(Optional.empty(), request.unitAmounts(),
+		assertEquals(Optional.empty(), request.optStopReason());
+		assertEquals(Optional.empty(), request.optErrorMessage());
+		assertEquals(OptionalInt.empty(), request.optAudioSeconds());
+		assertEquals(OptionalInt.empty(), request.optAudioInputTokens());
+		assertEquals(OptionalInt.empty(), request.optCachedInputTokens());
+		assertEquals(OptionalInt.empty(), request.optAudioOutputTokens());
+		assertEquals(Optional.empty(), request.optUnitAmounts(),
 				"1.2.2 has no amount vector to send, and an absent one must arrive as absent rather than as an "
 						+ "empty map — the legacy lane is read precisely when this is absent, and an empty map "
 						+ "would instead mean a current caller that metered nothing");
@@ -118,10 +119,10 @@ class LegacyWireCompatTest {
 	void legacyCompletionRequestJsonBindsPresentValues() throws Exception {
 		AiCompletionRequest request = JACKSON3.readValue(COMPLETION_REQ_FULL, AiCompletionRequest.class);
 
-		assertEquals(Optional.of("end_turn"), request.stopReason());
-		assertEquals(Optional.of("boom"), request.errorMessage());
-		assertEquals(Optional.of(12), request.audioSeconds());
-		assertEquals(Optional.of(78), request.audioOutputTokens());
+		assertEquals(Optional.of("end_turn"), request.optStopReason());
+		assertEquals(Optional.of("boom"), request.optErrorMessage());
+		assertEquals(OptionalInt.of(12), request.optAudioSeconds());
+		assertEquals(OptionalInt.of(78), request.optAudioOutputTokens());
 	}
 
 	// ---- outbound: what 2.0.0 emits, read by a 1.2.2 client -----------------------------
@@ -135,7 +136,7 @@ class LegacyWireCompatTest {
 	@Test
 	void currentResponseJsonIsByteIdenticalToLegacy() throws Exception {
 		AiPreflightResponse response =
-				new AiPreflightResponse(true, "trk-1", Optional.empty(), Optional.of(4));
+				new AiPreflightResponse(true, "trk-1", null, 4);
 
 		assertEquals(PREFLIGHT_RESP_AUTHORIZED, JACKSON3.writeValueAsString(response),
 				"Jackson 3 output must match what web-shared 1.2.2 emitted");
@@ -144,7 +145,7 @@ class LegacyWireCompatTest {
 	@Test
 	void currentRequestsAreByteIdenticalToLegacy() throws Exception {
 		AiPreflightRequest preflight = new AiPreflightRequest(
-				"acme", "org-1", "user-9", Optional.empty(), Optional.empty(),
+				"acme", "org-1", "user-9", null, null,
 				"anthropic", "claude-opus-4");
 		assertEquals(PREFLIGHT_REQ_NULLS, JACKSON3.writeValueAsString(preflight));
 	}
@@ -162,7 +163,7 @@ class LegacyWireCompatTest {
 	void legacyCompletionPayloadBindsWithTheVectorAbsent() throws Exception {
 		AiCompletionRequest request = JACKSON3.readValue(COMPLETION_REQ_NULLS, AiCompletionRequest.class);
 
-		assertEquals(Optional.empty(), request.unitAmounts(),
+		assertEquals(Optional.empty(), request.optUnitAmounts(),
 				"1.2.2 sends no \"u\" at all; absent must not be normalised into an empty vector");
 		assertEquals("trk-7", request.trackingId());
 		assertEquals(100, request.totalInputTokens());
@@ -184,8 +185,7 @@ class LegacyWireCompatTest {
 	@Test
 	void currentCompletionRequestAddsTheVectorAndChangesNothingElse() throws Exception {
 		AiCompletionRequest completion = new AiCompletionRequest(
-				"trk-7", 100, 200, 1500L, 3, Optional.empty(), Optional.empty(), Optional.empty(),
-				Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
+				"trk-7", 100, 200, 1500L, 3, null, null, null, null, null, null, null);
 
 		JsonNode legacy = JACKSON3.readTree(COMPLETION_REQ_NULLS);
 		JsonNode current = JACKSON3.readTree(JACKSON3.writeValueAsString(completion));
@@ -227,11 +227,11 @@ class LegacyWireCompatTest {
 
 		AiCompletionRequest viaJson =
 				JACKSON3.readValue(JACKSON3.writeValueAsString(completion), AiCompletionRequest.class);
-		assertEquals(Optional.of(expected), viaJson.unitAmounts());
+		assertEquals(Optional.of(expected), viaJson.optUnitAmounts());
 
 		AiCompletionRequest viaCbor =
 				CBOR.readValue(CBOR.writeValueAsBytes(completion), AiCompletionRequest.class);
-		assertEquals(Optional.of(expected), viaCbor.unitAmounts(),
+		assertEquals(Optional.of(expected), viaCbor.optUnitAmounts(),
 				"amounts are longs; a transport that narrowed them would bill a different number");
 	}
 
@@ -242,7 +242,7 @@ class LegacyWireCompatTest {
 	@Test
 	void deniedResponseIsByteIdenticalToLegacy() throws Exception {
 		AiPreflightResponse denied = new AiPreflightResponse(
-				false, "trk-2", Optional.of(AiDenialCode.TENANT_BLOCKED), Optional.empty());
+				false, "trk-2", AiDenialCode.TENANT_BLOCKED, null);
 
 		assertEquals("{\"a\":false,\"t\":\"trk-2\",\"d\":\"TENANT_BLOCKED\",\"i\":null}",
 				JACKSON3.writeValueAsString(denied));

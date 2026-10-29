@@ -3,6 +3,8 @@ package dev.bluestep.global.dto.aiunitrate;
 import java.time.OffsetDateTime;
 import java.util.Optional;
 
+import org.jspecify.annotations.Nullable;
+
 import dev.bluestep.global.dto.ai.RateVariant;
 import dev.bluestep.global.dto.ai.UnitAxis;
 
@@ -27,7 +29,13 @@ public record AiUnitRateResponse(
 		long rateMicros,
 		long ratePerUnits,
 		long flatMicros,
-		Optional<String> pricingSpec,
+		@Nullable String pricingSpec,
 		OffsetDateTime createdAt,
 		OffsetDateTime updatedAt
-) {}
+) {
+
+	/** {@link #pricingSpec}, as an {@code Optional}. */
+	public Optional<String> optPricingSpec() {
+		return Optional.ofNullable(pricingSpec);
+	}
+}

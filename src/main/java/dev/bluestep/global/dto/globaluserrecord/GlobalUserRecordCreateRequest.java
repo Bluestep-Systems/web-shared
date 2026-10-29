@@ -3,6 +3,9 @@ package dev.bluestep.global.dto.globaluserrecord;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalLong;
+
+import org.jspecify.annotations.Nullable;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
@@ -75,36 +78,25 @@ import jakarta.validation.constraints.Positive;
  */
 public record GlobalUserRecordCreateRequest(
 		@Positive long classid,
-		Optional<Long> seqnum,
-		Optional<@CodePointSize(max = 30) String> firstName,
-		Optional<@CodePointSize(max = 30) String> lastName,
-		Optional<@CodePointSize(max = 50) String> username,
-		Optional<@CodePointSize(max = 255) String> userEmail,
-		@Valid Optional<ResellerKey> reseller,
+		@Nullable Long seqnum,
+		@CodePointSize(max = 30) @Nullable String firstName,
+		@CodePointSize(max = 30) @Nullable String lastName,
+		@CodePointSize(max = 50) @Nullable String username,
+		@CodePointSize(max = 255) @Nullable String userEmail,
+		@Valid @Nullable ResellerKey reseller,
 		boolean superUser,
 		boolean disabled,
-		Optional<@CodePointSize(max = 4000) String> attribs,
-		Optional<LocalDateTime> passwordExpireStart,
+		@CodePointSize(max = 4000) @Nullable String attribs,
+		@Nullable LocalDateTime passwordExpireStart,
 		boolean emailValidated,
-		Optional<LocalDateTime> emailValidatedExpireStart,
+		@Nullable LocalDateTime emailValidatedExpireStart,
 		@Valid List<LinkedAccount> linkedAccounts,
-		Optional<String> storedCredential
+		@Nullable String storedCredential
 ) {
 
-	/** Jackson binds omitted fields to {@code null} whatever this package's null-marking says. */
+	/** An omitted {@code linkedAccounts} binds as {@code null}; it is defaulted to empty and copied. */
 	public GlobalUserRecordCreateRequest {
-		seqnum = seqnum == null ? Optional.empty() : seqnum;
-		firstName = firstName == null ? Optional.empty() : firstName;
-		lastName = lastName == null ? Optional.empty() : lastName;
-		username = username == null ? Optional.empty() : username;
-		userEmail = userEmail == null ? Optional.empty() : userEmail;
-		reseller = reseller == null ? Optional.empty() : reseller;
-		attribs = attribs == null ? Optional.empty() : attribs;
-		passwordExpireStart = passwordExpireStart == null ? Optional.empty() : passwordExpireStart;
-		emailValidatedExpireStart =
-				emailValidatedExpireStart == null ? Optional.empty() : emailValidatedExpireStart;
 		linkedAccounts = linkedAccounts == null ? List.of() : List.copyOf(linkedAccounts);
-		storedCredential = storedCredential == null ? Optional.empty() : storedCredential;
 	}
 
 	/**
@@ -129,7 +121,56 @@ public record GlobalUserRecordCreateRequest(
 	@JsonIgnore
 	@AssertTrue(message = "storedCredential must be the monolith's stored form, not a password")
 	public boolean isStoredCredentialInStoredForm() {
-		return storedCredential.map(StoredForm::carriesGenerationMarker).orElse(true);
+		return storedCredential == null || StoredForm.carriesGenerationMarker(storedCredential);
 	}
 
+	/** {@link #seqnum}, as an {@code OptionalLong}. */
+	public OptionalLong optSeqnum() {
+		return seqnum == null ? OptionalLong.empty() : OptionalLong.of(seqnum);
+	}
+
+	/** {@link #firstName}, as an {@code Optional}. */
+	public Optional<String> optFirstName() {
+		return Optional.ofNullable(firstName);
+	}
+
+	/** {@link #lastName}, as an {@code Optional}. */
+	public Optional<String> optLastName() {
+		return Optional.ofNullable(lastName);
+	}
+
+	/** {@link #username}, as an {@code Optional}. */
+	public Optional<String> optUsername() {
+		return Optional.ofNullable(username);
+	}
+
+	/** {@link #userEmail}, as an {@code Optional}. */
+	public Optional<String> optUserEmail() {
+		return Optional.ofNullable(userEmail);
+	}
+
+	/** {@link #reseller}, as an {@code Optional}. */
+	public Optional<ResellerKey> optReseller() {
+		return Optional.ofNullable(reseller);
+	}
+
+	/** {@link #attribs}, as an {@code Optional}. */
+	public Optional<String> optAttribs() {
+		return Optional.ofNullable(attribs);
+	}
+
+	/** {@link #passwordExpireStart}, as an {@code Optional}. */
+	public Optional<LocalDateTime> optPasswordExpireStart() {
+		return Optional.ofNullable(passwordExpireStart);
+	}
+
+	/** {@link #emailValidatedExpireStart}, as an {@code Optional}. */
+	public Optional<LocalDateTime> optEmailValidatedExpireStart() {
+		return Optional.ofNullable(emailValidatedExpireStart);
+	}
+
+	/** {@link #storedCredential}, as an {@code Optional}. */
+	public Optional<String> optStoredCredential() {
+		return Optional.ofNullable(storedCredential);
+	}
 }
