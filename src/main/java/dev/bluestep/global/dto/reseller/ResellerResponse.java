@@ -2,6 +2,8 @@ package dev.bluestep.global.dto.reseller;
 
 import java.util.Optional;
 
+import org.jspecify.annotations.Nullable;
+
 import dev.bluestep.global.dto.tenantaccess.ResellerKey;
 
 /**
@@ -27,10 +29,30 @@ import dev.bluestep.global.dto.tenantaccess.ResellerKey;
  */
 public record ResellerResponse(
 		ResellerKey reseller,
-		Optional<String> supportEmail,
-		Optional<String> defaultDomain,
-		Optional<String> privacyPageUrl,
-		Optional<String> termsPageUrl,
+		@Nullable String supportEmail,
+		@Nullable String defaultDomain,
+		@Nullable String privacyPageUrl,
+		@Nullable String termsPageUrl,
 		ResellerIcons icons
 ) {
+
+	/** {@link #supportEmail}, as an {@code Optional}. */
+	public Optional<String> optSupportEmail() {
+		return Optional.ofNullable(supportEmail);
+	}
+
+	/** {@link #defaultDomain}, as an {@code Optional}. */
+	public Optional<String> optDefaultDomain() {
+		return Optional.ofNullable(defaultDomain);
+	}
+
+	/** {@link #privacyPageUrl}, as an {@code Optional}. */
+	public Optional<String> optPrivacyPageUrl() {
+		return Optional.ofNullable(privacyPageUrl);
+	}
+
+	/** {@link #termsPageUrl}, as an {@code Optional}. */
+	public Optional<String> optTermsPageUrl() {
+		return Optional.ofNullable(termsPageUrl);
+	}
 }

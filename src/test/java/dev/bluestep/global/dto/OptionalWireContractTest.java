@@ -1,9 +1,12 @@
 package dev.bluestep.global.dto;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Optional;
+import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 import org.junit.jupiter.api.Test;
 
@@ -18,25 +21,18 @@ import dev.bluestep.global.dto.ai.BudgetSchedule;
 import dev.bluestep.global.dto.aitenantconfig.AiTenantConfigRequest;
 
 /**
- * Pins the wire behaviour that makes the "no null record components" rule workable.
+ * Pins the wire behaviour of an optional record component.
  *
- * <p>The rule leans on one specific Jackson property: an {@code Optional<T>} component binds to
- * {@link Optional#empty()} for both an absent key and an explicit JSON null, so replacing a nullable
- * component with an {@code Optional} is invisible to clients.</p>
- *
- * <p>Jackson 3 ({@code tools.jackson.*}) only — the family every consumer of this module runs. Jackson
- * 3 absorbed the JDK8 datatypes into core, so that property holds with <em>no module registered</em>,
- * which {@link #optionalBindsWithNoModuleRegistered()} pins. That is why, since 5.0.0, this module no
- * longer publishes {@code jackson-datatype-jdk8}: it was the Jackson 2 answer to the same problem, and
- * the last Jackson 2 mapper these DTOs met (web-global's msgpack converter) is retired. A consumer that
- * still binds them with Jackson 2 has to register that module itself, or absent and null fields bind
- * literal {@code null} into components the type system says can never be null.</p>
+ * <p>An optional component is a {@code @Nullable} value read through an {@code optX()} accessor
+ * (6.0.0; before it the component itself was {@code Optional<T>}). Both spellings bind an absent key
+ * and an explicit JSON null as absent, and both write an absent value as JSON null under the default
+ * inclusion, so the move is invisible to clients. This class pins that against a bare Jackson 3 mapper
+ * ({@code tools.jackson.*}), the family every consumer of this module runs.</p>
  */
 class OptionalWireContractTest {
 
 	/**
-	 * Deliberately bare — no module registered. Mirrors what Spring Boot 4 auto-configures,
-	 * and proves the Optional support is core behaviour rather than something added on.
+	 * Deliberately bare — no module registered. Mirrors what Spring Boot 4 auto-configures.
 	 */
 	private static final ObjectMapper MAPPER = JsonMapper.builder().build();
 
@@ -45,10 +41,9 @@ class OptionalWireContractTest {
 		AiTenantConfigRequest request = MAPPER.readValue("""
 				{"tenantId":"acme","maxIterations":5}""", AiTenantConfigRequest.class);
 
-		assertEquals(Optional.empty(), request.unitId(),
-				"Jackson 3 folds the JDK8 datatypes into core — an absent key must bind empty, not null");
-		assertEquals(Optional.empty(), request.flag());
-		assertEquals(Optional.empty(), request.maxSpendMicros());
+		assertEquals(Optional.empty(), request.optUnitId(), "an absent key must bind absent");
+		assertEquals(Optional.empty(), request.optFlag());
+		assertEquals(OptionalLong.empty(), request.optMaxSpendMicros());
 	}
 
 	@Test
@@ -56,12 +51,12 @@ class OptionalWireContractTest {
 		AiTenantConfigRequest request = MAPPER.readValue("""
 				{"tenantId":"acme","maxIterations":5}""", AiTenantConfigRequest.class);
 
-		assertEquals(Optional.empty(), request.unitId());
-		assertEquals(Optional.empty(), request.flag());
-		assertEquals(Optional.empty(), request.maxSpendMicros());
-		assertEquals(Optional.empty(), request.budgetSchedule());
-		assertEquals(Optional.empty(), request.utcOffsetMinutes());
-		assertEquals(Optional.empty(), request.enabled());
+		assertEquals(Optional.empty(), request.optUnitId());
+		assertEquals(Optional.empty(), request.optFlag());
+		assertEquals(OptionalLong.empty(), request.optMaxSpendMicros());
+		assertEquals(Optional.empty(), request.optBudgetSchedule());
+		assertEquals(OptionalInt.empty(), request.optUtcOffsetMinutes());
+		assertEquals(Optional.empty(), request.optEnabled());
 	}
 
 	@Test
@@ -71,9 +66,9 @@ class OptionalWireContractTest {
 				 "flag":null,"maxSpendMicros":null,"budgetSchedule":null,
 				 "utcOffsetMinutes":null,"enabled":null}""", AiTenantConfigRequest.class);
 
-		assertEquals(Optional.empty(), request.unitId());
-		assertEquals(Optional.empty(), request.maxSpendMicros());
-		assertEquals(Optional.empty(), request.budgetSchedule());
+		assertEquals(Optional.empty(), request.optUnitId());
+		assertEquals(OptionalLong.empty(), request.optMaxSpendMicros());
+		assertEquals(Optional.empty(), request.optBudgetSchedule());
 	}
 
 	@Test
@@ -83,40 +78,37 @@ class OptionalWireContractTest {
 				 "maxSpendMicros":250000,"maxIterations":5,"budgetSchedule":"MONTHLY",
 				 "utcOffsetMinutes":-420,"enabled":true}""", AiTenantConfigRequest.class);
 
-		assertEquals(Optional.of("org-1"), request.unitId());
-		assertEquals(Optional.of("chat"), request.flag());
-		assertEquals(Optional.of(250_000L), request.maxSpendMicros());
-		assertEquals(Optional.of(BudgetSchedule.MONTHLY), request.budgetSchedule());
-		assertEquals(Optional.of(-420), request.utcOffsetMinutes());
-		assertEquals(Optional.of(Boolean.TRUE), request.enabled());
+		assertEquals(Optional.of("org-1"), request.optUnitId());
+		assertEquals(Optional.of("chat"), request.optFlag());
+		assertEquals(OptionalLong.of(250_000L), request.optMaxSpendMicros());
+		assertEquals(Optional.of(BudgetSchedule.MONTHLY), request.optBudgetSchedule());
+		assertEquals(OptionalInt.of(-420), request.optUtcOffsetMinutes());
+		assertEquals(Optional.of(Boolean.TRUE), request.optEnabled());
 	}
 
 	/**
-	 * The wire shape is unchanged by the migration under the default inclusion: an empty
-	 * Optional serializes as JSON null, exactly as the nullable component it replaced did.
-	 * See {@link #nonNullInclusionIsTheOneSettingThatDiverges()} for the one configuration
-	 * where that stops being true.
+	 * The wire shape is unchanged under the default inclusion: an absent value serializes as JSON
+	 * null, exactly as the empty {@code Optional} component of 5.x did.
 	 */
 	@Test
 	void emptyOptionalSerializesAsJsonNull() throws Exception {
-		String json = MAPPER.writeValueAsString(
-				new AiPreflightResponse(true, "trk-1", Optional.empty(), Optional.of(4)));
+		String json = MAPPER.writeValueAsString(new AiPreflightResponse(true, "trk-1", null, 4));
 
-		assertTrue(json.contains("\"d\":null"), "empty Optional should serialize as null, got: " + json);
-		assertTrue(json.contains("\"i\":4"), "present Optional should serialize unwrapped, got: " + json);
+		assertTrue(json.contains("\"d\":null"), "an absent value should serialize as null, got: " + json);
+		assertTrue(json.contains("\"i\":4"), "a present value should serialize unwrapped, got: " + json);
 	}
 
 	@Test
 	void optionalSurvivesARoundTrip() throws Exception {
-		AiPreflightResponse denied =
-				new AiPreflightResponse(false, "trk-2", Optional.of(AiDenialCode.TENANT_BLOCKED), Optional.empty());
+		AiPreflightResponse denied = new AiPreflightResponse(false, "trk-2", AiDenialCode.TENANT_BLOCKED, null);
 
 		AiPreflightResponse decoded =
 				MAPPER.readValue(MAPPER.writeValueAsString(denied), AiPreflightResponse.class);
 
 		assertEquals(denied, decoded);
-		assertEquals(Optional.of(AiDenialCode.TENANT_BLOCKED), decoded.denialCode());
-		assertEquals(Optional.empty(), decoded.maxIterations());
+		assertEquals(Optional.of(AiDenialCode.TENANT_BLOCKED), decoded.optDenialCode());
+		assertEquals(OptionalInt.empty(), decoded.optMaxIterations());
+		assertNull(decoded.maxIterations());
 	}
 
 	/**
@@ -128,29 +120,22 @@ class OptionalWireContractTest {
 	 */
 	@Test
 	void shortKeysAreTheWire() throws Exception {
-		AiPreflightResponse response =
-				new AiPreflightResponse(false, "trk-3", Optional.of(AiDenialCode.BUDGET_EXCEEDED), Optional.empty());
+		AiPreflightResponse response = new AiPreflightResponse(false, "trk-3", AiDenialCode.BUDGET_EXCEEDED, null);
 
 		assertEquals("{\"a\":false,\"t\":\"trk-3\",\"d\":\"BUDGET_EXCEEDED\",\"i\":null}",
 				MAPPER.writeValueAsString(response));
 	}
 
 	/**
-	 * The one inclusion setting where "invisible to clients" stops holding, pinned so the
-	 * boundary is discoverable before someone crosses it.
-	 *
-	 * <p>{@code NON_NULL} is the obvious reach for trimming payloads, and it is the wrong
-	 * one here: an empty {@code Optional} is not null, so it is <em>included</em> and
-	 * written as {@code null}, where the nullable component it replaced would have been
-	 * omitted. {@code NON_ABSENT} is the Optional-aware equivalent and preserves the old
-	 * shape. Nothing in web-global sets a non-default inclusion today — this exists so that
-	 * a future {@code spring.jackson.default-property-inclusion: non_null} is a caught
-	 * decision rather than a silent wire change.</p>
+	 * Under {@code NON_NULL} and {@code NON_ABSENT} an absent value is omitted. With the 5.x
+	 * {@code Optional} components {@code NON_NULL} kept an empty {@code Optional} and wrote it as
+	 * {@code null}; a nullable component is plain null, so the two settings now agree. Nothing in
+	 * web-global sets a non-default inclusion; this pins the behaviour so a future
+	 * {@code spring.jackson.default-property-inclusion} is a caught decision.
 	 */
 	@Test
-	void nonNullInclusionIsTheOneSettingThatDiverges() throws Exception {
-		AiPreflightResponse response =
-				new AiPreflightResponse(true, "trk-1", Optional.empty(), Optional.empty());
+	void nonNullAndNonAbsentInclusionBothOmitAnAbsentValue() throws Exception {
+		AiPreflightResponse response = new AiPreflightResponse(true, "trk-1", null, null);
 
 		ObjectMapper nonNull = JsonMapper.builder()
 				.changeDefaultPropertyInclusion(inclusion -> JsonInclude.Value.construct(
@@ -161,10 +146,7 @@ class OptionalWireContractTest {
 						JsonInclude.Include.NON_ABSENT, JsonInclude.Include.NON_ABSENT))
 				.build();
 
-		assertEquals("{\"a\":true,\"t\":\"trk-1\",\"d\":null,\"i\":null}",
-				nonNull.writeValueAsString(response),
-				"NON_NULL keeps empty Optionals — an empty Optional is not null");
-		assertEquals("{\"a\":true,\"t\":\"trk-1\"}", nonAbsent.writeValueAsString(response),
-				"NON_ABSENT is the Optional-aware setting and reproduces the pre-migration shape");
+		assertEquals("{\"a\":true,\"t\":\"trk-1\"}", nonNull.writeValueAsString(response));
+		assertEquals("{\"a\":true,\"t\":\"trk-1\"}", nonAbsent.writeValueAsString(response));
 	}
 }

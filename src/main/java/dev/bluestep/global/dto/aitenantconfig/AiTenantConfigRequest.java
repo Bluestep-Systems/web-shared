@@ -1,6 +1,10 @@
 package dev.bluestep.global.dto.aitenantconfig;
 
 import java.util.Optional;
+import java.util.OptionalInt;
+import java.util.OptionalLong;
+
+import org.jspecify.annotations.Nullable;
 
 import dev.bluestep.global.dto.ai.BudgetSchedule;
 import jakarta.validation.constraints.Max;
@@ -40,12 +44,48 @@ import jakarta.validation.constraints.Positive;
  */
 public record AiTenantConfigRequest(
 		@NotBlank String tenantId,
-		Optional<String> unitId,
-		Optional<String> userId,
-		Optional<String> flag,
-		Optional<@Positive Long> maxSpendMicros,
+		@Nullable String unitId,
+		@Nullable String userId,
+		@Nullable String flag,
+		@Positive @Nullable Long maxSpendMicros,
 		@NotNull @Positive Integer maxIterations,
-		Optional<BudgetSchedule> budgetSchedule,
-		Optional<@Min(-1080) @Max(1080) Integer> utcOffsetMinutes,
-		Optional<Boolean> enabled
-) {}
+		@Nullable BudgetSchedule budgetSchedule,
+		@Min(-1080) @Max(1080) @Nullable Integer utcOffsetMinutes,
+		@Nullable Boolean enabled
+) {
+
+	/** {@link #unitId}, as an {@code Optional}. */
+	public Optional<String> optUnitId() {
+		return Optional.ofNullable(unitId);
+	}
+
+	/** {@link #userId}, as an {@code Optional}. */
+	public Optional<String> optUserId() {
+		return Optional.ofNullable(userId);
+	}
+
+	/** {@link #flag}, as an {@code Optional}. */
+	public Optional<String> optFlag() {
+		return Optional.ofNullable(flag);
+	}
+
+	/** {@link #maxSpendMicros}, as an {@code OptionalLong}. */
+	public OptionalLong optMaxSpendMicros() {
+		return maxSpendMicros == null ? OptionalLong.empty() : OptionalLong.of(maxSpendMicros);
+	}
+
+	/** {@link #budgetSchedule}, as an {@code Optional}. */
+	public Optional<BudgetSchedule> optBudgetSchedule() {
+		return Optional.ofNullable(budgetSchedule);
+	}
+
+	/** {@link #utcOffsetMinutes}, as an {@code OptionalInt}. */
+	public OptionalInt optUtcOffsetMinutes() {
+		return utcOffsetMinutes == null ? OptionalInt.empty() : OptionalInt.of(utcOffsetMinutes);
+	}
+
+	/** {@link #enabled}, as an {@code Optional}. */
+	public Optional<Boolean> optEnabled() {
+		return Optional.ofNullable(enabled);
+	}
+}

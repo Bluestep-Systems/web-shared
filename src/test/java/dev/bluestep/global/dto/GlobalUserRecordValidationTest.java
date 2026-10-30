@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 
 import org.hibernate.validator.messageinterpolation.ParameterMessageInterpolator;
@@ -28,14 +27,8 @@ import jakarta.validation.ValidatorFactory;
  * proves their logic and nothing about whether anything ever invokes them. The annotations are part
  * of this module's published contract — the {@code @Size} bounds in particular are the column widths,
  * and a consumer relies on them to answer 400 at its edge — so "the annotation is in the source" has
- * to be distinguishable from "the annotation fires". Swap two {@code @Size} values, or move one onto
- * the {@code Optional} instead of its type argument, and every assertion in the sibling suite still
- * passes.</p>
- *
- * <p>The container-element placement is the specific thing worth pinning. A constraint written
- * {@code @Size Optional<String>} rather than {@code Optional<@Size String>} is checked against the
- * {@code Optional} itself and fails at runtime with "no validator could be found" — a mistake that
- * looks identical in a diff and is invisible until a request arrives.</p>
+ * to be distinguishable from "the annotation fires". Swap two {@code @Size} values, or drop one, and every
+ * assertion in the sibling suite still passes.</p>
  *
  * <p>{@link ParameterMessageInterpolator} rather than the default: the default wants an Expression
  * Language implementation on the classpath, and these assertions are about which constraints fired
@@ -86,18 +79,18 @@ class GlobalUserRecordValidationTest {
 	@DisplayName("the email bound is 255 and the attribs bound is 4000")
 	void size_boundsOnTheWiderColumns() {
 		GlobalUserRecordCreateRequest longEmail = new GlobalUserRecordCreateRequest(CLASSID,
-				Optional.empty(), Optional.of("Del"), Optional.of("Novak"), Optional.of("del.novak"),
-				Optional.of(name(256)), Optional.empty(), false, false, Optional.empty(),
-				Optional.empty(), false, Optional.empty(), List.of(), Optional.of(STORED_CREDENTIAL));
+				null, "Del", "Novak", "del.novak",
+				name(256), null, false, false, null,
+				null, false, null, List.of(), STORED_CREDENTIAL);
 		assertEquals(Set.of("userEmail"), violatedPaths(longEmail));
 
 		// Base64 so the shape guard is satisfied and only the length can be at fault.
 		String longAttribs = "Q".repeat(4004);
 		GlobalUserRecordCreateRequest bigAttribs = new GlobalUserRecordCreateRequest(CLASSID,
-				Optional.empty(), Optional.of("Del"), Optional.of("Novak"), Optional.of("del.novak"),
-				Optional.of("del@example.test"), Optional.empty(), false, false,
-				Optional.of(longAttribs), Optional.empty(), false, Optional.empty(), List.of(),
-				Optional.of(STORED_CREDENTIAL));
+				null, "Del", "Novak", "del.novak",
+				"del@example.test", null, false, false,
+				longAttribs, null, false, null, List.of(),
+				STORED_CREDENTIAL);
 		assertEquals(Set.of("attribs"), violatedPaths(bigAttribs));
 	}
 
@@ -135,9 +128,9 @@ class GlobalUserRecordValidationTest {
 	@DisplayName("the update shape carries the same bounds as the create shape")
 	void size_updateMatchesCreate() {
 		GlobalUserRecordUpdateRequest tooLong = new GlobalUserRecordUpdateRequest(
-				Optional.of(name(31)), Optional.of("Novak"), Optional.of(name(51)),
-				Optional.of("del@example.test"), Optional.empty(), false, false, Optional.empty(),
-				Optional.empty(), false, Optional.empty(), List.of());
+				name(31), "Novak", name(51),
+				"del@example.test", null, false, false, null,
+				null, false, null, List.of());
 
 		assertEquals(Set.of("firstName", "username"), violatedPaths(tooLong),
 				"a bound on create but not update lets a row be edited into a state it could not be "
@@ -151,10 +144,10 @@ class GlobalUserRecordValidationTest {
 	void positive_classidMustBePositive() {
 		for (long classid : new long[] {0L, -1L}) {
 			GlobalUserRecordCreateRequest request = new GlobalUserRecordCreateRequest(classid,
-					Optional.empty(), Optional.of("Del"), Optional.of("Novak"),
-					Optional.of("del.novak"), Optional.of("del@example.test"), Optional.empty(),
-					false, false, Optional.empty(), Optional.empty(), false, Optional.empty(),
-					List.of(), Optional.of(STORED_CREDENTIAL));
+					null, "Del", "Novak",
+					"del.novak", "del@example.test", null,
+					false, false, null, null, false, null,
+					List.of(), STORED_CREDENTIAL);
 
 			assertEquals(Set.of("classid"), violatedPaths(request),
 					"classid " + classid + " would create a row under a class nothing can find");
@@ -210,16 +203,16 @@ class GlobalUserRecordValidationTest {
 	@Test
 	@DisplayName("attribs carries no shape constraint, on either write shape")
 	void attribsIsNotShapeConstrained() {
-		assertEquals(Set.of(), violatedPaths(new GlobalUserRecordUpdateRequest(Optional.of("Del"),
-				Optional.of("Novak"), Optional.of("del.novak"), Optional.of("del@example.test"),
-				Optional.empty(), false, false, Optional.of("PLATFORM_A,PLATFORM_B"),
-				Optional.empty(), false, Optional.empty(), List.of())));
+		assertEquals(Set.of(), violatedPaths(new GlobalUserRecordUpdateRequest("Del",
+				"Novak", "del.novak", "del@example.test",
+				null, false, false, "PLATFORM_A,PLATFORM_B",
+				null, false, null, List.of())));
 
-		assertTrue(violatedPaths(new GlobalUserRecordCreateRequest(CLASSID, Optional.empty(),
-				Optional.of("Del"), Optional.of("Novak"), Optional.of("del.novak"),
-				Optional.of("del@example.test"), Optional.empty(), false, false,
-				Optional.of("PLATFORM_A,PLATFORM_B"), Optional.empty(), false, Optional.empty(),
-				List.of(), Optional.of(STORED_CREDENTIAL))).isEmpty());
+		assertTrue(violatedPaths(new GlobalUserRecordCreateRequest(CLASSID, null,
+				"Del", "Novak", "del.novak",
+				"del@example.test", null, false, false,
+				"PLATFORM_A,PLATFORM_B", null, false, null,
+				List.of(), STORED_CREDENTIAL)).isEmpty());
 	}
 
 	/** A fully-populated, well-formed request must produce no violations at all. */
@@ -238,9 +231,9 @@ class GlobalUserRecordValidationTest {
 
 	private static GlobalUserRecordCreateRequest create(String firstName, String lastName,
 			String username) {
-		return new GlobalUserRecordCreateRequest(CLASSID, Optional.empty(), Optional.of(firstName),
-				Optional.of(lastName), Optional.of(username), Optional.of("del@example.test"),
-				Optional.empty(), false, false, Optional.empty(), Optional.empty(), false,
-				Optional.empty(), List.of(), Optional.of(STORED_CREDENTIAL));
+		return new GlobalUserRecordCreateRequest(CLASSID, null, firstName,
+				lastName, username, "del@example.test",
+				null, false, false, null, null, false,
+				null, List.of(), STORED_CREDENTIAL);
 	}
 }

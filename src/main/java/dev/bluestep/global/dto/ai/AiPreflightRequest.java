@@ -2,6 +2,8 @@ package dev.bluestep.global.dto.ai;
 
 import java.util.Optional;
 
+import org.jspecify.annotations.Nullable;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import jakarta.validation.constraints.NotBlank;
@@ -12,7 +14,7 @@ import jakarta.validation.constraints.NotBlank;
  * dimension is declared — every call costs and is checked against the same ceiling.
  * {@code provider}/{@code model} let the gate fail closed when a model has no
  * {@code ai_unit_rate} pricing (it can't be metered, so it can't be authorized).
- * {@code flag} and {@code triggeringProcess} are empty when the caller does not
+ * {@code flag} and {@code triggeringProcess} are absent when the caller does not
  * narrow by them.
  *
  * <p><b>The 4.0.0 rename did not touch this wire.</b> {@code tenantId} and {@code unitId} were
@@ -27,7 +29,18 @@ public record AiPreflightRequest(
 		@NotBlank @JsonProperty("s") String tenantId,
 		@NotBlank @JsonProperty("o") String unitId,
 		@NotBlank @JsonProperty("u") String userId,
-		@JsonProperty("f") Optional<String> flag,
-		@JsonProperty("t") Optional<String> triggeringProcess,
+		@JsonProperty("f") @Nullable String flag,
+		@JsonProperty("t") @Nullable String triggeringProcess,
 		@NotBlank @JsonProperty("p") String provider,
-		@NotBlank @JsonProperty("m") String model) {}
+		@NotBlank @JsonProperty("m") String model) {
+
+	/** {@link #flag}, as an {@code Optional}: empty when the caller does not narrow by a flag. */
+	public Optional<String> optFlag() {
+		return Optional.ofNullable(flag);
+	}
+
+	/** {@link #triggeringProcess}, as an {@code Optional}: empty when the caller does not name one. */
+	public Optional<String> optTriggeringProcess() {
+		return Optional.ofNullable(triggeringProcess);
+	}
+}

@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import org.jspecify.annotations.Nullable;
+
 import dev.bluestep.global.dto.constraints.CodePointSize;
 import dev.bluestep.global.dto.tenantaccess.ResellerKey;
 import jakarta.validation.Valid;
@@ -13,7 +15,7 @@ import jakarta.validation.Valid;
  *
  * <h2>The whole record, not a patch</h2>
  *
- * <p>Every editable column is named on every call, and an absent {@code Optional} sets the column to
+ * <p>Every editable column is named on every call, and an absent value sets the column to
  * NULL rather than leaving it alone. That is what the monolith's own {@code UPDATE} does, and keeping
  * it means a caller cannot half-apply an edit by omitting a field it did not think had changed. A
  * partial update is a different operation with different failure modes; if one is ever wanted it
@@ -48,32 +50,62 @@ import jakarta.validation.Valid;
  *                  mistaken for "no change".
  */
 public record GlobalUserRecordUpdateRequest(
-		Optional<@CodePointSize(max = 30) String> firstName,
-		Optional<@CodePointSize(max = 30) String> lastName,
-		Optional<@CodePointSize(max = 50) String> username,
-		Optional<@CodePointSize(max = 255) String> userEmail,
-		@Valid Optional<ResellerKey> reseller,
+		@CodePointSize(max = 30) @Nullable String firstName,
+		@CodePointSize(max = 30) @Nullable String lastName,
+		@CodePointSize(max = 50) @Nullable String username,
+		@CodePointSize(max = 255) @Nullable String userEmail,
+		@Valid @Nullable ResellerKey reseller,
 		boolean superUser,
 		boolean disabled,
-		Optional<@CodePointSize(max = 4000) String> attribs,
-		Optional<LocalDateTime> passwordExpireStart,
+		@CodePointSize(max = 4000) @Nullable String attribs,
+		@Nullable LocalDateTime passwordExpireStart,
 		boolean emailValidated,
-		Optional<LocalDateTime> emailValidatedExpireStart,
+		@Nullable LocalDateTime emailValidatedExpireStart,
 		@Valid List<LinkedAccount> linkedAccounts
 ) {
 
-	/** Jackson binds omitted fields to {@code null} whatever this package's null-marking says. */
+	/** An omitted {@code linkedAccounts} binds as {@code null}; it is defaulted to empty and copied. */
 	public GlobalUserRecordUpdateRequest {
-		firstName = firstName == null ? Optional.empty() : firstName;
-		lastName = lastName == null ? Optional.empty() : lastName;
-		username = username == null ? Optional.empty() : username;
-		userEmail = userEmail == null ? Optional.empty() : userEmail;
-		reseller = reseller == null ? Optional.empty() : reseller;
-		attribs = attribs == null ? Optional.empty() : attribs;
-		passwordExpireStart = passwordExpireStart == null ? Optional.empty() : passwordExpireStart;
-		emailValidatedExpireStart =
-				emailValidatedExpireStart == null ? Optional.empty() : emailValidatedExpireStart;
 		linkedAccounts = linkedAccounts == null ? List.of() : List.copyOf(linkedAccounts);
 	}
 
+	/** {@link #firstName}, as an {@code Optional}. */
+	public Optional<String> optFirstName() {
+		return Optional.ofNullable(firstName);
+	}
+
+	/** {@link #lastName}, as an {@code Optional}. */
+	public Optional<String> optLastName() {
+		return Optional.ofNullable(lastName);
+	}
+
+	/** {@link #username}, as an {@code Optional}. */
+	public Optional<String> optUsername() {
+		return Optional.ofNullable(username);
+	}
+
+	/** {@link #userEmail}, as an {@code Optional}. */
+	public Optional<String> optUserEmail() {
+		return Optional.ofNullable(userEmail);
+	}
+
+	/** {@link #reseller}, as an {@code Optional}. */
+	public Optional<ResellerKey> optReseller() {
+		return Optional.ofNullable(reseller);
+	}
+
+	/** {@link #attribs}, as an {@code Optional}. */
+	public Optional<String> optAttribs() {
+		return Optional.ofNullable(attribs);
+	}
+
+	/** {@link #passwordExpireStart}, as an {@code Optional}. */
+	public Optional<LocalDateTime> optPasswordExpireStart() {
+		return Optional.ofNullable(passwordExpireStart);
+	}
+
+	/** {@link #emailValidatedExpireStart}, as an {@code Optional}. */
+	public Optional<LocalDateTime> optEmailValidatedExpireStart() {
+		return Optional.ofNullable(emailValidatedExpireStart);
+	}
 }
