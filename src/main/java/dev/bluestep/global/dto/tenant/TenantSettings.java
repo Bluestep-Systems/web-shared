@@ -41,9 +41,9 @@ import jakarta.validation.constraints.NotNull;
  *
  * <p>Each string bound is the width of the {@code global.association} column behind it, as production
  * declares it, counted in code points ({@link CodePointSize}) as {@code varchar(n)} counts.
- * {@code namespace} is a {@link NamespaceName}, which refuses a name that is not a Kubernetes DNS label
- * when the body binds, and it must also name a namespace web-global knows; an unknown one is a
- * {@code 400}.</p>
+ * {@code namespace} is a {@link NamespaceName}, validated here ({@code @Valid}) as a Kubernetes DNS
+ * label, so a request naming one that is not is a {@code 400}. It must also name a namespace
+ * web-global knows; an unknown one is a {@code 400} too.</p>
  *
  * @param name                the tenant's name, also its root organization's
  * @param shortName           {@code shortname}
@@ -68,7 +68,7 @@ public record TenantSettings(
 		@CodePointSize(max = 50) @Nullable String shortName,
 		@CodePointSize(max = 4000) @Nullable String mission,
 		@NotNull ResellerKey reseller,
-		@NotNull NamespaceName namespace,
+		@NotNull @Valid NamespaceName namespace,
 		long flags,
 		@NotNull TenantFeatures features,
 		@CodePointSize(max = 100) @Nullable String requiredEndorsement,

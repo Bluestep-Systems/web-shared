@@ -204,10 +204,15 @@ class TenantWriteWireTest {
 	@Test
 	void settings_carryTheNamespaceAsABareStringAndRefuseAnInvalidOne() {
 		String json = JSON.writeValueAsString(settings("Harbor Clinic"));
+		String invalid = json.replace("\"namespace\":\"web-a\",", "\"namespace\":\"Web_A\",");
 
 		assertTrue(json.contains("\"namespace\":\"web-a\","), json);
-		assertThrows(JacksonException.class, () -> JSON.readValue(
-				json.replace("\"namespace\":\"web-a\",", "\"namespace\":\"Web_A\","), TenantSettings.class));
+		TenantSettings bound = JSON.readValue(invalid, TenantSettings.class);
+		assertEquals("Web_A", bound.namespace().value());
+		assertEquals(Set.of("namespace.value"), violatedPaths(bound));
+		assertEquals(Set.of("settings.namespace.value"), violatedPaths(new TenantUpdateRequest(bound, null)));
+		assertEquals(Set.of("settings.namespace.value"),
+				violatedPaths(new TenantCreateRequest(TENANT, "U137803", bound, null, null)));
 	}
 
 	@Test

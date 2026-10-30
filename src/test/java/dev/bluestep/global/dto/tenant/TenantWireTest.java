@@ -33,8 +33,12 @@ class TenantWireTest {
 	private static final TenantKey TENANT = new TenantKey(TenantKey.CLASSID, 137_803L);
 
 	private static TenantRecordResponse record(TenantActor creator, TenantActor modifier) {
+		return record(creator, modifier, NamespaceName.of("web-a"));
+	}
+
+	private static TenantRecordResponse record(TenantActor creator, TenantActor modifier, NamespaceName namespace) {
 		return new TenantRecordResponse(TENANT, "Harbor Clinic", null, "harbor", "care", "U137803",
-				new ResellerKey(111_222L, 1L), NamespaceName.of("web-a"), 8L,
+				new ResellerKey(111_222L, 1L), namespace, 8L,
 				new TenantFeatures(true, false, false, false, false, true, true, false, true, false, false, false,
 						true),
 				new TenantLock(5, true, LocalDateTime.of(2026, 10, 1, 8, 30), 60, "soon", "now", "done"),
@@ -90,6 +94,26 @@ class TenantWireTest {
 				"enableChangeHistory":true,"enableObjectStats":false,"enableAlerts":true,"global":false}]}""",
 				JSON.writeValueAsString(new TenantSnapshotResponse(List.of(entry))));
 		assertEquals(List.of(), JSON.readValue("{}", TenantSnapshotResponse.class).tenants());
+	}
+
+	/**
+	 * Older monolith builds write {@code association.namespace} unchecked, so a stored name may not be a
+	 * DNS label. The record and the snapshot carry it as stored: one such row must not fail the read.
+	 */
+	@Test
+	void aStoredNamespaceThatIsNotADnsLabel_roundTripsInTheRecordAndTheSnapshot() throws Exception {
+		NamespaceName stored = NamespaceName.of("Web_A");
+		TenantRecordResponse sent = record(null, null, stored);
+		TenantSnapshotEntry entry = new TenantSnapshotEntry(TENANT, new ResellerKey(111_222L, 1L), stored, 0, 0L,
+				false, false, false, false);
+
+		TenantRecordResponse read = JSON.readValue(JSON.writeValueAsString(sent), TenantRecordResponse.class);
+		TenantSnapshotResponse snapshot = JSON.readValue(
+				JSON.writeValueAsString(new TenantSnapshotResponse(List.of(entry))), TenantSnapshotResponse.class);
+
+		assertEquals(sent, read);
+		assertEquals(List.of(entry), snapshot.tenants());
+		assertEquals("Web_A", snapshot.tenants().get(0).optNamespace().orElseThrow().value());
 	}
 
 	@Test

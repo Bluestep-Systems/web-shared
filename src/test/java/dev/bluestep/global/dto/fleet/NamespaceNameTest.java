@@ -1,28 +1,57 @@
 package dev.bluestep.global.dto.fleet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
+import org.hibernate.validator.messageinterpolation.ParameterMessageInterpolator;
 import org.junit.jupiter.api.Test;
 
-import tools.jackson.core.JacksonException;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validation;
+import jakarta.validation.Validator;
+import jakarta.validation.ValidatorFactory;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Pins {@link NamespaceName}: the bare string on the wire both ways, and the DNS-label rule it holds a
- * name to, whether built in code or bound from JSON.
+ * Pins {@link NamespaceName}: the bare string on the wire both ways; any stored string builds and
+ * binds, so one bad row cannot fail a read; and the DNS-label rule holds only where a request is
+ * validated.
  */
 class NamespaceNameTest {
 
 	private static final ObjectMapper JSON = JsonMapper.builder().build();
 
+	private static final Validator VALIDATOR = validator();
+
 	/** Names that are not DNS labels, one per way of failing the rule. */
 	private static final List<String> INVALID = List.of("", " ", "Web-a", "web_a", "-web", "web-", "web.a",
 			"web a", "n".repeat(NamespaceName.MAX_LENGTH + 1));
+
+	/** DNS labels at each edge of the rule. */
+	private static final List<String> VALID = List.of("a", "7", "b6p-07", "web--a",
+			"n".repeat(NamespaceName.MAX_LENGTH));
+
+	private static Validator validator() {
+		try (ValidatorFactory factory = Validation.byDefaultProvider().configure()
+				.messageInterpolator(new ParameterMessageInterpolator())
+				.buildValidatorFactory()) {
+			return factory.getValidator();
+		}
+	}
+
+	private static Set<String> violatedPaths(Object bean) {
+		return VALIDATOR.validate(bean).stream()
+				.map(ConstraintViolation::getPropertyPath)
+				.map(Object::toString)
+				.collect(Collectors.toUnmodifiableSet());
+	}
 
 	@Test
 	void writesAsTheBareString() {
@@ -41,34 +70,38 @@ class NamespaceNameTest {
 
 	@Test
 	void acceptsEveryDnsLabelShape() {
-		for (String name : List.of("a", "7", "b6p-07", "web--a", "n".repeat(NamespaceName.MAX_LENGTH))) {
+		for (String name : VALID) {
+			assertTrue(NamespaceName.of(name).isKubernetesName(), name);
+			assertEquals(Set.of(), violatedPaths(NamespaceName.of(name)), name);
+		}
+	}
+
+	@Test
+	void aNameThatIsNotADnsLabel_buildsAndBindsAsStored() {
+		for (String name : INVALID) {
 			assertEquals(name, NamespaceName.of(name).value(), name);
+			assertEquals(NamespaceName.of(name), JSON.readValue(JSON.writeValueAsString(name), NamespaceName.class),
+					name);
+			assertFalse(NamespaceName.of(name).isKubernetesName(), name);
 		}
 	}
 
 	@Test
-	void refusesANameThatIsNotADnsLabel() {
+	void aNameThatIsNotADnsLabel_failsValidation() {
 		for (String name : INVALID) {
-			assertThrows(IllegalArgumentException.class, () -> NamespaceName.of(name), name);
+			assertEquals(Set.of("value"), violatedPaths(NamespaceName.of(name)), name);
 		}
 	}
 
 	@Test
-	void refusesANameThatIsNotADnsLabelWhenBound() {
-		for (String name : INVALID) {
-			String json = JSON.writeValueAsString(name);
-			assertThrows(JacksonException.class, () -> JSON.readValue(json, NamespaceName.class), name);
-		}
-	}
+	void aResponseCarryingAStoredNameThatIsNotADnsLabel_roundTrips() {
+		FleetNamespaceResponse stored = new FleetNamespaceResponse(NamespaceName.of("Web_A"), null, true, false,
+				false, 3L);
 
-	@Test
-	void aResponseCarryingOneBindsAndRefusesThroughIt() {
-		String body = "{\"name\":\"%s\",\"legacy\":false,\"isPrivate\":false,\"modified\":false,\"version\":0}";
+		String json = JSON.writeValueAsString(stored);
 
-		assertEquals(NamespaceName.of("web-a"),
-				JSON.readValue(body.formatted("web-a"), FleetNamespaceResponse.class).name());
-		assertThrows(JacksonException.class,
-				() -> JSON.readValue(body.formatted("Web_A"), FleetNamespaceResponse.class));
+		assertTrue(json.contains("\"name\":\"Web_A\""), json);
+		assertEquals(stored, JSON.readValue(json, FleetNamespaceResponse.class));
 	}
 
 	@Test
