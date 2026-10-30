@@ -168,4 +168,15 @@ public record GlobalUserCredentialUpdateRequest(
 	public Optional<Boolean> optReencoding() {
 		return Optional.ofNullable(reencoding);
 	}
+
+	/**
+	 * The re-encoding flag and a fixed placeholder for the stored credential, which is reversible with the
+	 * monolith's key (or an Argon2id hash) and so must not reach a log line, as
+	 * {@link GlobalUserAuthenticationRequest#toString()} leaves out its candidate.
+	 */
+	@Override
+	public String toString() {
+		return "GlobalUserCredentialUpdateRequest[storedCredential=" + StoredForm.redacted(storedCredential)
+				+ ", reencoding=" + reencoding + "]";
+	}
 }

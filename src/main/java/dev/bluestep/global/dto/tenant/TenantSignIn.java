@@ -9,14 +9,18 @@ import org.jspecify.annotations.Nullable;
 import dev.bluestep.global.dto.constraints.CodePointSize;
 
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 
 /**
  * How a tenant's users sign in: its sign-in type (the monolith's {@code global.logintype} row for the
  * tenant, folded into the tenant) and the password-policy columns beside it.
  *
  * <p>From 6.0.0 it is also written, inside {@link TenantSettings}. The string bounds are the widths of
- * the columns behind them, and {@code rememberPassword} is required because its column is
- * {@code NOT NULL}; Bean Validation applies them only where a request marks this {@code @Valid}.</p>
+ * the columns behind them, {@code rememberPassword} is required because its column is {@code NOT NULL},
+ * and {@code loginType} must be one of the monolith's {@code LoginTypeRecord.Type} names
+ * ({@link #LOGIN_TYPE_NAMES}): any other would be stored, and every monolith build would then fail
+ * to load the tenant. Bean Validation applies them only where a request marks this {@code @Valid},
+ * so a read carries the stored spelling whatever it is.</p>
  *
  * @param loginType         the monolith's {@code LoginType} name ({@code ONE_STEP},
  *                          {@code TENANT_OAUTH2} ...), verbatim; absent for a tenant with no row,
@@ -30,13 +34,21 @@ import jakarta.validation.constraints.NotNull;
  * @param rememberPassword  {@code rememberpassword}, the monolith's policy name, verbatim
  */
 public record TenantSignIn(
-		@Nullable String loginType,
+		@Pattern(regexp = TenantSignIn.LOGIN_TYPE_NAMES) @Nullable String loginType,
 		@Nullable String loginData,
 		@CodePointSize(max = 255) @Nullable String loginUrl,
 		@CodePointSize(max = 250) @Nullable String logoutUrl,
 		@Nullable Integer passwordGraceDays,
 		@Nullable Double maxLoginAttempts,
 		@NotNull @CodePointSize(max = 50) String rememberPassword) {
+
+	/**
+	 * The sign-in type names a write accepts, as a regular expression: the monolith's
+	 * {@code LoginTypeRecord.Type} constants, the same names as
+	 * {@link dev.bluestep.global.dto.domain.LoginTypeName}. Case matters; the monolith reads the stored
+	 * value with {@code valueOf}.
+	 */
+	public static final String LOGIN_TYPE_NAMES = "TENANT_OAUTH2|GENERAL_OAUTH2|ONE_STEP|TWO_STEP|CUSTOM";
 
 	/** {@link #loginType}, as an {@code Optional}. */
 	public Optional<String> optLoginType() {

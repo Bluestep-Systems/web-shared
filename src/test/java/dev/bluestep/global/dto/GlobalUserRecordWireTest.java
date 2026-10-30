@@ -187,6 +187,29 @@ class GlobalUserRecordWireTest {
 				GlobalUserRecordResponse.class));
 	}
 
+	@Test
+	void theCreateRequestNeverPrintsItsStoredCredential() {
+		final String printed = create().toString();
+		assertFalse(printed.contains(STORED_CREDENTIAL.substring(2)), printed);
+		assertTrue(printed.contains("storedCredential=<redacted>"), printed);
+		assertTrue(printed.contains("username=del.novak"), printed);
+		assertTrue(printed.endsWith("]"), printed);
+	}
+
+	@Test
+	void aCreateRequestWithNoCredentialPrintsItAsAbsent() {
+		final GlobalUserRecordCreateRequest none = new GlobalUserRecordCreateRequest(CLASSID, null, "Del",
+				"Novak", "del.novak", null, null, false, false, null, null, false, null, List.of(), null);
+		assertTrue(none.toString().contains("storedCredential=null"), none.toString());
+	}
+
+	@Test
+	void theCredentialUpdateNeverPrintsItsStoredCredential() {
+		final String printed = new GlobalUserCredentialUpdateRequest(STORED_CREDENTIAL, true).toString();
+		assertFalse(printed.contains(STORED_CREDENTIAL.substring(2)), printed);
+		assertEquals("GlobalUserCredentialUpdateRequest[storedCredential=<redacted>, reencoding=true]", printed);
+	}
+
 	// ---------------------------------------------------------------- fixtures
 
 	private static GlobalUserCredentialUpdateRequest credentialUpdate() {

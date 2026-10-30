@@ -19,8 +19,9 @@ import org.hibernate.validator.messageinterpolation.ParameterMessageInterpolator
 import org.junit.jupiter.api.Test;
 
 import dev.bluestep.global.dto.basetable.BaseTableKey;
-import dev.bluestep.global.dto.tenantaccess.GlobalUserKey;
+import dev.bluestep.global.dto.domain.LoginTypeName;
 import dev.bluestep.global.dto.fleet.NamespaceName;
+import dev.bluestep.global.dto.tenantaccess.GlobalUserKey;
 import dev.bluestep.global.dto.tenantaccess.ResellerKey;
 
 import jakarta.validation.ConstraintViolation;
@@ -207,6 +208,33 @@ class TenantWriteWireTest {
 		assertTrue(json.contains("\"namespace\":\"web-a\","), json);
 		assertThrows(JacksonException.class, () -> JSON.readValue(
 				json.replace("\"namespace\":\"web-a\",", "\"namespace\":\"Web_A\","), TenantSettings.class));
+	}
+
+	@Test
+	void signIn_acceptsEachMonolithLoginTypeName() {
+		for (LoginTypeName type : LoginTypeName.values()) {
+			TenantSignIn signIn = new TenantSignIn(type.name(), null, null, null, null, null, "NONE");
+			assertEquals(Set.of(), violatedPaths(signIn), type.name());
+		}
+		assertEquals(Set.of(), violatedPaths(new TenantSignIn(null, null, null, null, null, null, "NONE")));
+	}
+
+	@Test
+	void signIn_refusesALoginTypeTheMonolithCannotRead() {
+		for (String typo : List.of("one_step", "One_Step", "ONE-STEP", "", "PASSWORD")) {
+			assertEquals(Set.of("loginType"),
+					violatedPaths(new TenantSignIn(typo, null, null, null, null, null, "NONE")), typo);
+		}
+		TenantSettings ok = settings("Harbor Clinic");
+		assertEquals(Set.of("settings.signIn.loginType"), violatedPaths(new TenantUpdateRequest(
+				JSON.readValue(JSON.writeValueAsString(ok).replace("\"ONE_STEP\"", "\"one_step\""),
+						TenantSettings.class), null)));
+	}
+
+	@Test
+	void signIn_loginTypeNamesAreTheDomainEnumsNames() {
+		assertEquals(Set.copyOf(names(LoginTypeName.values())),
+				Set.of(TenantSignIn.LOGIN_TYPE_NAMES.split("\\|")));
 	}
 
 	@Test
