@@ -6,9 +6,17 @@ import java.util.OptionalInt;
 
 import org.jspecify.annotations.Nullable;
 
+import dev.bluestep.global.dto.constraints.CodePointSize;
+
+import jakarta.validation.constraints.NotNull;
+
 /**
  * How a tenant's users sign in: its sign-in type (the monolith's {@code global.logintype} row for the
  * tenant, folded into the tenant) and the password-policy columns beside it.
+ *
+ * <p>From 6.0.0 it is also written, inside {@link TenantSettings}. The string bounds are the widths of
+ * the columns behind them, and {@code rememberPassword} is required because its column is
+ * {@code NOT NULL}; Bean Validation applies them only where a request marks this {@code @Valid}.</p>
  *
  * @param loginType         the monolith's {@code LoginType} name ({@code ONE_STEP},
  *                          {@code TENANT_OAUTH2} ...), verbatim; absent for a tenant with no row,
@@ -24,11 +32,11 @@ import org.jspecify.annotations.Nullable;
 public record TenantSignIn(
 		@Nullable String loginType,
 		@Nullable String loginData,
-		@Nullable String loginUrl,
-		@Nullable String logoutUrl,
+		@CodePointSize(max = 255) @Nullable String loginUrl,
+		@CodePointSize(max = 250) @Nullable String logoutUrl,
 		@Nullable Integer passwordGraceDays,
 		@Nullable Double maxLoginAttempts,
-		String rememberPassword) {
+		@NotNull @CodePointSize(max = 50) String rememberPassword) {
 
 	/** {@link #loginType}, as an {@code Optional}. */
 	public Optional<String> optLoginType() {

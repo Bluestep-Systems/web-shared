@@ -543,6 +543,28 @@ group = 'dev.bluestep'
 //     implementations of one check cannot drift apart unnoticed. Data and a JDK-only reader, no
 //     verifier: this library stays free of BouncyCastle, Spring and JPA.
 // The monolith's use of the operation is behind a switch that defaults off.
+//
+// 6.0.0 also carries the rest of the org-identity contract (CU-86bcvktee), new shapes only:
+//   * dto.tenant writes: TenantSettings (the writable columns, named and typed as on
+//     TenantRecordResponse), TenantCreateRequest {tenant, associationId, settings, lock, creator},
+//     TenantUpdateRequest {settings, actor}, TenantLockUpdateRequest {lock, actor},
+//     TenantReservationResponse {tenant}, TenantWriteRefusal {KEY_TAKEN, TENANT_ID_TAKEN} and
+//     TenantDeleteRefusal {NAMED_AS_ACTOR, HAS_GRANTS}. TenantLock, TenantSignIn and TenantOrganization
+//     gain @CodePointSize bounds at the production column widths (and @NotNull on their two NOT NULL
+//     strings), checked only where a write marks them @Valid; their wire is unchanged.
+//   * dto.domain, new: DomainKey (120100), DomainRecordResponse, DomainCreateRequest,
+//     DomainUpdateRequest (host checked against DomainCreateRequest.HOST_PATTERN, the monolith's
+//     isValidDomain), LoginTypeSetting {type, data} with LoginTypeName, DomainWriteRefusal {HOST_TAKEN,
+//     RESERVED, TENANT_ABSENT} and DomainIngressRow.
+//   * dto.fleet, new: FleetNamespaceResponse, NamespaceModifiedRequest, FleetLockout,
+//     FleetLockoutUpdateRequest and ReservedDomainResponse.
+//   * dto.registry, new in this library: RegistryTenantResponse and RegistryHost, for web-global's
+//     versioned registry surface. web-global's own RegistryOrgResponse/RegistryHostResponse stay in
+//     the app, in the same package, for the unversioned /registry/orgs.
+// web-global's V6_0_0 adds the surfaces that serve them: TENANT write verbs, TENANT_RESERVATIONS,
+// NAMESPACES, FLEET_LOCKOUT, RESERVED_DOMAINS, DOMAINS and REGISTRY. RELEASE ORDER: this artifact only
+// after web-global's drafts serving all of them build green against it from mavenLocal (a shape bug
+// found after publishing costs a 6.0.1), then web-global released serving V6_0_0, then the monolith.
 version = '6.0.0'
 
 repositories {
