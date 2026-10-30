@@ -29,8 +29,9 @@
  * need.</p>
  *
  * <p>Null-marked: every type here is non-null unless explicitly annotated
- * {@link org.jspecify.annotations.Nullable}. Record components in particular are never null — a
- * component that may be absent is declared {@code Optional<T>} instead.</p>
+ * {@link org.jspecify.annotations.Nullable}. A record component that may be
+ * absent is a {@code @Nullable} value named for what it holds, read from outside the record through
+ * an {@code optX()} accessor that wraps it; a component is never {@code Optional<T>}.</p>
  */
 @NullMarked
 package dev.bluestep.global.dto.globaluserrecord;

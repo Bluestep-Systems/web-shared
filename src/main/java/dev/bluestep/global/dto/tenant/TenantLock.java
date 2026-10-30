@@ -2,6 +2,7 @@ package dev.bluestep.global.dto.tenant;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 import org.jspecify.annotations.Nullable;
 
@@ -35,9 +36,9 @@ public record TenantLock(
 		return Optional.ofNullable(lockedOut);
 	}
 
-	/** {@link #durationMinutes}, as an {@code Optional}. */
-	public Optional<Integer> optDurationMinutes() {
-		return Optional.ofNullable(durationMinutes);
+	/** {@link #durationMinutes}, as an {@code OptionalInt}. */
+	public OptionalInt optDurationMinutes() {
+		return durationMinutes == null ? OptionalInt.empty() : OptionalInt.of(durationMinutes);
 	}
 
 	/** {@link #preMessage}, as an {@code Optional}. */

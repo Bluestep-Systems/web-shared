@@ -2,6 +2,8 @@ package dev.bluestep.global.dto.reseller;
 
 import java.util.Optional;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * A reseller's icon set, as {@code global.reseller} holds it.
  *
@@ -10,39 +12,57 @@ import java.util.Optional;
  * what a reseller mostly is. Every one is optional: the monolith renders a default where a reseller
  * has not supplied one.</p>
  *
- * <p>The shape is unchanged since 4.0.0 and must stay that way — both released contracts serve it.
- * What was added is the compact constructor below, which is not a reshape: it binds nothing new and
- * serializes identically, and it exists because this record became something a caller <em>sends</em>
- * as well as receives.</p>
+ * <p>The wire shape is unchanged since 4.0.0 and must stay that way — every released contract serves
+ * it. An absent icon is a {@code @Nullable} component, read through its {@code optX()} accessor.</p>
  */
 public record ResellerIcons(
-		Optional<String> favicon,
-		Optional<String> favicon16,
-		Optional<String> favicon32,
-		Optional<String> appleTouchIcon,
-		Optional<String> appleTouchIcon72,
-		Optional<String> appleTouchIcon114,
-		Optional<String> appleTouchIcon144,
-		Optional<String> safariPinnedTab
+		@Nullable String favicon,
+		@Nullable String favicon16,
+		@Nullable String favicon32,
+		@Nullable String appleTouchIcon,
+		@Nullable String appleTouchIcon72,
+		@Nullable String appleTouchIcon114,
+		@Nullable String appleTouchIcon144,
+		@Nullable String safariPinnedTab
 ) {
 
-	/**
-	 * Jackson binds an omitted field to {@code null} whatever this package's null-marking says, and an
-	 * icon set is exactly the payload a caller sends half of — eight optional fields, most of which a
-	 * given reseller has no value for.
-	 *
-	 * <p>Without this, an omitted icon puts a literal {@code null} into a component the type system
-	 * says can never hold one, and the failure surfaces at whatever later dereferences it rather than
-	 * at the boundary that produced it.</p>
-	 */
-	public ResellerIcons {
-		favicon = favicon == null ? Optional.empty() : favicon;
-		favicon16 = favicon16 == null ? Optional.empty() : favicon16;
-		favicon32 = favicon32 == null ? Optional.empty() : favicon32;
-		appleTouchIcon = appleTouchIcon == null ? Optional.empty() : appleTouchIcon;
-		appleTouchIcon72 = appleTouchIcon72 == null ? Optional.empty() : appleTouchIcon72;
-		appleTouchIcon114 = appleTouchIcon114 == null ? Optional.empty() : appleTouchIcon114;
-		appleTouchIcon144 = appleTouchIcon144 == null ? Optional.empty() : appleTouchIcon144;
-		safariPinnedTab = safariPinnedTab == null ? Optional.empty() : safariPinnedTab;
+	/** {@link #favicon}, as an {@code Optional}. */
+	public Optional<String> optFavicon() {
+		return Optional.ofNullable(favicon);
+	}
+
+	/** {@link #favicon16}, as an {@code Optional}. */
+	public Optional<String> optFavicon16() {
+		return Optional.ofNullable(favicon16);
+	}
+
+	/** {@link #favicon32}, as an {@code Optional}. */
+	public Optional<String> optFavicon32() {
+		return Optional.ofNullable(favicon32);
+	}
+
+	/** {@link #appleTouchIcon}, as an {@code Optional}. */
+	public Optional<String> optAppleTouchIcon() {
+		return Optional.ofNullable(appleTouchIcon);
+	}
+
+	/** {@link #appleTouchIcon72}, as an {@code Optional}. */
+	public Optional<String> optAppleTouchIcon72() {
+		return Optional.ofNullable(appleTouchIcon72);
+	}
+
+	/** {@link #appleTouchIcon114}, as an {@code Optional}. */
+	public Optional<String> optAppleTouchIcon114() {
+		return Optional.ofNullable(appleTouchIcon114);
+	}
+
+	/** {@link #appleTouchIcon144}, as an {@code Optional}. */
+	public Optional<String> optAppleTouchIcon144() {
+		return Optional.ofNullable(appleTouchIcon144);
+	}
+
+	/** {@link #safariPinnedTab}, as an {@code Optional}. */
+	public Optional<String> optSafariPinnedTab() {
+		return Optional.ofNullable(safariPinnedTab);
 	}
 }

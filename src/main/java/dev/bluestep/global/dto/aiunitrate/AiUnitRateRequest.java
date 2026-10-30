@@ -1,6 +1,9 @@
 package dev.bluestep.global.dto.aiunitrate;
 
 import java.util.Optional;
+import java.util.OptionalLong;
+
+import org.jspecify.annotations.Nullable;
 
 import dev.bluestep.global.dto.ai.RateVariant;
 import dev.bluestep.global.dto.ai.UnitAxis;
@@ -50,9 +53,9 @@ public record AiUnitRateRequest(
 		@NotBlank @Size(max = UnitAxis.MAX_LENGTH) @Pattern(regexp = UnitAxis.PATTERN) String unitCategory,
 		@NotBlank @Size(max = UnitAxis.MAX_LENGTH) @Pattern(regexp = UnitAxis.PATTERN) String unitMeasure,
 		@NotNull @PositiveOrZero Long rateMicros,
-		Optional<@Positive Long> ratePerUnits,
-		Optional<@PositiveOrZero Long> flatMicros,
-		Optional<String> pricingSpec
+		@Positive @Nullable Long ratePerUnits,
+		@PositiveOrZero @Nullable Long flatMicros,
+		@Nullable String pricingSpec
 ) {
 
 	/** The per-million quote assumed when a payload does not say — what every rate meant before 012. */
@@ -60,11 +63,26 @@ public record AiUnitRateRequest(
 
 	/** The denominator to store: what was asked for, or the conventional per-million. */
 	public long ratePerUnitsOrDefault() {
-		return ratePerUnits.orElse(DEFAULT_RATE_PER_UNITS);
+		return ratePerUnits == null ? DEFAULT_RATE_PER_UNITS : ratePerUnits;
 	}
 
 	/** The flat component to store: what was asked for, or none. */
 	public long flatMicrosOrZero() {
-		return flatMicros.orElse(0L);
+		return flatMicros == null ? 0L : flatMicros;
+	}
+
+	/** {@link #ratePerUnits}, as an {@code OptionalLong}. */
+	public OptionalLong optRatePerUnits() {
+		return ratePerUnits == null ? OptionalLong.empty() : OptionalLong.of(ratePerUnits);
+	}
+
+	/** {@link #flatMicros}, as an {@code OptionalLong}. */
+	public OptionalLong optFlatMicros() {
+		return flatMicros == null ? OptionalLong.empty() : OptionalLong.of(flatMicros);
+	}
+
+	/** {@link #pricingSpec}, as an {@code Optional}. */
+	public Optional<String> optPricingSpec() {
+		return Optional.ofNullable(pricingSpec);
 	}
 }

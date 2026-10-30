@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
-import java.util.Optional;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -54,7 +53,7 @@ class GlobalUserRecordConstraintsTest {
 		@DisplayName("accepts a value carrying a cipher-generation marker")
 		void acceptsAMarkedValue() {
 			assertTrue(credentialUpdate(STORED_CREDENTIAL).isStoredCredentialInStoredForm());
-			assertTrue(create(Optional.of(STORED_CREDENTIAL)).isStoredCredentialInStoredForm());
+			assertTrue(create(STORED_CREDENTIAL).isStoredCredentialInStoredForm());
 		}
 
 		/**
@@ -65,7 +64,7 @@ class GlobalUserRecordConstraintsTest {
 		@DisplayName("refuses something that looks like a password")
 		void refusesAPlaintextPassword() {
 			assertFalse(credentialUpdate("not-a-stored-form").isStoredCredentialInStoredForm());
-			assertFalse(create(Optional.of("not-a-stored-form")).isStoredCredentialInStoredForm());
+			assertFalse(create("not-a-stored-form").isStoredCredentialInStoredForm());
 		}
 
 		/**
@@ -160,7 +159,7 @@ class GlobalUserRecordConstraintsTest {
 			final String emitted = "\n2s=2,b=141.99$argon2id$v=19$m=9216,t=4,p=1"
 					+ "$vhny/alZ6HTQOTd+OwuRsw$Pe8XjRT/ITDe1k2dUUF/IdwvSBRlPi5nI8sebh7/z1o";
 			assertTrue(credentialUpdate(emitted).isStoredCredentialInStoredForm());
-			assertTrue(create(Optional.of(emitted)).isStoredCredentialInStoredForm());
+			assertTrue(create(emitted).isStoredCredentialInStoredForm());
 		}
 
 		/**
@@ -234,7 +233,7 @@ class GlobalUserRecordConstraintsTest {
 		@Test
 		@DisplayName("create still accepts no credential at all")
 		void createAcceptsAnEmptyCredential() {
-			assertTrue(create(Optional.empty()).isStoredCredentialInStoredForm());
+			assertTrue(create(null).isStoredCredentialInStoredForm());
 		}
 
 		/**
@@ -253,10 +252,10 @@ class GlobalUserRecordConstraintsTest {
 		return new GlobalUserCredentialUpdateRequest(credential);
 	}
 
-	private static GlobalUserRecordCreateRequest create(Optional<String> credential) {
-		return new GlobalUserRecordCreateRequest(CLASSID, Optional.empty(), Optional.of("Del"),
-				Optional.of("Novak"), Optional.of("del.novak"), Optional.of("del.novak@example.test"),
-				Optional.empty(), false, false, Optional.empty(), Optional.empty(), false,
-				Optional.empty(), List.of(), credential);
+	private static GlobalUserRecordCreateRequest create(String credential) {
+		return new GlobalUserRecordCreateRequest(CLASSID, null, "Del",
+				"Novak", "del.novak", "del.novak@example.test",
+				null, false, false, null, null, false,
+				null, List.of(), credential);
 	}
 }
