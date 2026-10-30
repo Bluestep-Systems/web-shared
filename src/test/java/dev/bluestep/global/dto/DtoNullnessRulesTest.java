@@ -58,7 +58,8 @@ class DtoNullnessRulesTest {
 	 * A package joins once it holds no {@code Optional} component; the rest keep the older rule.
 	 * The other packages migrate when they are next touched, not in a sweep.
 	 */
-	private static final Set<String> NULLABLE_COMPONENT_PACKAGES = Set.of(DTO_ROOT + ".usage");
+	private static final Set<String> NULLABLE_COMPONENT_PACKAGES = Set.of(DTO_ROOT + ".usage",
+			DTO_ROOT + ".tenant");
 
 	private static final JavaClasses DTO_CLASSES = new ClassFileImporter()
 			.withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
