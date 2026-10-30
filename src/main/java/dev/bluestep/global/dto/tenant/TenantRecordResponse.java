@@ -2,9 +2,12 @@ package dev.bluestep.global.dto.tenant;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.OptionalDouble;
+import java.util.OptionalInt;
 
 import org.jspecify.annotations.Nullable;
 
+import dev.bluestep.global.dto.fleet.NamespaceName;
 import dev.bluestep.global.dto.tenantaccess.ResellerKey;
 
 /**
@@ -57,7 +60,7 @@ public record TenantRecordResponse(
 		@Nullable String mission,
 		@Nullable String associationId,
 		ResellerKey reseller,
-		@Nullable String namespace,
+		@Nullable NamespaceName namespace,
 		long flags,
 		TenantFeatures features,
 		TenantLock lock,
@@ -103,7 +106,7 @@ public record TenantRecordResponse(
 	}
 
 	/** {@link #namespace}, as an {@code Optional}. */
-	public Optional<String> optNamespace() {
+	public Optional<NamespaceName> optNamespace() {
 		return Optional.ofNullable(namespace);
 	}
 
@@ -122,19 +125,19 @@ public record TenantRecordResponse(
 		return Optional.ofNullable(formulaServer);
 	}
 
-	/** {@link #distributionCount}, as an {@code Optional}. */
-	public Optional<Integer> optDistributionCount() {
-		return Optional.ofNullable(distributionCount);
+	/** {@link #distributionCount}, as an {@code OptionalInt}. */
+	public OptionalInt optDistributionCount() {
+		return distributionCount == null ? OptionalInt.empty() : OptionalInt.of(distributionCount);
 	}
 
-	/** {@link #pageLockMillis}, as an {@code Optional}. */
-	public Optional<Double> optPageLockMillis() {
-		return Optional.ofNullable(pageLockMillis);
+	/** {@link #pageLockMillis}, as an {@code OptionalDouble}. */
+	public OptionalDouble optPageLockMillis() {
+		return pageLockMillis == null ? OptionalDouble.empty() : OptionalDouble.of(pageLockMillis);
 	}
 
-	/** {@link #pageLockWarningMillis}, as an {@code Optional}. */
-	public Optional<Double> optPageLockWarningMillis() {
-		return Optional.ofNullable(pageLockWarningMillis);
+	/** {@link #pageLockWarningMillis}, as an {@code OptionalDouble}. */
+	public OptionalDouble optPageLockWarningMillis() {
+		return pageLockWarningMillis == null ? OptionalDouble.empty() : OptionalDouble.of(pageLockWarningMillis);
 	}
 
 	/** {@link #helpTopicTemplate}, as an {@code Optional}. */

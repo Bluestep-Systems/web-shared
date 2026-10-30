@@ -37,10 +37,9 @@ import jakarta.validation.Payload;
  * consuming services' tests assert. Two different 400 shapes for one class of mistake is worse than a
  * slightly longer annotation.</p>
  *
- * <p>Declared {@link ElementType#TYPE_USE} so it can be written as a container-element constraint —
- * {@code Optional<@CodePointSize(max = 30) String>} — which is how every optional component in this
- * package carries its bound. A constraint placed on the {@code Optional} itself is checked against the
- * container and fails at runtime with "no validator could be found".</p>
+ * <p>Declared {@link ElementType#TYPE_USE} as well, so it can also be written as a container-element
+ * constraint ({@code List<@CodePointSize(max = 30) String>}). An optional component carries it
+ * directly beside its {@code @Nullable}: {@code @CodePointSize(max = 30) @Nullable String}.</p>
  *
  * <p>{@code null} is valid, as it is for every Bean Validation size constraint: absence is
  * {@code @NotNull}'s or {@code @NotBlank}'s question, and a constraint answering it too would report

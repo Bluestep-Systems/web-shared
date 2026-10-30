@@ -1,5 +1,8 @@
 plugins {
     id 'java-library'
+    // Publishes src/testFixtures as a second variant of this coordinate (6.0.0: the pinned Argon2id
+    // vectors), as secret-files does.
+    id 'java-test-fixtures'
     id 'maven-publish'
     id 'net.ltgt.errorprone' version '5.1.0'
     id 'checkstyle'
@@ -24,6 +27,10 @@ publishing {
     publications {
         mavenJava(MavenPublication) {
             from components.java
+            // Gradle module metadata carries the test-fixtures variants; a POM cannot. Every consumer
+            // is a Gradle build.
+            suppressPomMetadataWarningsFor('testFixturesApiElements')
+            suppressPomMetadataWarningsFor('testFixturesRuntimeElements')
         }
     }
     repositories {
@@ -487,7 +494,84 @@ group = 'dev.bluestep'
 // Java callers compiling. A MINOR: new shapes plus one optional component, absent meaning what it meant
 // before. RELEASE ORDER: this artifact, then web-global serving 5.5.0
 // for these paths and every surface 5.4.0 serves, then the monolith moving its contract tag to 5.5.0.
-version = '5.5.0'
+//
+// 6.0.0 (CU-86bcv632n): every DTO package now spells an absent record component one way, the way
+// dto.usage (5.3.0) and dto.tenant (5.5.0) already did: a @Nullable component named for the value,
+// read from outside the record through an optX() accessor, never an Optional<T> component. A boxed
+// Integer, Long or Double gets an OptionalInt, OptionalLong or OptionalDouble accessor (dto.tenant's
+// Optional<Integer>/<Long>/<Double> accessors moved too, and DtoNullnessRulesTest now requires it).
+// Constructors take the value or null. This reverses 2.0.0's "nullable record components became
+// Optional<T>"; absence still reaches every Java caller as an Optional, but construction and JSON
+// binding stay plain and no compact constructor has to turn a bound null back into Optional.empty().
+//   * Converted: dto.accesstoken, ai, aitenantblock, aitenantconfig, aiunitrate, aiusage, globaluser,
+//     globaluserrecord, lookup, reseller and tenantaccess, including 5.5.0's ResellerUpdateRequest.actor.
+//   * Container-element constraints moved onto the component itself:
+//     Optional<@CodePointSize(max = 256) String> is now @CodePointSize(max = 256) @Nullable String,
+//     which Bean Validation checks the same way and passes when absent.
+//   * Dropped constructors that only existed to accept Optionals for an older shape: ResellerUpdateRequest's
+//     7-argument one (5.5.0) and GlobalUserRecordResponse's pre-credentialVersion one (5.0.1), plus
+//     TenantAccessGrantRequest's no-argument one (a bound empty body is now plainly null). Every Java
+//     caller recompiles against this release anyway. Static factories keep Optional parameters
+//     (AiCompletionRequest.of, TenantAccessGrantResponse.of).
+//   * DtoNullnessRulesTest applies the nullable rule to the whole DTO root; the old-rule branch and
+//     NULLABLE_COMPONENT_PACKAGES are gone.
+// A MAJOR because it is source-breaking for every Java caller of a converted record. The WIRE IS
+// UNCHANGED under the default inclusion: an absent value still binds from an absent key or an explicit
+// null and still writes as null. NullableComponentWireTest holds one record per converted package to
+// the bytes 5.5.0 wrote for the same values, absent and present. The one behavioural difference is a
+// mapper configured NON_NULL, which used to write an empty Optional as null and now omits it, as
+// NON_ABSENT always did; nothing in the fleet sets either (OptionalWireContractTest pins it).
+// No ContractVersion surface changes, but the tag is this number, so web-global declares a 6.0.0
+// ContractVersion serving every surface 5.5.0 serves. RELEASE ORDER: this artifact (after 5.5.0 is
+// released), then web-global declaring and serving the 6.0.0 contract, deployed, then the monolith
+// bumping its dependency and moving its contract tag to 6.0.0. A monolith sending the 6.0.0 tag before
+// web-global serves it gets 404s on every tag-routed gateway.
+//
+// 6.0.0 also carries (CU-86bcvducz): a global user's password can be checked by web-global. New in
+// dto.globaluserrecord: GlobalUserAuthenticationRequest {tenant, username, candidate} and
+// GlobalUserAuthenticationResponse {outcome, record, needsRewrite}, outcome one of
+// GlobalUserAuthenticationOutcome MATCH | NO_MATCH | LEGACY_CREDENTIAL. web-global answers it on
+// POST /global-user-records/lookups/authenticate under its own surface (GLOBAL_USER_AUTHENTICATION),
+// for one-way (\n2, Argon2id) credentials only; a reversible one is LEGACY_CREDENTIAL and the monolith
+// still checks it. No response carries a credential, and the request's toString leaves the candidate
+// out. The request names the tenant by its TenantKey, not by a bare association seqnum. Drafted as a
+// 6.1.0 and never released; it ships with the rest of 6.0.0.
+//   * Test fixtures, new: this coordinate now publishes a test-fixtures variant
+//     (testImplementation(testFixtures('dev.bluestep:web-shared:6.0.0'))) carrying one pinned set of
+//     Argon2id vectors (dev.bluestep.global.testing.Argon2idVectors), produced by the monolith's
+//     encoder. The monolith's verifier and web-global's each run them in their own build, so two
+//     implementations of one check cannot drift apart unnoticed. Data and a JDK-only reader, no
+//     verifier: this library stays free of BouncyCastle, Spring and JPA.
+// The monolith's use of the operation is behind a switch that defaults off.
+//
+// 6.0.0 also carries the rest of the org-identity contract (CU-86bcvktee), new shapes only:
+//   * dto.tenant writes: TenantSettings (the writable columns, named and typed as on
+//     TenantRecordResponse), TenantCreateRequest {tenant, associationId, settings, lock, creator},
+//     TenantUpdateRequest {settings, actor}, TenantLockUpdateRequest {lock, actor},
+//     TenantReservationResponse {tenant}, TenantWriteRefusal {KEY_TAKEN, TENANT_ID_TAKEN} and
+//     TenantDeleteRefusal {NAMED_AS_ACTOR, HAS_GRANTS}. TenantLock, TenantSignIn and TenantOrganization
+//     gain @CodePointSize bounds at the production column widths (and @NotNull on their two NOT NULL
+//     strings), checked only where a write marks them @Valid; their wire is unchanged.
+//   * dto.domain, new: DomainKey (120100), DomainRecordResponse, DomainCreateRequest,
+//     DomainUpdateRequest (host checked against DomainCreateRequest.HOST_PATTERN, the monolith's
+//     isValidDomain), LoginTypeSetting {type, data} with LoginTypeName, DomainWriteRefusal {HOST_TAKEN,
+//     RESERVED, TENANT_ABSENT} and DomainIngressRow.
+//   * dto.fleet, new: FleetNamespaceResponse, NamespaceModifiedRequest, FleetLockout,
+//     FleetLockoutUpdateRequest and ReservedDomainResponse.
+//   * dto.fleet.NamespaceName, new: a Kubernetes namespace name, refused unless a DNS label (1-63 of
+//     [a-z0-9-], alphanumeric at both ends; every production name is one). Its JSON is the bare string,
+//     so the components retyped to it keep their wire byte for byte: TenantSettings.namespace,
+//     TenantRecordResponse.namespace, TenantSnapshotEntry.namespace, FleetNamespaceResponse.name. A
+//     write naming an invalid one now fails to bind (400) instead of reaching @NotBlank/@CodePointSize.
+//     The usage batch requests keep a String namespace (metering ingest, outside this contract).
+//   * dto.registry, new in this library: RegistryTenantResponse and RegistryHost, for web-global's
+//     versioned registry surface. web-global's own RegistryOrgResponse/RegistryHostResponse stay in
+//     the app, in the same package, for the unversioned /registry/orgs.
+// web-global's V6_0_0 adds the surfaces that serve them: TENANT write verbs, TENANT_RESERVATIONS,
+// NAMESPACES, FLEET_LOCKOUT, RESERVED_DOMAINS, DOMAINS and REGISTRY. RELEASE ORDER: this artifact only
+// after web-global's drafts serving all of them build green against it from mavenLocal (a shape bug
+// found after publishing costs a 6.0.1), then web-global released serving V6_0_0, then the monolith.
+version = '6.0.0'
 
 repositories {
     mavenCentral()

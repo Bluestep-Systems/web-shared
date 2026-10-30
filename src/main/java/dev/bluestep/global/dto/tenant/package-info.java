@@ -13,12 +13,22 @@
  *       instead of a traversal.</li>
  * </ul>
  *
- * <h2>Read only, from 5.5.0</h2>
+ * <h2>Reads, from 5.5.0</h2>
  *
  * <p>web-global serves these under {@code /api/v5.5.0/tenants}: a paged listing, one tenant by key
- * with its version as the {@code ETag}, the snapshot, and one tenant's lock. Writes still go through
- * the monolith's own rows, which web-global keeps in step with {@code global.tenant} by trigger
- * (its changeset 025) until the monolith writes through the contract as well.</p>
+ * with its version as the {@code ETag}, the snapshot, and one tenant's lock. Until 6.0.0 every write
+ * went through the monolith's own rows, which web-global keeps in step with {@code global.tenant} by
+ * trigger (its changeset 027); a monolith build that has not moved still writes them that way.</p>
+ *
+ * <h2>Writes, from 6.0.0</h2>
+ *
+ * <p>{@link TenantReservationResponse} draws a key; {@link TenantCreateRequest} creates the tenant under
+ * it; {@link TenantUpdateRequest} replaces its {@link TenantSettings}; {@link TenantLockUpdateRequest}
+ * sets its lock; a delete takes no body. A write that something stands in the way of answers
+ * {@code 409} with a {@link TenantWriteRefusal} or {@link TenantDeleteRefusal}, whose reasons are kinds,
+ * never ids. Every write names its actor ({@code creator} on a create), absent for none. web-global keeps
+ * the monolith's legacy rows in step by trigger, so a monolith build still reading or writing them
+ * sees the same tenant.</p>
  *
  * <h2>Values are served as the monolith reads them</h2>
  *

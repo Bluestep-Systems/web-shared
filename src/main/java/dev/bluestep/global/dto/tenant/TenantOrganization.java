@@ -1,10 +1,14 @@
 package dev.bluestep.global.dto.tenant;
 
 import java.util.Optional;
+import java.util.OptionalInt;
 
 import org.jspecify.annotations.Nullable;
 
 import dev.bluestep.global.dto.basetable.BaseTableKey;
+import dev.bluestep.global.dto.constraints.CodePointSize;
+
+import jakarta.validation.constraints.NotNull;
 
 /**
  * A tenant's root organization: what the monolith kept on the tenant's {@code global.organization}
@@ -13,6 +17,11 @@ import dev.bluestep.global.dto.basetable.BaseTableKey;
  * <p>The four object references name objects in the tenant's own schema (or, for a default domain,
  * in {@code global.domainname}); web-global stores them and does not resolve them. Each is both halves
  * of a key or absent.</p>
+ *
+ * <p>From 6.0.0 it is also written, inside {@link TenantSettings}. The string bounds are the widths of
+ * the {@code global.organization} columns behind them, and {@code supportEmail} is required because its
+ * column is {@code NOT NULL}; Bean Validation applies them only where a request marks this
+ * {@code @Valid}.</p>
  *
  * @param description          {@code description}
  * @param storageSpace         {@code storagespace}
@@ -37,24 +46,24 @@ import dev.bluestep.global.dto.basetable.BaseTableKey;
  * @param config               {@code config}, the stored {@code jsonb} as JSON text, verbatim
  */
 public record TenantOrganization(
-		@Nullable String description,
+		@CodePointSize(max = 4000) @Nullable String description,
 		@Nullable Integer storageSpace,
-		@Nullable String homePageUrl,
+		@CodePointSize(max = 200) @Nullable String homePageUrl,
 		@Nullable BaseTableKey defaultWebInfo,
 		@Nullable BaseTableKey primaryEntities,
 		@Nullable BaseTableKey defaultDomainName,
 		@Nullable BaseTableKey emailGroup,
-		String supportEmail,
-		@Nullable String emailHost,
+		@NotNull @CodePointSize(max = 50) String supportEmail,
+		@CodePointSize(max = 100) @Nullable String emailHost,
 		boolean externalEmailAllowed,
-		@Nullable String contactName,
-		@Nullable String contactAddress,
-		@Nullable String contactPhone,
-		@Nullable String contactEmail,
-		@Nullable String pharmacyId,
-		@Nullable String pharmacyRepId,
-		@Nullable String deniedIps,
-		@Nullable String allowedIps,
+		@CodePointSize(max = 100) @Nullable String contactName,
+		@CodePointSize(max = 255) @Nullable String contactAddress,
+		@CodePointSize(max = 20) @Nullable String contactPhone,
+		@CodePointSize(max = 50) @Nullable String contactEmail,
+		@CodePointSize(max = 255) @Nullable String pharmacyId,
+		@CodePointSize(max = 255) @Nullable String pharmacyRepId,
+		@CodePointSize(max = 2000) @Nullable String deniedIps,
+		@CodePointSize(max = 2000) @Nullable String allowedIps,
 		boolean showManageLink,
 		boolean showHqLink,
 		@Nullable String config) {
@@ -64,9 +73,9 @@ public record TenantOrganization(
 		return Optional.ofNullable(description);
 	}
 
-	/** {@link #storageSpace}, as an {@code Optional}. */
-	public Optional<Integer> optStorageSpace() {
-		return Optional.ofNullable(storageSpace);
+	/** {@link #storageSpace}, as an {@code OptionalInt}. */
+	public OptionalInt optStorageSpace() {
+		return storageSpace == null ? OptionalInt.empty() : OptionalInt.of(storageSpace);
 	}
 
 	/** {@link #homePageUrl}, as an {@code Optional}. */

@@ -3,7 +3,7 @@ package dev.bluestep.global.dto.reseller;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.util.Optional;
+import java.util.OptionalLong;
 
 import org.junit.jupiter.api.Test;
 
@@ -51,22 +51,14 @@ class ResellerUpdateActorWireTest {
 		ResellerUpdateRequest nulled = JSON.readValue(
 				"{\"displayName\":\"House\",\"icons\":{},\"actor\":null}", ResellerUpdateRequest.class);
 
-		assertTrue(old.actor().isEmpty());
-		assertEquals(Optional.of(4L), old.flags());
-		assertTrue(nulled.actor().isEmpty());
-	}
-
-	@Test
-	void theSevenArgumentConstructor_isNoActor() {
-		ResellerUpdateRequest request = new ResellerUpdateRequest("House", Optional.empty(), Optional.empty(),
-				Optional.empty(), Optional.empty(), JSON.readValue("{}", ResellerIcons.class), Optional.empty());
-
-		assertTrue(request.actor().isEmpty());
+		assertTrue(old.optActor().isEmpty());
+		assertEquals(OptionalLong.of(4L), old.optFlags());
+		assertTrue(nulled.optActor().isEmpty());
 	}
 
 	private static ResellerUpdateRequest withActor(TenantActor actor) throws Exception {
-		return new ResellerUpdateRequest("House", Optional.of("help@example.test"), Optional.empty(),
-				Optional.empty(), Optional.empty(), JSON.readValue("{}", ResellerIcons.class), Optional.of(4L),
-				Optional.of(actor));
+		return new ResellerUpdateRequest("House", "help@example.test", null,
+				null, null, JSON.readValue("{}", ResellerIcons.class), 4L,
+				actor);
 	}
 }

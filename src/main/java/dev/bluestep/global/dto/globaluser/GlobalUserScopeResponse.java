@@ -2,6 +2,8 @@ package dev.bluestep.global.dto.globaluser;
 
 import java.util.Optional;
 
+import org.jspecify.annotations.Nullable;
+
 import dev.bluestep.global.dto.tenantaccess.GlobalUserKey;
 import dev.bluestep.global.dto.tenantaccess.ResellerKey;
 
@@ -18,7 +20,17 @@ import dev.bluestep.global.dto.tenantaccess.ResellerKey;
 public record GlobalUserScopeResponse(
 		GlobalUserKey user,
 		CatalogScopeKind scope,
-		Optional<ResellerKey> reseller,
-		Optional<GlobalUserScopeDecision> decision
+		@Nullable ResellerKey reseller,
+		@Nullable GlobalUserScopeDecision decision
 ) {
+
+	/** {@link #reseller}, as an {@code Optional}. */
+	public Optional<ResellerKey> optReseller() {
+		return Optional.ofNullable(reseller);
+	}
+
+	/** {@link #decision}, as an {@code Optional}. */
+	public Optional<GlobalUserScopeDecision> optDecision() {
+		return Optional.ofNullable(decision);
+	}
 }
