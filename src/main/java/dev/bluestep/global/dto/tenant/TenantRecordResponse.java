@@ -7,6 +7,7 @@ import java.util.OptionalInt;
 
 import org.jspecify.annotations.Nullable;
 
+import dev.bluestep.global.dto.fleet.NamespaceName;
 import dev.bluestep.global.dto.tenantaccess.ResellerKey;
 
 /**
@@ -59,7 +60,7 @@ public record TenantRecordResponse(
 		@Nullable String mission,
 		@Nullable String associationId,
 		ResellerKey reseller,
-		@Nullable String namespace,
+		@Nullable NamespaceName namespace,
 		long flags,
 		TenantFeatures features,
 		TenantLock lock,
@@ -105,7 +106,7 @@ public record TenantRecordResponse(
 	}
 
 	/** {@link #namespace}, as an {@code Optional}. */
-	public Optional<String> optNamespace() {
+	public Optional<NamespaceName> optNamespace() {
 		return Optional.ofNullable(namespace);
 	}
 

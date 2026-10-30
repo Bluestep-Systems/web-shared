@@ -558,6 +558,12 @@ group = 'dev.bluestep'
 //     RESERVED, TENANT_ABSENT} and DomainIngressRow.
 //   * dto.fleet, new: FleetNamespaceResponse, NamespaceModifiedRequest, FleetLockout,
 //     FleetLockoutUpdateRequest and ReservedDomainResponse.
+//   * dto.fleet.NamespaceName, new: a Kubernetes namespace name, refused unless a DNS label (1-63 of
+//     [a-z0-9-], alphanumeric at both ends; every production name is one). Its JSON is the bare string,
+//     so the components retyped to it keep their wire byte for byte: TenantSettings.namespace,
+//     TenantRecordResponse.namespace, TenantSnapshotEntry.namespace, FleetNamespaceResponse.name. A
+//     write naming an invalid one now fails to bind (400) instead of reaching @NotBlank/@CodePointSize.
+//     The usage batch requests keep a String namespace (metering ingest, outside this contract).
 //   * dto.registry, new in this library: RegistryTenantResponse and RegistryHost, for web-global's
 //     versioned registry surface. web-global's own RegistryOrgResponse/RegistryHostResponse stay in
 //     the app, in the same package, for the unversioned /registry/orgs.

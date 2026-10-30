@@ -21,7 +21,7 @@ import org.jspecify.annotations.Nullable;
  * @param version   the entry's version, advanced on every change whichever side made it
  */
 public record FleetNamespaceResponse(
-		String name,
+		NamespaceName name,
 		@Nullable String label,
 		boolean legacy,
 		boolean isPrivate,

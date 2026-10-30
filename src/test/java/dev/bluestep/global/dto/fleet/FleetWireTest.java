@@ -51,7 +51,8 @@ class FleetWireTest {
 
 	@Test
 	void namespace_pinsItsKeysIncludingIsPrivate() {
-		FleetNamespaceResponse sent = new FleetNamespaceResponse("web-a", "Web A", false, true, true, 7L);
+		FleetNamespaceResponse sent =
+				new FleetNamespaceResponse(NamespaceName.of("web-a"), "Web A", false, true, true, 7L);
 
 		String json = JSON.writeValueAsString(sent);
 

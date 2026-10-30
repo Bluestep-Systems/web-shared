@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 
 import dev.bluestep.global.dto.basetable.BaseTableKey;
 import dev.bluestep.global.dto.tenantaccess.GlobalUserKey;
+import dev.bluestep.global.dto.fleet.NamespaceName;
 import dev.bluestep.global.dto.tenantaccess.ResellerKey;
 
 import jakarta.validation.ConstraintViolation;
@@ -50,6 +51,8 @@ class TenantWriteWireTest {
 
 	private static final TenantKey TENANT = new TenantKey(TenantKey.CLASSID, 137_803L);
 
+	private static final NamespaceName WEB_A = NamespaceName.of("web-a");
+
 	/** One supplementary-plane character: two UTF-16 units, one code point, one {@code varchar} char. */
 	private static final String CLEF = "𝄞";
 
@@ -79,7 +82,7 @@ class TenantWriteWireTest {
 	}
 
 	private static TenantSettings settings(String name) {
-		return new TenantSettings(name, "harbor", null, new ResellerKey(111_222L, 1L), "web-a", 8L,
+		return new TenantSettings(name, "harbor", null, new ResellerKey(111_222L, 1L), WEB_A, 8L,
 				new TenantFeatures(true, false, false, false, false, true, true, false, true, false, false, false,
 						true),
 				"cipher", "a,b", "fs1", 2, -1, 1_000.0, null, "help", signIn("https://in.example"),
@@ -195,6 +198,15 @@ class TenantWriteWireTest {
 
 		assertEquals(Set.of("namespace", "signIn.rememberPassword"),
 				violatedPaths(JSON.readValue(json, TenantSettings.class)));
+	}
+
+	@Test
+	void settings_carryTheNamespaceAsABareStringAndRefuseAnInvalidOne() {
+		String json = JSON.writeValueAsString(settings("Harbor Clinic"));
+
+		assertTrue(json.contains("\"namespace\":\"web-a\","), json);
+		assertThrows(JacksonException.class, () -> JSON.readValue(
+				json.replace("\"namespace\":\"web-a\",", "\"namespace\":\"Web_A\","), TenantSettings.class));
 	}
 
 	@Test

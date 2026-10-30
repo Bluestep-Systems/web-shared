@@ -4,6 +4,7 @@ import java.util.Optional;
 
 import org.jspecify.annotations.Nullable;
 
+import dev.bluestep.global.dto.fleet.NamespaceName;
 import dev.bluestep.global.dto.tenantaccess.ResellerKey;
 
 /**
@@ -24,7 +25,7 @@ import dev.bluestep.global.dto.tenantaccess.ResellerKey;
 public record TenantSnapshotEntry(
 		TenantKey tenant,
 		ResellerKey reseller,
-		@Nullable String namespace,
+		@Nullable NamespaceName namespace,
 		int lockStatus,
 		long flags,
 		boolean enableChangeHistory,
@@ -33,7 +34,7 @@ public record TenantSnapshotEntry(
 		boolean global) {
 
 	/** {@link #namespace}, as an {@code Optional}. */
-	public Optional<String> optNamespace() {
+	public Optional<NamespaceName> optNamespace() {
 		return Optional.ofNullable(namespace);
 	}
 }

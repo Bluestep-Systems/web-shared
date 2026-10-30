@@ -10,6 +10,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 import dev.bluestep.global.dto.basetable.BaseTableKey;
+import dev.bluestep.global.dto.fleet.NamespaceName;
 import dev.bluestep.global.dto.tenantaccess.GlobalUserKey;
 import dev.bluestep.global.dto.tenantaccess.ResellerKey;
 import dev.bluestep.global.dto.tenantaccess.TenantUserKey;
@@ -33,7 +34,7 @@ class TenantWireTest {
 
 	private static TenantRecordResponse record(TenantActor creator, TenantActor modifier) {
 		return new TenantRecordResponse(TENANT, "Harbor Clinic", null, "harbor", "care", "U137803",
-				new ResellerKey(111_222L, 1L), "web-a", 8L,
+				new ResellerKey(111_222L, 1L), NamespaceName.of("web-a"), 8L,
 				new TenantFeatures(true, false, false, false, false, true, true, false, true, false, false, false,
 						true),
 				new TenantLock(5, true, LocalDateTime.of(2026, 10, 1, 8, 30), 60, "soon", "now", "done"),
@@ -80,8 +81,8 @@ class TenantWireTest {
 
 	@Test
 	void snapshot_pinsItsKeysAndDefaultsAnOmittedList() throws Exception {
-		TenantSnapshotEntry entry = new TenantSnapshotEntry(TENANT, new ResellerKey(111_222L, 1L), "web-a", 4,
-				8L, true, false, true, false);
+		TenantSnapshotEntry entry = new TenantSnapshotEntry(TENANT, new ResellerKey(111_222L, 1L),
+				NamespaceName.of("web-a"), 4, 8L, true, false, true, false);
 
 		assertEquals("""
 				{"tenants":[{"tenant":{"classid":111111,"seqnum":137803},\
