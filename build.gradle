@@ -1,6 +1,6 @@
 plugins {
     id 'java-library'
-    // Publishes src/testFixtures as a second variant of this coordinate (6.1.0: the pinned Argon2id
+    // Publishes src/testFixtures as a second variant of this coordinate (6.0.0: the pinned Argon2id
     // vectors), as secret-files does.
     id 'java-test-fixtures'
     id 'maven-publish'
@@ -527,23 +527,23 @@ group = 'dev.bluestep'
 // bumping its dependency and moving its contract tag to 6.0.0. A monolith sending the 6.0.0 tag before
 // web-global serves it gets 404s on every tag-routed gateway.
 //
-// 6.1.0 (CU-86bcvducz): a global user's password can be checked by web-global. New in
-// dto.globaluserrecord: GlobalUserAuthenticationRequest {associationSeqnum, username, candidate} and
+// 6.0.0 also carries (CU-86bcvducz): a global user's password can be checked by web-global. New in
+// dto.globaluserrecord: GlobalUserAuthenticationRequest {tenant, username, candidate} and
 // GlobalUserAuthenticationResponse {outcome, record, needsRewrite}, outcome one of
 // GlobalUserAuthenticationOutcome MATCH | NO_MATCH | LEGACY_CREDENTIAL. web-global answers it on
-// POST /global-user-records/lookups/authenticate under its own surface, for one-way (\n2, Argon2id)
-// credentials only; a reversible one is LEGACY_CREDENTIAL and the monolith still checks it. No
-// response carries a credential, and the request's toString leaves the candidate out.
+// POST /global-user-records/lookups/authenticate under its own surface (GLOBAL_USER_AUTHENTICATION),
+// for one-way (\n2, Argon2id) credentials only; a reversible one is LEGACY_CREDENTIAL and the monolith
+// still checks it. No response carries a credential, and the request's toString leaves the candidate
+// out. The request names the tenant by its TenantKey, not by a bare association seqnum. Drafted as a
+// 6.1.0 and never released; it ships with the rest of 6.0.0.
 //   * Test fixtures, new: this coordinate now publishes a test-fixtures variant
-//     (testImplementation(testFixtures('dev.bluestep:web-shared:6.1.0'))) carrying one pinned set of
+//     (testImplementation(testFixtures('dev.bluestep:web-shared:6.0.0'))) carrying one pinned set of
 //     Argon2id vectors (dev.bluestep.global.testing.Argon2idVectors), produced by the monolith's
 //     encoder. The monolith's verifier and web-global's each run them in their own build, so two
 //     implementations of one check cannot drift apart unnoticed. Data and a JDK-only reader, no
 //     verifier: this library stays free of BouncyCastle, Spring and JPA.
-// A MINOR: new shapes only, nothing existing moved. RELEASE ORDER: after 6.0.0 is released, this
-// artifact, then web-global serving 6.1.0, deployed, then the monolith bumping to 6.1.0 and moving its
-// contract tag. The monolith's use of the operation is behind a switch that defaults off.
-version = '6.1.0'
+// The monolith's use of the operation is behind a switch that defaults off.
+version = '6.0.0'
 
 repositories {
     mavenCentral()

@@ -25,7 +25,7 @@
  * credential component, which is what stops an edit by something that had not loaded the credential
  * from blanking it. One request does carry a password:
  * {@link dev.bluestep.global.dto.globaluserrecord.GlobalUserAuthenticationRequest}, the sign-in check
- * (6.1.0). It is answered for one-way (Argon2id) credentials only, with an outcome and the account and
+ * (6.0.0). It is answered for one-way (Argon2id) credentials only, with an outcome and the account and
  * never with anything derived from the stored value; a reversible credential is answered
  * {@link dev.bluestep.global.dto.globaluserrecord.GlobalUserAuthenticationOutcome#LEGACY_CREDENTIAL}
  * and stays the monolith's to check, because checking it needs the monolith's cipher key.</p>

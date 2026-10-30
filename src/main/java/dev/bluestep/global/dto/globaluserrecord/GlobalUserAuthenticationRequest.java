@@ -1,11 +1,13 @@
 package dev.bluestep.global.dto.globaluserrecord;
 
+import dev.bluestep.global.dto.tenant.TenantKey;
+
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
-import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.NotNull;
 
 /**
- * Checking a password a global user just typed, inside one organization.
+ * Checking a password a global user just typed, inside one tenant.
  *
  * <h2>The one request on this surface that carries a password</h2>
  *
@@ -22,17 +24,19 @@ import jakarta.validation.constraints.Positive;
  *
  * <h2>Scoped exactly as the username lookup is</h2>
  *
- * <p>{@code associationSeqnum} carries the weight it carries on {@link UsernameLookupRequest}: a
- * reseller-scoped account does not exist inside an organization its reseller does not own, so it is
- * {@link GlobalUserAuthenticationOutcome#NO_MATCH} there whatever the password.</p>
+ * <p>{@code tenant} carries the weight {@code associationSeqnum} carries on
+ * {@link UsernameLookupRequest}: a reseller-scoped account does not exist inside a tenant its reseller
+ * does not own, so it is {@link GlobalUserAuthenticationOutcome#NO_MATCH} there whatever the password.
+ * It is the whole key rather than a bare seqnum, so nothing but a tenant can be passed for it; a key
+ * whose classid is not {@link TenantKey#CLASSID} names no tenant and is refused by web-global.</p>
  *
- * @param associationSeqnum the organization the sign-in is happening inside
- * @param username          the login name, matched case-insensitively as the lookup matches it
- * @param candidate         the password as typed. Not trimmed and not normalized: a password of spaces
- *                          is a password, so only an empty one is refused.
+ * @param tenant    the tenant the sign-in is happening inside
+ * @param username  the login name, matched case-insensitively as the lookup matches it
+ * @param candidate the password as typed. Not trimmed and not normalized: a password of spaces is a
+ *                  password, so only an empty one is refused.
  */
 public record GlobalUserAuthenticationRequest(
-		@Positive long associationSeqnum,
+		@NotNull TenantKey tenant,
 		@NotBlank String username,
 		@NotEmpty String candidate
 ) {
@@ -40,7 +44,7 @@ public record GlobalUserAuthenticationRequest(
 	/** Everything but the candidate, which is replaced by a fixed placeholder. */
 	@Override
 	public String toString() {
-		return "GlobalUserAuthenticationRequest[associationSeqnum=" + associationSeqnum
-				+ ", username=" + username + ", candidate=<redacted>]";
+		return "GlobalUserAuthenticationRequest[tenant=" + tenant + ", username=" + username
+				+ ", candidate=<redacted>]";
 	}
 }

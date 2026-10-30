@@ -1,4 +1,4 @@
-# Argon2id stored-credential vectors (web-shared 6.1.0, CU-86bcvducz).
+# Argon2id stored-credential vectors (web-shared 6.0.0, CU-86bcvducz).
 #
 # Produced by the monolith's own encoder (myassn.util.Argon2id.encode at the stated cost, behind the
 # "\n2" one-way stored form DBPasswordDescriptor.encryptOneWayPassword writes) and checked against its

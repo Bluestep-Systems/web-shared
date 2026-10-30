@@ -14,7 +14,7 @@ import java.util.Objects;
  * One pinned set of Argon2id stored-credential vectors, for every verifier of a global user's password.
  *
  * <p>Two services verify the same stored form: the monolith, for the rows it still reads, and web-global,
- * which answers the sign-in check (6.1.0). Two implementations of one check drift apart quietly — a cost
+ * which answers the sign-in check (6.0.0). Two implementations of one check drift apart quietly — a cost
  * ceiling raised on one side, a metadata segment parsed differently on the other — and the drift shows up
  * as an account that can sign in through one path and not the other. Each runs these rows in its own
  * build instead, so a disagreement fails a test rather than a sign-in.</p>

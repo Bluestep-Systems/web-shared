@@ -86,7 +86,7 @@ import jakarta.validation.constraints.NotBlank;
  * that population at zero, or an operation that says which generation it is asking about. Either is a
  * decision with its own reasoning rather than a detail of this one.</p>
  *
- * <p>6.1.0 took the second: {@link GlobalUserAuthenticationRequest} checks a candidate against a
+ * <p>6.0.0 took the second: {@link GlobalUserAuthenticationRequest} checks a candidate against a
  * one-way ({@code \n2}) credential, which needs no key, and answers
  * {@link GlobalUserAuthenticationOutcome#LEGACY_CREDENTIAL} for a reversible one, which stays the
  * monolith's to check. It is not a byte comparison and this operation is still the only way to write a
