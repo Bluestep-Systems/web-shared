@@ -1,0 +1,29 @@
+# Argon2id stored-credential vectors (web-shared 6.1.0, CU-86bcvducz).
+#
+# Produced by the monolith's own encoder (myassn.util.Argon2id.encode at the stated cost, behind the
+# "\n2" one-way stored form DBPasswordDescriptor.encryptOneWayPassword writes) and checked against its
+# verifier before being written here. Every verifier of a global user's stored credential runs these:
+# the monolith's DBPasswordDescriptor.verifyPassword and web-global's authentication service.
+#
+# Columns, tab-separated: name, candidate, stored form, whether the candidate verifies.
+# The stored form's leading newline is written as the two characters \n. Lines starting with # and
+# blank lines are ignored. Never edit a row: a verifier that disagrees with one is the bug. Add rows.
+#
+# Cost ceilings these pin (the monolith's Argon2id.MAX_VERIFY_*): m <= 36864 KiB, t <= 16, p <= 4.
+# A value above any of them is refused even for the right password ("*-refused" rows).
+current-cost-match	correct horse battery staple	\n2s=3,b=0.83,c=0,g=0f1e2d3c4b5a6978$argon2id$v=19$m=9216,t=4,p=1$ZqNTAV/91fhnReFANK2k8w$7H0BjTCm6RIDljLFsK9Li4WNk2XHrThO3paXeKzveec	true
+current-cost-wrong-password	correct horse battery stapl	\n2s=3,b=0.83,c=0,g=0f1e2d3c4b5a6978$argon2id$v=19$m=9216,t=4,p=1$ZqNTAV/91fhnReFANK2k8w$7H0BjTCm6RIDljLFsK9Li4WNk2XHrThO3paXeKzveec	false
+current-cost-case-differs	Correct horse battery staple	\n2s=3,b=0.83,c=0,g=0f1e2d3c4b5a6978$argon2id$v=19$m=9216,t=4,p=1$ZqNTAV/91fhnReFANK2k8w$7H0BjTCm6RIDljLFsK9Li4WNk2XHrThO3paXeKzveec	false
+utf8-match	pässwörd-日本語-🔑	\n2s=3,b=0.91,c=0,g=0f1e2d3c4b5a6978$argon2id$v=19$m=9216,t=4,p=1$BHzbaU9RkBbsmaGcjaQ5ww$wErXpgWX0fqs/fvttYhqIPjZ/CEdyxO5c9oppLKt3gs	true
+no-metadata-match	hunter2hunter2	\n2$argon2id$v=19$m=9216,t=4,p=1$HXIedQx0Iu6oMNtJRlVRlA$sAdtIUkb7jnrQ+e3J2jH9ieZ6SfhVy44TjR3vxmWBg8	true
+verdict-before-scorer-match	tr0ub4dor&3	\n2c=12,g=00000000deadbeef,s=3,b=0.40$argon2id$v=19$m=9216,t=4,p=1$qjRgsptM8O41w7nZKeMpMA$MM33CsdZoht3PFUlHW9viyShwAuc0DxxN9qC5gQID8g	true
+ceiling-memory-and-lanes-match	correct horse battery staple	\n2s=3,b=0.83,c=0,g=0f1e2d3c4b5a6978$argon2id$v=19$m=36864,t=1,p=4$kgX/ZXgjhaTSYz4g9Pl5Dg$NBSkfMXMdG27Tv+AhEy0OVKX5DGDJq8ioAifBxIT574	true
+ceiling-iterations-match	correct horse battery staple	\n2s=3,b=0.83,c=0,g=0f1e2d3c4b5a6978$argon2id$v=19$m=1024,t=16,p=1$HiNXvg+IAi5yn04R2ZZ5kg$H8vKHGOz0GT0v3AqsQMqAb4a5qIVPjJRv7oAmZY+ES4	true
+over-memory-ceiling-refused	correct horse battery staple	\n2s=3,b=0.83,c=0,g=0f1e2d3c4b5a6978$argon2id$v=19$m=36865,t=1,p=1$fKnETI5MLG4/lOehnN4qOg$OMIlKbwMfmJK5XBwMgo3fu5edgHf0NmbfXt6oFL6d5s	false
+over-iteration-ceiling-refused	correct horse battery staple	\n2s=3,b=0.83,c=0,g=0f1e2d3c4b5a6978$argon2id$v=19$m=1024,t=17,p=1$eIwCkecfcSxsvIc+Hdb0Xg$5kq06P13/vTRexg+0zh9/6yepIQpgCSLciECKtwrMuo	false
+over-lane-ceiling-refused	correct horse battery staple	\n2s=3,b=0.83,c=0,g=0f1e2d3c4b5a6978$argon2id$v=19$m=1024,t=1,p=5$qPJUhbOTYYTh3n5059foVg$ZzBQuaaYouvN+GbS3fgOwHrOQv+6c84zQ6E8ME2MJV0	false
+truncated-hash-refused	correct horse battery staple	\n2s=3,b=0.83,c=0,g=0f1e2d3c4b5a6978$argon2id$v=19$m=9216,t=4,p=1$ZqNTAV/91fhnReFANK2k8w$7H0BjTCm6RIDljLFsK9Li4WNk2XHrThO3paXeKz	false
+wrong-argon2-version-refused	correct horse battery staple	\n2s=3,b=0.83,c=0,g=0f1e2d3c4b5a6978$argon2id$v=16$m=9216,t=4,p=1$ZqNTAV/91fhnReFANK2k8w$7H0BjTCm6RIDljLFsK9Li4WNk2XHrThO3paXeKzveec	false
+argon2i-not-argon2id-refused	correct horse battery staple	\n2s=3,b=0.83,c=0,g=0f1e2d3c4b5a6978$argon2i$v=19$m=9216,t=4,p=1$ZqNTAV/91fhnReFANK2k8w$7H0BjTCm6RIDljLFsK9Li4WNk2XHrThO3paXeKzveec	false
+no-hash-refused	correct horse battery staple	\n2s=3,b=0.83,c=0,g=0f1e2d3c4b5a6978	false
+empty-candidate-refused		\n2s=3,b=0.83,c=0,g=0f1e2d3c4b5a6978$argon2id$v=19$m=9216,t=4,p=1$ZqNTAV/91fhnReFANK2k8w$7H0BjTCm6RIDljLFsK9Li4WNk2XHrThO3paXeKzveec	false

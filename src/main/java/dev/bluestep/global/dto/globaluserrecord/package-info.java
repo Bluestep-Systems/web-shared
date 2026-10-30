@@ -23,10 +23,12 @@
  * <p>The credential moves on its own verb and never rides an account edit:
  * {@link dev.bluestep.global.dto.globaluserrecord.GlobalUserRecordUpdateRequest} still has no
  * credential component, which is what stops an edit by something that had not loaded the credential
- * from blanking it. There is deliberately <em>no</em> verify operation — the stored population spans
- * two cipher generations, so comparing encoded bytes would refuse the correct password for the
- * majority of accounts; the credential update record states what was measured and what verify would
- * need.</p>
+ * from blanking it. One request does carry a password:
+ * {@link dev.bluestep.global.dto.globaluserrecord.GlobalUserAuthenticationRequest}, the sign-in check
+ * (6.1.0). It is answered for one-way (Argon2id) credentials only, with an outcome and the account and
+ * never with anything derived from the stored value; a reversible credential is answered
+ * {@link dev.bluestep.global.dto.globaluserrecord.GlobalUserAuthenticationOutcome#LEGACY_CREDENTIAL}
+ * and stays the monolith's to check, because checking it needs the monolith's cipher key.</p>
  *
  * <p>Null-marked: every type here is non-null unless explicitly annotated
  * {@link org.jspecify.annotations.Nullable}. A record component that may be
