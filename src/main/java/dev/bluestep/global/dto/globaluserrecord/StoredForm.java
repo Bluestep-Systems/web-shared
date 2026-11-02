@@ -1,5 +1,7 @@
 package dev.bluestep.global.dto.globaluserrecord;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * What the monolith's encoded credential looks like on the wire, so that a request carrying a plainly
  * un-encoded value is refused at the edge rather than stored.
@@ -95,6 +97,17 @@ final class StoredForm {
 	private static final int BODY_START = 2;
 
 	private StoredForm() {
+	}
+
+	/**
+	 * How a record's {@code toString} prints a stored credential: never the value, only whether one is
+	 * there.
+	 *
+	 * @param credential the stored credential, or {@code null} where the record has none
+	 * @return {@code "<redacted>"} for a value, {@code "null"} for none, as a record prints a null
+	 */
+	static String redacted(@Nullable String credential) {
+		return credential == null ? "null" : "<redacted>";
 	}
 
 	/**

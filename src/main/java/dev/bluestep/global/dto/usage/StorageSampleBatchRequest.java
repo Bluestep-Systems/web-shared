@@ -3,9 +3,8 @@ package dev.bluestep.global.dto.usage;
 import java.time.OffsetDateTime;
 import java.util.List;
 
-import dev.bluestep.global.dto.constraints.CodePointSize;
+import dev.bluestep.global.dto.fleet.NamespaceName;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -40,18 +39,17 @@ import jakarta.validation.constraints.Size;
  *   <li>a meter web-global's catalog does not list. A meter is catalogued before any producer
  *       sends it; a figure silently dropped would be storage nobody bills;</li>
  *   <li>two levels naming the same meter for one tenant once meter keys are normalized
- *       (trimmed and lowercased, like the namespace).</li>
+ *       (trimmed and lowercased).</li>
  * </ul>
  *
- * @param namespace the Kubernetes namespace the sampler runs in, recorded on every row; trimmed,
- *                  lowercased and spelling-checked at ingest exactly as
- *                  {@link UsageBatchRequest#namespace()} is
+ * @param namespace the Kubernetes namespace the sampler runs in, recorded on every row; validated
+ *                  as a DNS label exactly as {@link UsageBatchRequest#namespace()} is
  * @param sampledAt the start of the sampling period — midnight UTC while the cadence is daily
  * @param samples   one entry per tenant measured, at most {@value #MAX_SAMPLES}; empty for a
  *                  heartbeat
  */
 public record StorageSampleBatchRequest(
-		@NotBlank @CodePointSize(max = UsageBatchRequest.MAX_NAMESPACE_LENGTH) String namespace,
+		@NotNull @Valid NamespaceName namespace,
 		@NotNull OffsetDateTime sampledAt,
 		@Size(max = MAX_SAMPLES) List<@Valid StorageSample> samples) {
 

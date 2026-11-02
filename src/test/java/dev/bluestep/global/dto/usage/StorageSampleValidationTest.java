@@ -18,6 +18,8 @@ import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import jakarta.validation.ValidatorFactory;
 
+import dev.bluestep.global.dto.fleet.NamespaceName;
+
 /**
  * The usage DTO constraints, run through a real Bean Validation provider — so "the annotation is
  * in the source" is distinguishable from "the annotation fires", including the {@code @Valid}
@@ -48,7 +50,7 @@ class StorageSampleValidationTest {
 	}
 
 	private static StorageSampleBatchRequest batchOf(final List<StorageSample> samples) {
-		return new StorageSampleBatchRequest("b6p-07", PERIOD, samples);
+		return new StorageSampleBatchRequest(NamespaceName.of("b6p-07"), PERIOD, samples);
 	}
 
 	private static StorageSample valid() {
@@ -74,22 +76,27 @@ class StorageSampleValidationTest {
 	}
 
 	@Test
-	void theNamespaceIsRequiredAndBounded() {
-		final int max = UsageBatchRequest.MAX_NAMESPACE_LENGTH;
-		assertEquals(Set.of("namespace"), violatedPaths(
-				new StorageSampleBatchRequest(" ", PERIOD, List.of(valid()))));
-		assertEquals(Set.of(), violatedPaths(
-				new StorageSampleBatchRequest("n".repeat(max), PERIOD, List.of(valid()))));
-		assertEquals(Set.of("namespace"), violatedPaths(
-				new StorageSampleBatchRequest("n".repeat(max + 1), PERIOD, List.of(valid()))));
+	void theNamespaceIsRequired() {
+		assertEquals(Set.of("namespace"), violatedPaths(new StorageSampleBatchRequest(null, PERIOD, List.of(valid()))));
 	}
 
-	/** The width counts code points, as {@code varchar} does, not UTF-16 units. */
+	/**
+	 * The namespace is held to {@link NamespaceName}'s request rule, a Kubernetes DNS label: a spelling the
+	 * ingest once trimmed and lower-cased is now refused, so one namespace has one spelling on the wire.
+	 */
 	@Test
-	void theNamespaceBoundCountsCodePoints() {
-		final String astral = "😀".repeat(UsageBatchRequest.MAX_NAMESPACE_LENGTH);
-
-		assertEquals(Set.of(), violatedPaths(new StorageSampleBatchRequest(astral, PERIOD, List.of())));
+	void theNamespaceMustBeADnsLabel() {
+		final String longest = "n".repeat(NamespaceName.MAX_LENGTH);
+		assertEquals(Set.of(), violatedPaths(
+				new StorageSampleBatchRequest(NamespaceName.of(longest), PERIOD, List.of(valid()))));
+		for (final String bad : List.of("", " ", " b6p-07", "B6P-07", "b6p_07", longest + "n")) {
+			assertEquals(Set.of("namespace.value"), violatedPaths(
+					new StorageSampleBatchRequest(NamespaceName.of(bad), PERIOD, List.of(valid()))), bad);
+			assertEquals(Set.of("namespace.value"), violatedPaths(new DbUsageBatchRequest(NamespaceName.of(bad),
+					PERIOD, PERIOD.plusMinutes(5), 0, false, 0, 100, List.of())), bad);
+			assertEquals(Set.of("namespace.value"), violatedPaths(
+					new UsageBatchRequest("id", NamespaceName.of(bad), List.of())), bad);
+		}
 	}
 
 	/**
@@ -99,9 +106,9 @@ class StorageSampleValidationTest {
 	@Test
 	void sampledAtIsRequiredButNotTimeBoundedHere() {
 		assertEquals(Set.of("sampledAt"),
-				violatedPaths(new StorageSampleBatchRequest("b6p-07", null, List.of())));
+				violatedPaths(new StorageSampleBatchRequest(NamespaceName.of("b6p-07"), null, List.of())));
 		assertEquals(Set.of(), violatedPaths(
-				new StorageSampleBatchRequest("b6p-07", OffsetDateTime.now().plusDays(1), List.of())));
+				new StorageSampleBatchRequest(NamespaceName.of("b6p-07"), OffsetDateTime.now().plusDays(1), List.of())));
 	}
 
 	@Test
@@ -162,11 +169,11 @@ class StorageSampleValidationTest {
 		final UsageWindow bad = new UsageWindow(1L, "", "c".repeat(UsageWindow.MAX_KEY_LENGTH + 1),
 				-1, UsageWindow.MAX_TOTAL + 1, 1, 1, 1, 1, 1, 1, 1, 1);
 
-		assertEquals(Set.of(), violatedPaths(new UsageBatchRequest("id", "b6p-07", List.of(ok))));
+		assertEquals(Set.of(), violatedPaths(new UsageBatchRequest("id", NamespaceName.of("b6p-07"), List.of(ok))));
 		assertEquals(Set.of("batchId", "namespace", "windows[0].schemaName", "windows[0].category",
 				"windows[0].hits", "windows[0].pageMillis"),
-				violatedPaths(new UsageBatchRequest(" ", " ", List.of(bad))));
-		assertEquals(Set.of("windows"), violatedPaths(new UsageBatchRequest("id", "b6p-07",
+				violatedPaths(new UsageBatchRequest(" ", null, List.of(bad))));
+		assertEquals(Set.of("windows"), violatedPaths(new UsageBatchRequest("id", NamespaceName.of("b6p-07"),
 				Collections.nCopies(UsageBatchRequest.MAX_WINDOWS + 1, ok))));
 	}
 }

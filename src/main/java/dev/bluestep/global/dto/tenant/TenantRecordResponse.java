@@ -7,6 +7,7 @@ import java.util.OptionalInt;
 
 import org.jspecify.annotations.Nullable;
 
+import dev.bluestep.global.dto.fleet.NamespaceName;
 import dev.bluestep.global.dto.tenantaccess.ResellerKey;
 
 /**
@@ -59,7 +60,7 @@ public record TenantRecordResponse(
 		@Nullable String mission,
 		@Nullable String associationId,
 		ResellerKey reseller,
-		@Nullable String namespace,
+		@Nullable NamespaceName namespace,
 		long flags,
 		TenantFeatures features,
 		TenantLock lock,
@@ -105,7 +106,7 @@ public record TenantRecordResponse(
 	}
 
 	/** {@link #namespace}, as an {@code Optional}. */
-	public Optional<String> optNamespace() {
+	public Optional<NamespaceName> optNamespace() {
 		return Optional.ofNullable(namespace);
 	}
 
@@ -162,5 +163,23 @@ public record TenantRecordResponse(
 	/** {@link #modifier}, as an {@code Optional}. */
 	public Optional<TenantActor> optModifier() {
 		return Optional.ofNullable(modifier);
+	}
+
+	/**
+	 * Every component but {@link #requiredEndorsement}, which is replaced by a fixed placeholder when
+	 * present, as {@link TenantSettings#toString()} does: it is enciphered with the monolith's key.
+	 */
+	@Override
+	public String toString() {
+		return "TenantRecordResponse[tenant=" + tenant + ", name=" + name + ", displayName=" + displayName
+				+ ", shortName=" + shortName + ", mission=" + mission + ", associationId=" + associationId
+				+ ", reseller=" + reseller + ", namespace=" + namespace + ", flags=" + flags + ", features=" + features
+				+ ", lock=" + lock + ", requiredEndorsement=" + TenantSettings.redacted(requiredEndorsement)
+				+ ", assignedServers=" + assignedServers + ", formulaServer=" + formulaServer + ", distributionCount="
+				+ distributionCount + ", defaultEmailValidatedCountdown=" + defaultEmailValidatedCountdown
+				+ ", pageLockMillis=" + pageLockMillis + ", pageLockWarningMillis=" + pageLockWarningMillis
+				+ ", helpTopicTemplate=" + helpTopicTemplate + ", signIn=" + signIn + ", storage=" + storage
+				+ ", organization=" + organization + ", created=" + created + ", modified=" + modified + ", creator="
+				+ creator + ", modifier=" + modifier + "]";
 	}
 }

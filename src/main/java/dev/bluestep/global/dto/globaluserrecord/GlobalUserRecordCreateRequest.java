@@ -173,4 +173,21 @@ public record GlobalUserRecordCreateRequest(
 	public Optional<String> optStoredCredential() {
 		return Optional.ofNullable(storedCredential);
 	}
+
+	/**
+	 * Every component but the stored credential, which is replaced by a fixed placeholder when present: it
+	 * is reversible with the monolith's key, so a request that reaches a log line through a framework's
+	 * argument logging must not carry it, as {@link GlobalUserAuthenticationRequest#toString()} does not
+	 * carry its candidate.
+	 */
+	@Override
+	public String toString() {
+		return "GlobalUserRecordCreateRequest[classid=" + classid + ", seqnum=" + seqnum
+				+ ", firstName=" + firstName + ", lastName=" + lastName + ", username=" + username
+				+ ", userEmail=" + userEmail + ", reseller=" + reseller + ", superUser=" + superUser
+				+ ", disabled=" + disabled + ", attribs=" + attribs + ", passwordExpireStart=" + passwordExpireStart
+				+ ", emailValidated=" + emailValidated + ", emailValidatedExpireStart=" + emailValidatedExpireStart
+				+ ", linkedAccounts=" + linkedAccounts
+				+ ", storedCredential=" + StoredForm.redacted(storedCredential) + "]";
+	}
 }

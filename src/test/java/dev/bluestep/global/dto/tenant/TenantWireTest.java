@@ -9,7 +9,9 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
+import dev.bluestep.global.dto.ToStringRedaction;
 import dev.bluestep.global.dto.basetable.BaseTableKey;
+import dev.bluestep.global.dto.fleet.NamespaceName;
 import dev.bluestep.global.dto.tenantaccess.GlobalUserKey;
 import dev.bluestep.global.dto.tenantaccess.ResellerKey;
 import dev.bluestep.global.dto.tenantaccess.TenantUserKey;
@@ -32,8 +34,12 @@ class TenantWireTest {
 	private static final TenantKey TENANT = new TenantKey(TenantKey.CLASSID, 137_803L);
 
 	private static TenantRecordResponse record(TenantActor creator, TenantActor modifier) {
+		return record(creator, modifier, NamespaceName.of("web-a"));
+	}
+
+	private static TenantRecordResponse record(TenantActor creator, TenantActor modifier, NamespaceName namespace) {
 		return new TenantRecordResponse(TENANT, "Harbor Clinic", null, "harbor", "care", "U137803",
-				new ResellerKey(111_222L, 1L), "web-a", 8L,
+				new ResellerKey(111_222L, 1L), namespace, 8L,
 				new TenantFeatures(true, false, false, false, false, true, true, false, true, false, false, false,
 						true),
 				new TenantLock(5, true, LocalDateTime.of(2026, 10, 1, 8, 30), 60, "soon", "now", "done"),
@@ -46,6 +52,12 @@ class TenantWireTest {
 						null, null, "pat@example.org", null, null, null, "10.0.0.0/8", false, true, null),
 				LocalDateTime.of(2020, 1, 2, 3, 4, 5), LocalDateTime.of(2026, 10, 28, 9, 0), creator,
 				modifier);
+	}
+
+	/** The enciphered endorsement is served as stored but never printed. */
+	@Test
+	void record_printsWithoutItsRequiredEndorsement() {
+		ToStringRedaction.assertRedacts(record(null, null), "requiredEndorsement", "cipher");
 	}
 
 	@Test
@@ -80,8 +92,8 @@ class TenantWireTest {
 
 	@Test
 	void snapshot_pinsItsKeysAndDefaultsAnOmittedList() throws Exception {
-		TenantSnapshotEntry entry = new TenantSnapshotEntry(TENANT, new ResellerKey(111_222L, 1L), "web-a", 4,
-				8L, true, false, true, false);
+		TenantSnapshotEntry entry = new TenantSnapshotEntry(TENANT, new ResellerKey(111_222L, 1L),
+				NamespaceName.of("web-a"), 4, 8L, true, false, true, false);
 
 		assertEquals("""
 				{"tenants":[{"tenant":{"classid":111111,"seqnum":137803},\
@@ -89,6 +101,26 @@ class TenantWireTest {
 				"enableChangeHistory":true,"enableObjectStats":false,"enableAlerts":true,"global":false}]}""",
 				JSON.writeValueAsString(new TenantSnapshotResponse(List.of(entry))));
 		assertEquals(List.of(), JSON.readValue("{}", TenantSnapshotResponse.class).tenants());
+	}
+
+	/**
+	 * Older monolith builds write {@code association.namespace} unchecked, so a stored name may not be a
+	 * DNS label. The record and the snapshot carry it as stored: one such row must not fail the read.
+	 */
+	@Test
+	void aStoredNamespaceThatIsNotADnsLabel_roundTripsInTheRecordAndTheSnapshot() throws Exception {
+		NamespaceName stored = NamespaceName.of("Web_A");
+		TenantRecordResponse sent = record(null, null, stored);
+		TenantSnapshotEntry entry = new TenantSnapshotEntry(TENANT, new ResellerKey(111_222L, 1L), stored, 0, 0L,
+				false, false, false, false);
+
+		TenantRecordResponse read = JSON.readValue(JSON.writeValueAsString(sent), TenantRecordResponse.class);
+		TenantSnapshotResponse snapshot = JSON.readValue(
+				JSON.writeValueAsString(new TenantSnapshotResponse(List.of(entry))), TenantSnapshotResponse.class);
+
+		assertEquals(sent, read);
+		assertEquals(List.of(entry), snapshot.tenants());
+		assertEquals("Web_A", snapshot.tenants().get(0).optNamespace().orElseThrow().value());
 	}
 
 	@Test
