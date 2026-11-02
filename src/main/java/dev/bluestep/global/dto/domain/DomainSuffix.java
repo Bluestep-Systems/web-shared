@@ -3,7 +3,7 @@ package dev.bluestep.global.dto.domain;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 
-import jakarta.validation.constraints.Pattern;
+import dev.bluestep.global.dto.constraints.CodePointSize;
 
 /**
  * The domain a site's {@link DomainPrefix} is put under to build its host (from 6.0.0): the
@@ -24,31 +24,38 @@ import jakarta.validation.constraints.Pattern;
  * reseller read and written back keeps exactly the column it had, and the wire carries {@code ""} where it
  * always did; {@link #isNone()} says which it is.</p>
  *
- * <h2>Validation: requests only</h2>
+ * <h2>Validation: the width always, the shape by contract version</h2>
  *
- * <p>A suffix a caller writes must match {@link #SUFFIX_PATTERN}: blank, or a host name as
- * {@link DomainHost#HOST_PATTERN} spells one (the monolith's {@code DomainName.isValidDomain}). The rule is
- * a bean-validation constraint on {@link #value}, so it fires only where a request is validated
- * ({@code @Valid}), and a request breaking it is a {@code 400}.</p>
+ * <p>The one bean-validation constraint is the column's width, {@value #MAX_LENGTH} code points, which every
+ * request that cascades into this ({@code @Valid}) is held to, as the plain {@code String} was.</p>
  *
- * <p>Building one, in code or from JSON, accepts any string: older monolith builds wrote the column
- * unchecked, and reading such a row answers the suffix as stored rather than failing the read.</p>
+ * <p>The shape, {@link #SUFFIX_PATTERN} (blank, or a host name as {@link DomainHost#HOST_PATTERN} spells
+ * one), is <em>not</em> a bean constraint, because the records carrying a suffix are bound under every
+ * contract version: older monolith builds pass an administrator's text through unchecked, and the contract
+ * versions they speak must keep accepting and storing it exactly as sent. The server applies
+ * {@link #isValid()} itself on the versions that promise the rule (web-global: 6.0.0 and later).</p>
+ *
+ * <p>Building one, in code or from JSON, accepts any string, and reading a stored one answers it as
+ * stored.</p>
  *
  * @param value the suffix, as stored or as written; empty for none
  */
 public record DomainSuffix(
 		@JsonValue
-		@Pattern(regexp = DomainSuffix.SUFFIX_PATTERN)
+		@CodePointSize(max = DomainSuffix.MAX_LENGTH)
 		String value) {
 
-	/** A suffix a caller may write: empty (none), or a host name as {@link DomainHost#HOST_PATTERN} spells one. */
+	/** The width of the reseller's {@code defaultdomain} column, {@code varchar(256)}, in code points. */
+	public static final int MAX_LENGTH = 256;
+
+	/** A well-formed suffix: empty (none), or a host name as {@link DomainHost#HOST_PATTERN} spells one. */
 	public static final String SUFFIX_PATTERN = "(" + DomainHost.HOST_PATTERN + ")?";
 
 	private static final java.util.regex.Pattern SUFFIX = java.util.regex.Pattern.compile(SUFFIX_PATTERN);
 
 	/**
 	 * The suffix {@code value} spells; Jackson binds a JSON string through this. Any string is accepted
-	 * (see the class doc); {@link #isValid()} or bean validation checks it.
+	 * (see the class doc).
 	 *
 	 * @param value the suffix, as stored or as written
 	 * @return the suffix
@@ -68,8 +75,8 @@ public record DomainSuffix(
 	}
 
 	/**
-	 * Whether a caller could write this suffix as it is spelled: what the constraint on {@link #value}
-	 * checks, for a caller that holds one outside a validated request.
+	 * Whether this suffix is well formed: blank, or a host name a site prefix can be put under. The rule a
+	 * server applies on the contract versions that promise it (see the class doc).
 	 *
 	 * @return {@code true} when {@link #value} matches {@link #SUFFIX_PATTERN}
 	 */

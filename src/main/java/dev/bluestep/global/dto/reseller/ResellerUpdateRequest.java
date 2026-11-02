@@ -83,10 +83,10 @@ import jakarta.validation.constraints.NotNull;
  * @param displayName    the name the reseller is shown and ordered by. Required, and bounded at the
  *                       width of {@code basetable.displayname}.
  * @param supportEmail   where this reseller's users are told to write
- * @param defaultDomain  the domain its tenants' site hosts are built under: a host name, or
- *                       blank or absent for the platform's default (blank is kept as sent; see
- *                       {@link DomainSuffix}). Validated ({@code @Valid}) against
- *                       {@link DomainSuffix#SUFFIX_PATTERN}.
+ * @param defaultDomain  the domain its tenants' site hosts are built under, or blank or absent
+ *                       for the platform's default (blank is kept as sent; see {@link DomainSuffix}).
+ *                       Bounded at the column's width on every version ({@code @Valid}); its shape
+ *                       ({@link DomainSuffix#isValid()}) is enforced by web-global from 6.0.0 only.
  * @param privacyPageUrl the privacy policy to render, or absent for the monolith's own
  * @param termsPageUrl   the terms to render, or absent for the monolith's own
  * @param icons          the icon set, in full. Required as an object even when every icon inside it
