@@ -40,7 +40,7 @@ public record DomainRecordResponse(
 		DomainHost host,
 		TenantKey tenant,
 		@Nullable BaseTableKey organization,
-		@Nullable String domainPrefix,
+		@Nullable DomainPrefix domainPrefix,
 		long flags,
 		@Nullable Integer ingressReadTimeoutSeconds,
 		@Nullable LoginTypeSetting signIn,
@@ -55,7 +55,7 @@ public record DomainRecordResponse(
 	}
 
 	/** {@link #domainPrefix}, as an {@code Optional}. */
-	public Optional<String> optDomainPrefix() {
+	public Optional<DomainPrefix> optDomainPrefix() {
 		return Optional.ofNullable(domainPrefix);
 	}
 

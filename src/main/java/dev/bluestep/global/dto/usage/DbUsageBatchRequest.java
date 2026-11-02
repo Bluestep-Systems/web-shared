@@ -5,11 +5,10 @@ import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
-import dev.bluestep.global.dto.constraints.CodePointSize;
+import dev.bluestep.global.dto.fleet.NamespaceName;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -57,8 +56,8 @@ import jakarta.validation.constraints.Size;
  * so web-global answers 400. A component added later must therefore be boxed or {@code Optional} to
  * stay additive for producers built against the older shape.</p>
  *
- * @param namespace    the Kubernetes namespace the sampler runs in; trimmed, lowercased and
- *                     spelling-checked at ingest exactly as {@link UsageBatchRequest#namespace()} is
+ * @param namespace    the Kubernetes namespace the sampler runs in, validated as a DNS label
+ *                     exactly as {@link UsageBatchRequest#namespace()} is
  * @param windowStart  when the baseline read was taken
  * @param windowEnd    when the closing read was taken
  * @param deallocDelta growth of {@code pg_stat_statements_info.dealloc} over the window. That counts
@@ -72,7 +71,7 @@ import jakarta.validation.constraints.Size;
  * @param tenants      one row per tenant with work in the window, at most {@value #MAX_TENANTS}
  */
 public record DbUsageBatchRequest(
-		@NotBlank @CodePointSize(max = UsageBatchRequest.MAX_NAMESPACE_LENGTH) String namespace,
+		@NotNull @Valid NamespaceName namespace,
 		@NotNull OffsetDateTime windowStart,
 		@NotNull OffsetDateTime windowEnd,
 		@PositiveOrZero @Max(DbUsageRow.MAX_TOTAL) long deallocDelta,

@@ -9,7 +9,9 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import dev.bluestep.global.dto.basetable.BaseTableKey;
 import dev.bluestep.global.dto.constraints.CodePointSize;
+import dev.bluestep.global.dto.domain.DomainSuffix;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -53,7 +55,7 @@ public record ResellerCreateRequest(
 		@NotNull BaseTableKey creator,
 		@NotBlank @CodePointSize(max = 1000) String displayName,
 		@CodePointSize(max = 256) @Nullable String supportEmail,
-		@CodePointSize(max = 256) @Nullable String defaultDomain,
+		@Valid @Nullable DomainSuffix defaultDomain,
 		@Nullable String privacyPageUrl,
 		@Nullable String termsPageUrl,
 		@NotNull ResellerIcons icons,
@@ -85,7 +87,7 @@ public record ResellerCreateRequest(
 	}
 
 	/** {@link #defaultDomain}, as an {@code Optional}. */
-	public Optional<String> optDefaultDomain() {
+	public Optional<DomainSuffix> optDefaultDomain() {
 		return Optional.ofNullable(defaultDomain);
 	}
 

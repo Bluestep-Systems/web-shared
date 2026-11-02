@@ -6,7 +6,6 @@ import java.util.OptionalInt;
 import org.jspecify.annotations.Nullable;
 
 import dev.bluestep.global.dto.basetable.BaseTableKey;
-import dev.bluestep.global.dto.constraints.CodePointSize;
 import dev.bluestep.global.dto.tenant.TenantActor;
 
 import jakarta.validation.Valid;
@@ -29,7 +28,8 @@ import jakarta.validation.constraints.Positive;
  * @param host                      the host name
  * @param organization              the unit inside the tenant's schema the host lands on, or absent for
  *                                  the tenant's default
- * @param domainPrefix              the site prefix the host was built from, or absent
+ * @param domainPrefix              the site prefix the host was built from, or absent; validated
+ *                                  ({@code @Valid}) against {@link DomainPrefix#PREFIX_PATTERN}
  * @param flags                     the monolith's bit set, verbatim
  * @param ingressReadTimeoutSeconds the ingress read timeout, or absent for the default, 120 seconds
  * @param signIn                    the domain's own sign-in type, or absent for the tenant's
@@ -38,7 +38,7 @@ import jakarta.validation.constraints.Positive;
 public record DomainUpdateRequest(
 		@NotNull @Valid DomainHost host,
 		@Nullable BaseTableKey organization,
-		@CodePointSize(max = 256) @Nullable String domainPrefix,
+		@Valid @Nullable DomainPrefix domainPrefix,
 		long flags,
 		@Positive @Nullable Integer ingressReadTimeoutSeconds,
 		@Valid @Nullable LoginTypeSetting signIn,
@@ -50,7 +50,7 @@ public record DomainUpdateRequest(
 	}
 
 	/** {@link #domainPrefix}, as an {@code Optional}. */
-	public Optional<String> optDomainPrefix() {
+	public Optional<DomainPrefix> optDomainPrefix() {
 		return Optional.ofNullable(domainPrefix);
 	}
 

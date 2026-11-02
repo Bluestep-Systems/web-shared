@@ -68,13 +68,14 @@ class DomainWireTest {
 	}
 
 	private static DomainCreateRequest create(String host) {
-		return new DomainCreateRequest(TENANT, DomainHost.of(host), UNIT, "harbor", 0L, 300, OAUTH,
+		return new DomainCreateRequest(TENANT, DomainHost.of(host), UNIT, DomainPrefix.of("harbor"), 0L, 300, OAUTH,
 				new TenantActor.GlobalUser(new GlobalUserKey(222_222L, -180L)));
 	}
 
 	@Test
 	void record_roundTripsAndPinsItsKeys() {
-		DomainRecordResponse sent = new DomainRecordResponse(DOMAIN, DomainHost.of("harbor.example.org"), TENANT, UNIT, "harbor",
+		DomainRecordResponse sent = new DomainRecordResponse(DOMAIN, DomainHost.of("harbor.example.org"), TENANT, UNIT,
+				DomainPrefix.of("harbor"),
 				4L, 120, OAUTH, LocalDateTime.of(2020, 1, 2, 3, 4, 5), LocalDateTime.of(2026, 10, 28, 9, 0),
 				new TenantActor.GlobalUser(new GlobalUserKey(222_222L, -180L)),
 				new TenantActor.TenantUser(TENANT, new TenantUserKey(222_222L, 42L)));
@@ -152,7 +153,8 @@ class DomainWireTest {
 
 	@Test
 	void ingressRow_pinsItsKeysAndAbsence() {
-		DomainIngressRow row = new DomainIngressRow(DomainHost.of("a.harbor.example.org"), 120, "a", "harbor.example.org");
+		DomainIngressRow row = new DomainIngressRow(DomainHost.of("a.harbor.example.org"), 120, DomainPrefix.of("a"),
+				"harbor.example.org");
 
 		assertEquals("{\"host\":\"a.harbor.example.org\",\"ingressReadTimeoutSeconds\":120,\"domainPrefix\":\"a\","
 				+ "\"wildcard\":\"harbor.example.org\"}", JSON.writeValueAsString(row));
@@ -197,12 +199,12 @@ class DomainWireTest {
 	}
 
 	@Test
-	void create_refusesANonPositiveTimeoutAndAWidePrefix() {
+	void create_refusesANonPositiveTimeoutAndAnInvalidPrefix() {
 		DomainCreateRequest ok = create("harbor.example.org");
-		assertEquals(Set.of("ingressReadTimeoutSeconds", "domainPrefix"), violatedPaths(new DomainCreateRequest(
-				ok.tenant(), ok.host(), null, "p".repeat(257), 0L, 0, null, null)));
-		assertEquals(Set.of(), violatedPaths(new DomainCreateRequest(ok.tenant(), ok.host(), null, "p".repeat(256),
-				0L, null, null, null)));
+		assertEquals(Set.of("ingressReadTimeoutSeconds", "domainPrefix.value"), violatedPaths(new DomainCreateRequest(
+				ok.tenant(), ok.host(), null, DomainPrefix.of("Harbor"), 0L, 0, null, null)));
+		assertEquals(Set.of(), violatedPaths(new DomainCreateRequest(ok.tenant(), ok.host(), null,
+				DomainPrefix.of("a." + "p".repeat(62)), 0L, null, null, null)));
 	}
 
 	@Test

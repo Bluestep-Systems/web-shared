@@ -17,13 +17,15 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Pins the bytes of every record that carries a host, so retyping its host components from
- * {@code String} to {@link DomainHost} is proven to change no byte on the wire, either way.
+ * Pins the bytes of every record that carries a host or a site prefix, so retyping those components
+ * from {@code String} to {@link DomainHost} and {@link DomainPrefix} is proven to change no byte on the
+ * wire, either way.
  *
  * <p>The expected strings were first pinned against the {@code String}-typed components (commit
- * 24249cb's shapes, with {@link #h} the identity); only {@link #h} changed when the components were
- * retyped. Each record is written to exactly the old bytes and those bytes read back to an equal
- * record, including a stored host the request rule would refuse.</p>
+ * 24249cb's shapes, with {@link #h} the identity; then c8aa29d's, with {@link #p} the identity);
+ * only those helpers changed when the components were retyped. Each record is written to exactly the old
+ * bytes and those bytes read back to an equal record, including a stored host the request rule would
+ * refuse.</p>
  */
 class DomainHostWireTest {
 
@@ -41,6 +43,10 @@ class DomainHostWireTest {
 		return DomainHost.of(host);
 	}
 
+	private static DomainPrefix p(String prefix) {
+		return DomainPrefix.of(prefix);
+	}
+
 	private static <T> void pinned(T sent, String expected, Class<T> type) {
 		assertEquals(expected, JSON.writeValueAsString(sent));
 		assertEquals(sent, JSON.readValue(expected, type));
@@ -48,7 +54,7 @@ class DomainHostWireTest {
 
 	@Test
 	void recordResponse() {
-		pinned(new DomainRecordResponse(DOMAIN, h(STORED), TENANT, new BaseTableKey(111_000L, 12L), "harbor", 4L,
+		pinned(new DomainRecordResponse(DOMAIN, h(STORED), TENANT, new BaseTableKey(111_000L, 12L), p("harbor"), 4L,
 				120, null, LocalDateTime.of(2020, 1, 2, 3, 4, 5), null, null, null),
 				"{\"domain\":{\"classid\":120100,\"seqnum\":5531},\"host\":\" Harbor.Example.org\","
 						+ "\"tenant\":{\"classid\":111111,\"seqnum\":137803},"
@@ -69,7 +75,7 @@ class DomainHostWireTest {
 
 	@Test
 	void updateRequest() {
-		pinned(new DomainUpdateRequest(h("harbor.example.org"), null, "harbor", 2L, 300, null, null),
+		pinned(new DomainUpdateRequest(h("harbor.example.org"), null, p("harbor"), 2L, 300, null, null),
 				"{\"host\":\"harbor.example.org\",\"organization\":null,\"domainPrefix\":\"harbor\",\"flags\":2,"
 						+ "\"ingressReadTimeoutSeconds\":300,\"signIn\":null,\"actor\":null}",
 				DomainUpdateRequest.class);
@@ -77,7 +83,7 @@ class DomainHostWireTest {
 
 	@Test
 	void ingressRow() {
-		pinned(new DomainIngressRow(h("a.harbor.example.org"), null, "a", "harbor.example.org"),
+		pinned(new DomainIngressRow(h("a.harbor.example.org"), null, p("a"), "harbor.example.org"),
 				"{\"host\":\"a.harbor.example.org\",\"ingressReadTimeoutSeconds\":null,\"domainPrefix\":\"a\","
 						+ "\"wildcard\":\"harbor.example.org\"}",
 				DomainIngressRow.class);

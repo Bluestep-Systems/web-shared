@@ -4,8 +4,10 @@ import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import dev.bluestep.global.dto.fleet.NamespaceName;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 /**
@@ -27,15 +29,17 @@ import jakarta.validation.constraints.Size;
  *                  transport failure carries the same id
  * @param namespace the Kubernetes namespace the producer runs in, recorded on every row of the
  *                  batch — a billing row must say where usage historically happened, and the
- *                  producer is the only party that knows. Trimmed and lowercased at ingest, then
- *                  held to {@code UsageIngestService.KEY_SPELLING}: it is a primary-key column,
- *                  and {@code b6p-7} beside {@code b6p-07} is one tenant-minute billed twice
+ *                  producer is the only party that knows. A {@link NamespaceName}, validated
+ *                  ({@code @Valid}) as a Kubernetes DNS label, so a padded or upper-case spelling is a
+ *                  400 rather than a second spelling of a primary-key column ({@code B6P-07} beside
+ *                  {@code b6p-07} is one tenant-minute billed twice). Retyped from {@code String} in
+ *                  6.0.0; the wire value is the same bare string
  * @param windows   the accumulated windows; an omitted or empty list is a legitimate quiet minute,
  *                  and at most {@value #MAX_WINDOWS} of them
  */
 public record UsageBatchRequest(
 		@NotBlank @Size(max = MAX_BATCH_ID_LENGTH) @JsonProperty("b") String batchId,
-		@NotBlank @Size(max = MAX_NAMESPACE_LENGTH) @JsonProperty("n") String namespace,
+		@NotNull @Valid @JsonProperty("n") NamespaceName namespace,
 		@Size(max = MAX_WINDOWS) @JsonProperty("w") List<@Valid UsageWindow> windows) {
 
 	/**
@@ -52,12 +56,6 @@ public record UsageBatchRequest(
 
 	/** Length bound on the opaque batch id — a UUID's 36 characters with room to spare. */
 	public static final int MAX_BATCH_ID_LENGTH = 64;
-
-	/**
-	 * Length bound on {@code namespace}, matching {@code varchar(255)} on
-	 * {@code tenant_usage.namespace} (Kubernetes itself stops at 63).
-	 */
-	public static final int MAX_NAMESPACE_LENGTH = 255;
 
 	/**
 	 * Normalises the list's absence and takes a defensive copy of a present one.

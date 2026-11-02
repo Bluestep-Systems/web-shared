@@ -6,8 +6,10 @@ import java.util.OptionalLong;
 import org.jspecify.annotations.Nullable;
 
 import dev.bluestep.global.dto.constraints.CodePointSize;
+import dev.bluestep.global.dto.domain.DomainSuffix;
 import dev.bluestep.global.dto.tenant.TenantActor;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -81,7 +83,10 @@ import jakarta.validation.constraints.NotNull;
  * @param displayName    the name the reseller is shown and ordered by. Required, and bounded at the
  *                       width of {@code basetable.displayname}.
  * @param supportEmail   where this reseller's users are told to write
- * @param defaultDomain  the host its tenants front by default. Not a URL — a bare host name.
+ * @param defaultDomain  the domain its tenants' site hosts are built under: a host name, or
+ *                       blank or absent for the platform's default (blank is kept as sent; see
+ *                       {@link DomainSuffix}). Validated ({@code @Valid}) against
+ *                       {@link DomainSuffix#SUFFIX_PATTERN}.
  * @param privacyPageUrl the privacy policy to render, or absent for the monolith's own
  * @param termsPageUrl   the terms to render, or absent for the monolith's own
  * @param icons          the icon set, in full. Required as an object even when every icon inside it
@@ -94,7 +99,7 @@ import jakarta.validation.constraints.NotNull;
 public record ResellerUpdateRequest(
 		@NotBlank @CodePointSize(max = 1000) String displayName,
 		@CodePointSize(max = 256) @Nullable String supportEmail,
-		@CodePointSize(max = 256) @Nullable String defaultDomain,
+		@Valid @Nullable DomainSuffix defaultDomain,
 		@Nullable String privacyPageUrl,
 		@Nullable String termsPageUrl,
 		@NotNull ResellerIcons icons,
@@ -108,7 +113,7 @@ public record ResellerUpdateRequest(
 	}
 
 	/** {@link #defaultDomain}, as an {@code Optional}. */
-	public Optional<String> optDefaultDomain() {
+	public Optional<DomainSuffix> optDefaultDomain() {
 		return Optional.ofNullable(defaultDomain);
 	}
 

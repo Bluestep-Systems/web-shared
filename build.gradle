@@ -564,14 +564,30 @@ group = 'dev.bluestep'
 //     TenantRecordResponse.namespace, TenantSnapshotEntry.namespace, FleetNamespaceResponse.name. It
 //     accepts any string when bound or built (a stored name reads as stored); a request is refused by
 //     bean validation (400) when it names one that is not a DNS label.
-//     The usage batch requests keep a String namespace (metering ingest, outside this contract).
+//     The usage batch requests are retyped too (UsageBatchRequest.namespace, wire key "n";
+//     DbUsageBatchRequest.namespace; StorageSampleBatchRequest.namespace), @NotNull @Valid in place of
+//     @NotBlank and a 255 bound (UsageBatchRequest.MAX_NAMESPACE_LENGTH is gone). Same bytes; what changes
+//     is that a padded or upper-case namespace is a 400 rather than trimmed and lower-cased at ingest.
+//     Every producer sends its pod's metadata.namespace (or "unknown" off-cluster), and every production
+//     usage row's namespace is a DNS label (checked 2026-11-02), so no producer is affected.
 //   * dto.domain.DomainHost, new: a host name, typed the way NamespaceName is (bare string on the wire,
 //     any string when bound or built, DomainHost.HOST_PATTERN checked by bean validation on requests
 //     only) with one normalization for comparisons (normalized(): stripped, lower-cased; sameHostAs).
 //     It types DomainCreateRequest.host, DomainUpdateRequest.host, DomainRecordResponse.host,
 //     DomainIngressRow.host, RegistryHost.host and RegistryTenantResponse.defaultHost, wire unchanged.
-//     A site prefix (ReservedDomainResponse.domain, the domainPrefix components) and
-//     DomainIngressRow.wildcard (a zone) are not hosts and stay strings.
+//     DomainIngressRow.wildcard (a zone) is not a host and stays a string.
+//   * dto.domain.DomainPrefix, new: a site's domain prefix (the foo of foo.<suffix>), typed the same way
+//     (bare string, any string when bound or built). Request rule DomainPrefix.PREFIX_PATTERN = the
+//     monolith's SiteDomainPrefix: 1-64 of [a-z0-9.-] in labels of at most 63 that never start or end
+//     with a hyphen. It types ReservedDomainResponse.domain and the domainPrefix of DomainCreateRequest,
+//     DomainUpdateRequest (both @Valid), DomainRecordResponse and DomainIngressRow, wire unchanged. The
+//     reserved list is still matched without regard to case, in the database.
+//   * dto.domain.DomainSuffix, new: the domain a site prefix is put under, typed the same way; request
+//     rule blank or DomainHost.HOST_PATTERN (blank is the monolith's "none": a reseller column holds
+//     NULL, '' and host names, and a whole-set edit sends back what it read). It types defaultDomain on
+//     ResellerRecordResponse, ResellerResponse, ResellerCreateRequest and ResellerUpdateRequest (both
+//     @Valid, in place of a 256 code-point bound); null stays null and "" stays "" on the wire
+//     (ResellerDefaultDomainWireTest pins 5.5.0's bytes). Source break for callers of the accessors.
 //   * TenantLock.status and FleetLockout.status are held to 0..TenantLock.MAX_STATUS (6) on requests:
 //     the monolith decodes them with LockStatus.values()[status], so one outside the enum would fail
 //     every association load. GlobalUserAuthenticationRequest bounds username (50, the column's CHECK)
