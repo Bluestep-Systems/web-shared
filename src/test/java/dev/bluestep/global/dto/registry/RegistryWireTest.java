@@ -8,6 +8,7 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
+import dev.bluestep.global.dto.domain.DomainHost;
 import dev.bluestep.global.dto.tenant.TenantKey;
 
 import tools.jackson.databind.DeserializationFeature;
@@ -30,8 +31,8 @@ class RegistryWireTest {
 	@Test
 	void tenant_roundTripsAndPinsItsKeys() {
 		RegistryTenantResponse sent = new RegistryTenantResponse(TENANT, "U137803", "Harbor Clinic",
-				"harbor.example.org", 300, List.of(new RegistryHost("harbor.example.org", 300),
-						new RegistryHost("harbor.bluestep.net", null)));
+				DomainHost.of("harbor.example.org"), 300, List.of(new RegistryHost(DomainHost.of("harbor.example.org"), 300),
+						new RegistryHost(DomainHost.of("harbor.bluestep.net"), null)));
 
 		String json = JSON.writeValueAsString(sent);
 
@@ -59,9 +60,9 @@ class RegistryWireTest {
 
 	@Test
 	void tenant_copiesItsHosts() {
-		List<RegistryHost> hosts = new ArrayList<>(List.of(new RegistryHost("harbor.example.org", null)));
+		List<RegistryHost> hosts = new ArrayList<>(List.of(new RegistryHost(DomainHost.of("harbor.example.org"), null)));
 		RegistryTenantResponse response = new RegistryTenantResponse(TENANT, "U137803", null, null, null, hosts);
-		hosts.add(new RegistryHost("other.example.org", null));
+		hosts.add(new RegistryHost(DomainHost.of("other.example.org"), null));
 
 		assertEquals(1, response.hosts().size());
 	}

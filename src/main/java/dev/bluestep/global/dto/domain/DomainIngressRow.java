@@ -14,10 +14,12 @@ import org.jspecify.annotations.Nullable;
  * @param host                      the host name
  * @param ingressReadTimeoutSeconds the ingress read timeout, absent where the column is
  * @param domainPrefix              the site prefix the host was built from, if any
- * @param wildcard                  the wildcard domain the host falls under, absent for none
+ * @param wildcard                  the wildcard domain the host falls under, absent for none. A zone whose
+ *                                  wildcard certificate covers the host, not a host itself: no lookup
+ *                                  resolves it and no host rule applies, so it stays a string
  */
 public record DomainIngressRow(
-		String host,
+		DomainHost host,
 		@Nullable Integer ingressReadTimeoutSeconds,
 		@Nullable String domainPrefix,
 		@Nullable String wildcard) {

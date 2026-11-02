@@ -1,6 +1,7 @@
 package dev.bluestep.global.dto.tenant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -18,6 +19,7 @@ import java.util.stream.Collectors;
 import org.hibernate.validator.messageinterpolation.ParameterMessageInterpolator;
 import org.junit.jupiter.api.Test;
 
+import dev.bluestep.global.dto.ToStringRedaction;
 import dev.bluestep.global.dto.basetable.BaseTableKey;
 import dev.bluestep.global.dto.domain.LoginTypeName;
 import dev.bluestep.global.dto.fleet.NamespaceName;
@@ -249,6 +251,42 @@ class TenantWriteWireTest {
 				violatedPaths(new TenantLockUpdateRequest(lock("m".repeat(2001)), null)));
 		assertEquals(Set.of("lock.mainMessage"), violatedPaths(new TenantCreateRequest(TENANT, null,
 				settings("Harbor Clinic"), lock("m".repeat(2001)), null)));
+	}
+
+	/**
+	 * Every monolith build decodes the status with {@code LockStatus.values()[status]}: a written ordinal
+	 * outside 0..6 would make every load of the tenant throw, so a request is refused it. A read is not.
+	 */
+	@Test
+	void lock_statusIsHeldToTheMonolithsLockStatusOrdinalsWhereALockIsWritten() {
+		for (int status = 0; status <= TenantLock.MAX_STATUS; status++) {
+			assertEquals(Set.of(), violatedPaths(new TenantLockUpdateRequest(status(status), null)), "" + status);
+		}
+		for (int status : new int[] {-1, TenantLock.MAX_STATUS + 1, Integer.MAX_VALUE}) {
+			assertEquals(Set.of("lock.status"), violatedPaths(new TenantLockUpdateRequest(status(status), null)),
+					"" + status);
+			assertEquals(Set.of("lock.status"), violatedPaths(new TenantCreateRequest(TENANT, null,
+					settings("Harbor Clinic"), status(status), null)), "" + status);
+		}
+		assertEquals(7, JSON.readValue("{\"status\":7,\"autoOff\":false}", TenantLock.class).status());
+	}
+
+	private static TenantLock status(int status) {
+		return new TenantLock(status, false, null, null, null, null, null);
+	}
+
+	/** The enciphered endorsement never prints, whichever request carries the settings. */
+	@Test
+	void settings_printWithoutTheirRequiredEndorsement() {
+		TenantSettings settings = settings("Harbor Clinic");
+		ToStringRedaction.assertRedacts(settings, "requiredEndorsement", "cipher");
+		assertFalse(new TenantUpdateRequest(settings, null).toString().contains("cipher"));
+		assertFalse(new TenantCreateRequest(TENANT, null, settings, null, null).toString().contains("cipher"));
+		assertTrue(new TenantSettings(settings.name(), settings.shortName(), settings.mission(), settings.reseller(),
+				settings.namespace(), settings.flags(), settings.features(), null, settings.assignedServers(),
+				settings.formulaServer(), settings.distributionCount(), settings.defaultEmailValidatedCountdown(),
+				settings.pageLockMillis(), settings.pageLockWarningMillis(), settings.helpTopicTemplate(),
+				settings.signIn(), settings.organization()).toString().contains("requiredEndorsement=null"));
 	}
 
 	@Test

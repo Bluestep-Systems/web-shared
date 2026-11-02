@@ -10,8 +10,7 @@ import dev.bluestep.global.dto.constraints.CodePointSize;
 import dev.bluestep.global.dto.tenant.TenantActor;
 
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 
 /**
@@ -25,7 +24,7 @@ import jakarta.validation.constraints.Positive;
  * tenant's namespace modified.</p>
  *
  * <p>The components and their constraints are {@link DomainCreateRequest}'s, the host checked against
- * {@link DomainCreateRequest#HOST_PATTERN}; refusals are a {@code 409} {@link DomainWriteRefusal}.</p>
+ * {@link DomainHost#HOST_PATTERN}; refusals are a {@code 409} {@link DomainWriteRefusal}.</p>
  *
  * @param host                      the host name
  * @param organization              the unit inside the tenant's schema the host lands on, or absent for
@@ -37,7 +36,7 @@ import jakarta.validation.constraints.Positive;
  * @param actor                     who is making the edit, or absent for no actor
  */
 public record DomainUpdateRequest(
-		@NotBlank @CodePointSize(max = 255) @Pattern(regexp = DomainCreateRequest.HOST_PATTERN) String host,
+		@NotNull @Valid DomainHost host,
 		@Nullable BaseTableKey organization,
 		@CodePointSize(max = 256) @Nullable String domainPrefix,
 		long flags,

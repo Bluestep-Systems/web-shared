@@ -9,6 +9,7 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
+import dev.bluestep.global.dto.ToStringRedaction;
 import dev.bluestep.global.dto.basetable.BaseTableKey;
 import dev.bluestep.global.dto.fleet.NamespaceName;
 import dev.bluestep.global.dto.tenantaccess.GlobalUserKey;
@@ -51,6 +52,12 @@ class TenantWireTest {
 						null, null, "pat@example.org", null, null, null, "10.0.0.0/8", false, true, null),
 				LocalDateTime.of(2020, 1, 2, 3, 4, 5), LocalDateTime.of(2026, 10, 28, 9, 0), creator,
 				modifier);
+	}
+
+	/** The enciphered endorsement is served as stored but never printed. */
+	@Test
+	void record_printsWithoutItsRequiredEndorsement() {
+		ToStringRedaction.assertRedacts(record(null, null), "requiredEndorsement", "cipher");
 	}
 
 	@Test

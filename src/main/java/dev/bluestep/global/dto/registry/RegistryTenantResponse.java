@@ -6,6 +6,7 @@ import java.util.OptionalInt;
 
 import org.jspecify.annotations.Nullable;
 
+import dev.bluestep.global.dto.domain.DomainHost;
 import dev.bluestep.global.dto.tenant.TenantKey;
 
 /**
@@ -29,7 +30,7 @@ public record RegistryTenantResponse(
 		TenantKey tenant,
 		String tenantId,
 		@Nullable String name,
-		@Nullable String defaultHost,
+		@Nullable DomainHost defaultHost,
 		@Nullable Integer ingressReadTimeoutSeconds,
 		List<RegistryHost> hosts) {
 
@@ -47,7 +48,7 @@ public record RegistryTenantResponse(
 	}
 
 	/** {@link #defaultHost}, as an {@code Optional}. */
-	public Optional<String> optDefaultHost() {
+	public Optional<DomainHost> optDefaultHost() {
 		return Optional.ofNullable(defaultHost);
 	}
 

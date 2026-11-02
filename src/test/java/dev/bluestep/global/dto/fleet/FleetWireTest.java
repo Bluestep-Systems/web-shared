@@ -10,6 +10,8 @@ import java.util.stream.Collectors;
 import org.hibernate.validator.messageinterpolation.ParameterMessageInterpolator;
 import org.junit.jupiter.api.Test;
 
+import dev.bluestep.global.dto.tenant.TenantLock;
+
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
@@ -109,6 +111,23 @@ class FleetWireTest {
 		assertEquals(Set.of("lockout.mainMessage"),
 				violatedPaths(new FleetLockoutUpdateRequest(lockout("m".repeat(2001)))));
 		assertEquals(Set.of("lockout"), violatedPaths(JSON.readValue("{}", FleetLockoutUpdateRequest.class)));
+	}
+
+	/** The monolith decodes the fleet status as it does a tenant's, so a write is held to the same 0..6. */
+	@Test
+	void lockoutUpdate_holdsTheStatusToTheMonolithsLockStatusOrdinals() {
+		for (int status = 0; status <= TenantLock.MAX_STATUS; status++) {
+			assertEquals(Set.of(), violatedPaths(new FleetLockoutUpdateRequest(status(status))), "" + status);
+		}
+		for (int status : new int[] {-1, TenantLock.MAX_STATUS + 1}) {
+			assertEquals(Set.of("lockout.status"), violatedPaths(new FleetLockoutUpdateRequest(status(status))),
+					"" + status);
+		}
+		assertEquals(9, JSON.readValue("{\"status\":9,\"autoOff\":false}", FleetLockout.class).status());
+	}
+
+	private static FleetLockout status(int status) {
+		return new FleetLockout(status, false, null, null, null, null, null);
 	}
 
 	@Test
