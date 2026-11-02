@@ -1,6 +1,6 @@
 package dev.bluestep.global.dto.tenant;
 
-import java.util.Optional;
+import java.util.OptionalLong;
 
 import org.jspecify.annotations.Nullable;
 
@@ -19,23 +19,23 @@ public record TenantStorage(
 		@Nullable Long bulkAllocatedBytes,
 		@Nullable Long bulkFreeBytes) {
 
-	/** {@link #dataAllocatedBytes}, as an {@code Optional}. */
-	public Optional<Long> optDataAllocatedBytes() {
-		return Optional.ofNullable(dataAllocatedBytes);
+	/** {@link #dataAllocatedBytes}, as an {@code OptionalLong}. */
+	public OptionalLong optDataAllocatedBytes() {
+		return dataAllocatedBytes == null ? OptionalLong.empty() : OptionalLong.of(dataAllocatedBytes);
 	}
 
-	/** {@link #dataFreeBytes}, as an {@code Optional}. */
-	public Optional<Long> optDataFreeBytes() {
-		return Optional.ofNullable(dataFreeBytes);
+	/** {@link #dataFreeBytes}, as an {@code OptionalLong}. */
+	public OptionalLong optDataFreeBytes() {
+		return dataFreeBytes == null ? OptionalLong.empty() : OptionalLong.of(dataFreeBytes);
 	}
 
-	/** {@link #bulkAllocatedBytes}, as an {@code Optional}. */
-	public Optional<Long> optBulkAllocatedBytes() {
-		return Optional.ofNullable(bulkAllocatedBytes);
+	/** {@link #bulkAllocatedBytes}, as an {@code OptionalLong}. */
+	public OptionalLong optBulkAllocatedBytes() {
+		return bulkAllocatedBytes == null ? OptionalLong.empty() : OptionalLong.of(bulkAllocatedBytes);
 	}
 
-	/** {@link #bulkFreeBytes}, as an {@code Optional}. */
-	public Optional<Long> optBulkFreeBytes() {
-		return Optional.ofNullable(bulkFreeBytes);
+	/** {@link #bulkFreeBytes}, as an {@code OptionalLong}. */
+	public OptionalLong optBulkFreeBytes() {
+		return bulkFreeBytes == null ? OptionalLong.empty() : OptionalLong.of(bulkFreeBytes);
 	}
 }

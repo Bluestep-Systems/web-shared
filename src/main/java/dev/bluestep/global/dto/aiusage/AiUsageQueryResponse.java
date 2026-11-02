@@ -2,6 +2,10 @@ package dev.bluestep.global.dto.aiusage;
 
 import java.time.OffsetDateTime;
 import java.util.Optional;
+import java.util.OptionalInt;
+import java.util.OptionalLong;
+
+import org.jspecify.annotations.Nullable;
 
 import dev.bluestep.global.dto.ai.BudgetSchedule;
 
@@ -43,12 +47,33 @@ import dev.bluestep.global.dto.ai.BudgetSchedule;
  */
 public record AiUsageQueryResponse(
 		long spendMicrosUsed,
-		Optional<Long> maxSpendMicros,
-		Optional<Integer> maxIterations,
-		Optional<BudgetSchedule> budgetSchedule,
+		@Nullable Long maxSpendMicros,
+		@Nullable Integer maxIterations,
+		@Nullable BudgetSchedule budgetSchedule,
 		OffsetDateTime windowStart,
-		Optional<OffsetDateTime> windowEnd,
+		@Nullable OffsetDateTime windowEnd,
 		boolean configured,
 		boolean spendComplete,
 		boolean explicitRange
-) {}
+) {
+
+	/** {@link #maxSpendMicros}, as an {@code OptionalLong}. */
+	public OptionalLong optMaxSpendMicros() {
+		return maxSpendMicros == null ? OptionalLong.empty() : OptionalLong.of(maxSpendMicros);
+	}
+
+	/** {@link #maxIterations}, as an {@code OptionalInt}. */
+	public OptionalInt optMaxIterations() {
+		return maxIterations == null ? OptionalInt.empty() : OptionalInt.of(maxIterations);
+	}
+
+	/** {@link #budgetSchedule}, as an {@code Optional}. */
+	public Optional<BudgetSchedule> optBudgetSchedule() {
+		return Optional.ofNullable(budgetSchedule);
+	}
+
+	/** {@link #windowEnd}, as an {@code Optional}. */
+	public Optional<OffsetDateTime> optWindowEnd() {
+		return Optional.ofNullable(windowEnd);
+	}
+}

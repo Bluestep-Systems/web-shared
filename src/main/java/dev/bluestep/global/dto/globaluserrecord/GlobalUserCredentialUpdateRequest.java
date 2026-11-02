@@ -2,6 +2,8 @@ package dev.bluestep.global.dto.globaluserrecord;
 
 import java.util.Optional;
 
+import org.jspecify.annotations.Nullable;
+
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import jakarta.validation.constraints.AssertTrue;
@@ -98,7 +100,7 @@ import jakarta.validation.constraints.NotBlank;
  * verification prompt; wrongly not advancing would let a device trusted under the old password outlive
  * a change, so the default is the direction that fails safe.</p>
  *
- * <p>An {@code Optional} rather than a {@code boolean} because absence has to bind. Jackson 3 refuses
+ * <p>A nullable {@code Boolean} rather than a {@code boolean} because absence has to bind. Jackson 3 refuses
  * to map a missing creator property onto a primitive ({@code FAIL_ON_NULL_FOR_PRIMITIVES} is on by
  * default), so a primitive here would turn every request from an older caller into a 400 — the
  * opposite of the compatible default above.</p>
@@ -107,26 +109,18 @@ import jakarta.validation.constraints.NotBlank;
  *                         password</b>, and never absent. Required, for the reasons above.
  * @param reencoding       {@code true} only when {@code storedCredential} encodes the same password the
  *                         account already holds, which leaves the credential version where it is.
- *                         Empty or {@code false} is a change. Read it through {@link #isReencode()}.
+ *                         Absent or {@code false} is a change. Read it through {@link #isReencode()}.
  */
 public record GlobalUserCredentialUpdateRequest(
 		@NotBlank String storedCredential,
-		Optional<Boolean> reencoding
+		@Nullable Boolean reencoding
 ) {
-
-	/**
-	 * Jackson binds an omitted {@code Optional} according to mapper configuration this module does not
-	 * control, so absence is normalised here rather than trusted to arrive as empty.
-	 */
-	public GlobalUserCredentialUpdateRequest {
-		reencoding = reencoding == null ? Optional.empty() : reencoding;
-	}
 
 	/**
 	 * A credential change — a different password — which advances the credential version.
 	 */
 	public GlobalUserCredentialUpdateRequest(String storedCredential) {
-		this(storedCredential, Optional.empty());
+		this(storedCredential, null);
 	}
 
 	/**
@@ -136,7 +130,7 @@ public record GlobalUserCredentialUpdateRequest(
 	 */
 	@JsonIgnore
 	public boolean isReencode() {
-		return reencoding.orElse(false);
+		return Boolean.TRUE.equals(reencoding);
 	}
 
 	/**
@@ -162,5 +156,10 @@ public record GlobalUserCredentialUpdateRequest(
 	public boolean isStoredCredentialInStoredForm() {
 		return storedCredential == null || storedCredential.isBlank()
 				|| StoredForm.carriesGenerationMarker(storedCredential);
+	}
+
+	/** {@link #reencoding}, as an {@code Optional}. */
+	public Optional<Boolean> optReencoding() {
+		return Optional.ofNullable(reencoding);
 	}
 }

@@ -1,6 +1,9 @@
 package dev.bluestep.global.dto.reseller;
 
 import java.util.Optional;
+import java.util.OptionalLong;
+
+import org.jspecify.annotations.Nullable;
 
 import dev.bluestep.global.dto.constraints.CodePointSize;
 import dev.bluestep.global.dto.tenant.TenantActor;
@@ -14,7 +17,7 @@ import jakarta.validation.constraints.NotNull;
  *
  * <h2>The whole set, not a patch</h2>
  *
- * <p>Every column is named on every call, and an absent {@code Optional} clears it. That is what the
+ * <p>Every column is named on every call, and an absent value clears it. That is what the
  * monolith's generic update does — the console screen posts the whole form — and it is what makes the
  * call idempotent: sending it twice leaves the same branding, and a caller re-asserting a set it
  * assembled cannot leave a stale value standing because it forgot to mention it.</p>
@@ -46,8 +49,8 @@ import jakarta.validation.constraints.NotNull;
  * <p>{@code displayName} is the one field here that is not branding. It lives on {@code basetable}
  * rather than on {@code reseller}, and the console screen marks it required because a reseller with no
  * name cannot be picked out of the list that six screens render. Declaring it {@code @NotBlank} rather
- * than {@code Optional} is what keeps the whole-set rule from being dangerous for it: on this record an
- * omitted value clears its column, so an {@code Optional} display name would let a caller that simply
+ * than {@code @Nullable} is what keeps the whole-set rule from being dangerous for it: on this record an
+ * omitted value clears its column, so a nullable display name would let a caller that simply
  * did not know about the field erase the name of every reseller it saved. A caller that omits it is
  * refused instead.</p>
  *
@@ -69,11 +72,6 @@ import jakarta.validation.constraints.NotNull;
  *
  * <h2>Constraints</h2>
  *
- * <p>The length limits are written as container-element constraints
- * ({@code Optional<@CodePointSize(max = 256) String>}) wherever the component is an {@code Optional},
- * because a constraint placed on an {@code Optional} is checked against the {@code Optional} itself and
- * fails at runtime with "no validator could be found" instead of checking the value inside it.</p>
- *
  * <p>{@link dev.bluestep.global.dto.constraints.CodePointSize} rather than {@code @Size} because the
  * bound is a column width: {@code @Size} counts UTF-16 code units and {@code varchar(n)} counts
  * characters, so a value of supplementary-plane characters would be refused here and accepted by the
@@ -84,58 +82,53 @@ import jakarta.validation.constraints.NotNull;
  *                       width of {@code basetable.displayname}.
  * @param supportEmail   where this reseller's users are told to write
  * @param defaultDomain  the host its tenants front by default. Not a URL — a bare host name.
- * @param privacyPageUrl the privacy policy to render, or empty for the monolith's own
- * @param termsPageUrl   the terms to render, or empty for the monolith's own
+ * @param privacyPageUrl the privacy policy to render, or absent for the monolith's own
+ * @param termsPageUrl   the terms to render, or absent for the monolith's own
  * @param icons          the icon set, in full. Required as an object even when every icon inside it
  *                       is empty, so that "no icons" is something the caller says rather than
  *                       something inferred from a missing field.
- * @param flags          the switch word to store, or empty to leave the stored one alone. The one
+ * @param flags          the switch word to store, or absent to leave the stored one alone. The one
  *                       component here that an absent value does not clear — see above.
- * @param actor          who is making the edit, or empty for no actor
+ * @param actor          who is making the edit, or absent for no actor
  */
 public record ResellerUpdateRequest(
 		@NotBlank @CodePointSize(max = 1000) String displayName,
-		Optional<@CodePointSize(max = 256) String> supportEmail,
-		Optional<@CodePointSize(max = 256) String> defaultDomain,
-		Optional<String> privacyPageUrl,
-		Optional<String> termsPageUrl,
+		@CodePointSize(max = 256) @Nullable String supportEmail,
+		@CodePointSize(max = 256) @Nullable String defaultDomain,
+		@Nullable String privacyPageUrl,
+		@Nullable String termsPageUrl,
 		@NotNull ResellerIcons icons,
-		Optional<Long> flags,
-		Optional<TenantActor> actor
+		@Nullable Long flags,
+		@Nullable TenantActor actor
 ) {
 
-	/**
-	 * Guards direct construction, not the wire.
-	 *
-	 * <p>{@code OptionalWireContractTest} and its Jackson 3 counterpart pin that an {@code Optional}
-	 * component binds to {@link Optional#empty()} for an absent key <em>and</em> an explicit JSON null,
-	 * under both Jackson families, with no compact constructor at all — {@code AiTenantConfigRequest}
-	 * has none and is the record those tests measure. So nothing here fires for a deserialized request.
-	 * What it does catch is Java code passing {@code null} into an {@code @NullMarked} record, which is
-	 * a caller bug this normalizes rather than propagates.</p>
-	 */
-	public ResellerUpdateRequest {
-		supportEmail = supportEmail == null ? Optional.empty() : supportEmail;
-		defaultDomain = defaultDomain == null ? Optional.empty() : defaultDomain;
-		privacyPageUrl = privacyPageUrl == null ? Optional.empty() : privacyPageUrl;
-		termsPageUrl = termsPageUrl == null ? Optional.empty() : termsPageUrl;
-		flags = flags == null ? Optional.empty() : flags;
-		actor = actor == null ? Optional.empty() : actor;
+	/** {@link #supportEmail}, as an {@code Optional}. */
+	public Optional<String> optSupportEmail() {
+		return Optional.ofNullable(supportEmail);
 	}
 
-	/**
-	 * The 5.4.0 shape, with no actor: kept so Java callers written before 5.5.0 still compile.
-	 *
-	 * @param displayName    as on the canonical constructor
-	 * @param supportEmail   as on the canonical constructor
-	 * @param defaultDomain  as on the canonical constructor
-	 * @param privacyPageUrl as on the canonical constructor
-	 * @param termsPageUrl   as on the canonical constructor
-	 * @param icons          as on the canonical constructor
-	 * @param flags          as on the canonical constructor
-	 */
-	public ResellerUpdateRequest(String displayName, Optional<String> supportEmail, Optional<String> defaultDomain,
-			Optional<String> privacyPageUrl, Optional<String> termsPageUrl, ResellerIcons icons, Optional<Long> flags) {
-		this(displayName, supportEmail, defaultDomain, privacyPageUrl, termsPageUrl, icons, flags, Optional.empty());
+	/** {@link #defaultDomain}, as an {@code Optional}. */
+	public Optional<String> optDefaultDomain() {
+		return Optional.ofNullable(defaultDomain);
+	}
+
+	/** {@link #privacyPageUrl}, as an {@code Optional}. */
+	public Optional<String> optPrivacyPageUrl() {
+		return Optional.ofNullable(privacyPageUrl);
+	}
+
+	/** {@link #termsPageUrl}, as an {@code Optional}. */
+	public Optional<String> optTermsPageUrl() {
+		return Optional.ofNullable(termsPageUrl);
+	}
+
+	/** {@link #flags}, as an {@code OptionalLong}. */
+	public OptionalLong optFlags() {
+		return flags == null ? OptionalLong.empty() : OptionalLong.of(flags);
+	}
+
+	/** {@link #actor}, as an {@code Optional}. */
+	public Optional<TenantActor> optActor() {
+		return Optional.ofNullable(actor);
 	}
 }

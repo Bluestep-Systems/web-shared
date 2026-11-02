@@ -78,7 +78,7 @@ class GlobalUserScopeWireTest {
 		});
 	}
 
-	/** An omitted reseller still binds to empty rather than to null — the compact constructor's job. */
+	/** An omitted reseller binds as absent. */
 	@Test
 	@DisplayName("an omitted reseller binds to empty")
 	void omittedResellerBindsToEmpty() throws Exception {
@@ -86,21 +86,21 @@ class GlobalUserScopeWireTest {
 				{"scope":"FLEET","reason":"onboarding","actor":"platform-admin"}""";
 
 		assertEquals(Optional.empty(),
-				JACKSON3.readValue(json, GlobalUserScopeRequest.class).reseller());
+				JACKSON3.readValue(json, GlobalUserScopeRequest.class).optReseller());
 	}
 
 	private static GlobalUserScopeRequest fleetRequest() {
-		return new GlobalUserScopeRequest(CatalogScopeKind.FLEET, Optional.empty(), "onboarding",
+		return new GlobalUserScopeRequest(CatalogScopeKind.FLEET, null, "onboarding",
 				"platform-admin");
 	}
 
 	private static GlobalUserScopeRequest resellerRequest() {
 		return new GlobalUserScopeRequest(CatalogScopeKind.RESELLER,
-				Optional.of(new ResellerKey(111_222L, 1L)), "contractor", "platform-admin");
+				new ResellerKey(111_222L, 1L), "contractor", "platform-admin");
 	}
 
 	private static GlobalUserScopeEntry entry() {
 		return new GlobalUserScopeEntry(new GlobalUserKey(222_222L, -50_001L),
-				CatalogScopeKind.FLEET, Optional.empty(), "onboarding");
+				CatalogScopeKind.FLEET, null, "onboarding");
 	}
 }

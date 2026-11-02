@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.HashSet;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -61,13 +62,13 @@ class ResellerWriteShapesTest {
 	}
 
 	private static ResellerIcons noIcons() {
-		return new ResellerIcons(Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
-				Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
+		return new ResellerIcons(null, null, null, null,
+				null, null, null, null);
 	}
 
 	private static ResellerCreateRequest create(String displayName) {
-		return new ResellerCreateRequest(CREATOR, displayName, Optional.of("help@example.test"),
-				Optional.of("example.test"), Optional.empty(), Optional.empty(), noIcons(), Optional.of(1L));
+		return new ResellerCreateRequest(CREATOR, displayName, "help@example.test",
+				"example.test", null, null, noIcons(), 1L);
 	}
 
 	// ---------------------------------------------------------------- create: wire
@@ -83,7 +84,7 @@ class ResellerWriteShapesTest {
 
 	@Test
 	@DisplayName("omitted optional components bind to empty, so an absent flags word means zero to the service")
-	void omittedOptionalsBindToEmpty() throws Exception {
+	void omittedOptionalsBindAsAbsent() throws Exception {
 		String json = """
 				{"creator":{"classid":222222,"seqnum":7},"displayName":"Example Reseller","icons":{}}
 				""";
@@ -91,11 +92,11 @@ class ResellerWriteShapesTest {
 		ResellerCreateRequest bound = JACKSON3.readValue(json, ResellerCreateRequest.class);
 
 		assertEquals(CREATOR, bound.creator());
-		assertEquals(Optional.empty(), bound.supportEmail());
-		assertEquals(Optional.empty(), bound.defaultDomain());
-		assertEquals(Optional.empty(), bound.privacyPageUrl());
-		assertEquals(Optional.empty(), bound.termsPageUrl());
-		assertEquals(Optional.empty(), bound.flags());
+		assertEquals(Optional.empty(), bound.optSupportEmail());
+		assertEquals(Optional.empty(), bound.optDefaultDomain());
+		assertEquals(Optional.empty(), bound.optPrivacyPageUrl());
+		assertEquals(Optional.empty(), bound.optTermsPageUrl());
+		assertEquals(OptionalLong.empty(), bound.optFlags());
 	}
 
 	// ---------------------------------------------------------------- create: constraints
@@ -115,8 +116,8 @@ class ResellerWriteShapesTest {
 	@Test
 	@DisplayName("the creator and the icon set are required")
 	void creatorAndIconsAreRequired() {
-		ResellerCreateRequest request = new ResellerCreateRequest(null, "Example Reseller", Optional.empty(),
-				Optional.empty(), Optional.empty(), Optional.empty(), null, Optional.empty());
+		ResellerCreateRequest request = new ResellerCreateRequest(null, "Example Reseller", null,
+				null, null, null, null, null);
 
 		assertEquals(Set.of("creator", "icons"), violatedPaths(request));
 	}
@@ -138,18 +139,18 @@ class ResellerWriteShapesTest {
 	}
 
 	private static ResellerCreateRequest withCreator(BaseTableKey creator) {
-		return new ResellerCreateRequest(creator, "Example Reseller", Optional.empty(), Optional.empty(),
-				Optional.empty(), Optional.empty(), noIcons(), Optional.empty());
+		return new ResellerCreateRequest(creator, "Example Reseller", null, null,
+				null, null, noIcons(), null);
 	}
 
 	@Test
-	@DisplayName("the email and domain bounds fire on the value inside the Optional, in code points")
-	void lengthBoundsFireInsideTheOptional() {
+	@DisplayName("the email and domain bounds fire on a present value, in code points")
+	void lengthBoundsFireOnAPresentValue() {
 		String overLong = "x".repeat(257);
 		String atBoundInSupplementaryCharacters = "😀".repeat(256);
 		ResellerCreateRequest request = new ResellerCreateRequest(CREATOR, "Example Reseller",
-				Optional.of(overLong), Optional.of(atBoundInSupplementaryCharacters), Optional.empty(),
-				Optional.empty(), noIcons(), Optional.empty());
+				overLong, atBoundInSupplementaryCharacters, null,
+				null, noIcons(), null);
 
 		Set<String> paths = violatedPaths(request);
 

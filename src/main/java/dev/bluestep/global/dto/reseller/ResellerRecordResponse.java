@@ -3,6 +3,8 @@ package dev.bluestep.global.dto.reseller;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
+import org.jspecify.annotations.Nullable;
+
 import dev.bluestep.global.dto.basetable.BaseTableKey;
 import dev.bluestep.global.dto.tenantaccess.ResellerKey;
 
@@ -16,7 +18,7 @@ import dev.bluestep.global.dto.tenantaccess.ResellerKey;
  * a {@code global.reseller} table that had no name column at all. From 017 on, {@code global.reseller}
  * is a table web-global owns outright and holds all of them itself; the old table is kept, unwritten,
  * as {@code global.reseller_archive}, and the old {@code basetable} rows are left as they were. The
- * shape below did not change with the storage, so its {@code Optional} components stay optional: a
+ * shape below did not change with the storage, so its optional components stay optional: a
  * service from before 017 can still answer one empty, though one from 017 on never does.</p>
  *
  * <h2>Why this exists beside {@link ResellerResponse}</h2>
@@ -62,7 +64,7 @@ import dev.bluestep.global.dto.tenantaccess.ResellerKey;
  * returns the word, the same way it stores and returns a branding URL it never fetches.</p>
  *
  * <p>Zero is the meaningful default rather than an absence, which is why this component is a
- * {@code long} where every optional column beside it is an {@code Optional}. The column is
+ * {@code long} where every optional column beside it is {@code @Nullable}. The column is
  * {@code NOT NULL DEFAULT 0}, so every reseller has a value; a reseller that has never been edited
  * has all bits clear, which is what makes "no bits set" the behaviour a new bit must be defined
  * against.</p>
@@ -87,14 +89,49 @@ import dev.bluestep.global.dto.tenantaccess.ResellerKey;
  */
 public record ResellerRecordResponse(
 		ResellerKey reseller,
-		Optional<String> displayName,
-		Optional<String> supportEmail,
-		Optional<String> defaultDomain,
-		Optional<String> privacyPageUrl,
-		Optional<String> termsPageUrl,
+		@Nullable String displayName,
+		@Nullable String supportEmail,
+		@Nullable String defaultDomain,
+		@Nullable String privacyPageUrl,
+		@Nullable String termsPageUrl,
 		ResellerIcons icons,
 		long flags,
-		Optional<BaseTableKey> creator,
-		Optional<LocalDateTime> created
+		@Nullable BaseTableKey creator,
+		@Nullable LocalDateTime created
 ) {
+
+	/** {@link #displayName}, as an {@code Optional}. */
+	public Optional<String> optDisplayName() {
+		return Optional.ofNullable(displayName);
+	}
+
+	/** {@link #supportEmail}, as an {@code Optional}. */
+	public Optional<String> optSupportEmail() {
+		return Optional.ofNullable(supportEmail);
+	}
+
+	/** {@link #defaultDomain}, as an {@code Optional}. */
+	public Optional<String> optDefaultDomain() {
+		return Optional.ofNullable(defaultDomain);
+	}
+
+	/** {@link #privacyPageUrl}, as an {@code Optional}. */
+	public Optional<String> optPrivacyPageUrl() {
+		return Optional.ofNullable(privacyPageUrl);
+	}
+
+	/** {@link #termsPageUrl}, as an {@code Optional}. */
+	public Optional<String> optTermsPageUrl() {
+		return Optional.ofNullable(termsPageUrl);
+	}
+
+	/** {@link #creator}, as an {@code Optional}. */
+	public Optional<BaseTableKey> optCreator() {
+		return Optional.ofNullable(creator);
+	}
+
+	/** {@link #created}, as an {@code Optional}. */
+	public Optional<LocalDateTime> optCreated() {
+		return Optional.ofNullable(created);
+	}
 }

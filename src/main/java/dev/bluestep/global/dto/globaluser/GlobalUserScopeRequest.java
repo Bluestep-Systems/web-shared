@@ -2,6 +2,8 @@ package dev.bluestep.global.dto.globaluser;
 
 import java.util.Optional;
 
+import org.jspecify.annotations.Nullable;
+
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import dev.bluestep.global.dto.tenantaccess.ResellerKey;
@@ -32,15 +34,10 @@ import jakarta.validation.constraints.Size;
  */
 public record GlobalUserScopeRequest(
 		@NotNull CatalogScopeKind scope,
-		@Valid Optional<ResellerKey> reseller,
+		@Valid @Nullable ResellerKey reseller,
 		@NotBlank @Size(max = 1000) String reason,
 		@NotBlank @Size(max = 100) String actor
 ) {
-
-	public GlobalUserScopeRequest {
-		// Jackson binds an omitted field to null whatever this package's null-marking says.
-		reseller = reseller == null ? Optional.empty() : reseller;
-	}
 
 	/**
 	 * The reseller and the scope are one fact, so a payload asserting one without the other is
@@ -59,6 +56,11 @@ public record GlobalUserScopeRequest(
 	@JsonIgnore
 	@AssertTrue(message = "a reseller is required for a RESELLER scope and permitted for no other")
 	public boolean isResellerConsistentWithScope() {
-		return (scope == CatalogScopeKind.RESELLER) == reseller.isPresent();
+		return (scope == CatalogScopeKind.RESELLER) == (reseller != null);
+	}
+
+	/** {@link #reseller}, as an {@code Optional}. */
+	public Optional<ResellerKey> optReseller() {
+		return Optional.ofNullable(reseller);
 	}
 }

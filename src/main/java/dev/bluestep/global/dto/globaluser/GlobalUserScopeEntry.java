@@ -2,6 +2,8 @@ package dev.bluestep.global.dto.globaluser;
 
 import java.util.Optional;
 
+import org.jspecify.annotations.Nullable;
+
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import dev.bluestep.global.dto.tenantaccess.GlobalUserKey;
@@ -21,13 +23,9 @@ import jakarta.validation.constraints.Size;
 public record GlobalUserScopeEntry(
 		@NotNull @Valid GlobalUserKey user,
 		@NotNull CatalogScopeKind scope,
-		@Valid Optional<ResellerKey> reseller,
+		@Valid @Nullable ResellerKey reseller,
 		@NotBlank @Size(max = 1000) String reason
 ) {
-
-	public GlobalUserScopeEntry {
-		reseller = reseller == null ? Optional.empty() : reseller;
-	}
 
 	/**
 	 * Same invariant the per-user request states, for the same reasons.
@@ -38,6 +36,11 @@ public record GlobalUserScopeEntry(
 	@JsonIgnore
 	@AssertTrue(message = "a reseller is required for a RESELLER scope and permitted for no other")
 	public boolean isResellerConsistentWithScope() {
-		return (scope == CatalogScopeKind.RESELLER) == reseller.isPresent();
+		return (scope == CatalogScopeKind.RESELLER) == (reseller != null);
+	}
+
+	/** {@link #reseller}, as an {@code Optional}. */
+	public Optional<ResellerKey> optReseller() {
+		return Optional.ofNullable(reseller);
 	}
 }

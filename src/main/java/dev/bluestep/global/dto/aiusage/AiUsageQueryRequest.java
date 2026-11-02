@@ -3,6 +3,8 @@ package dev.bluestep.global.dto.aiusage;
 import java.time.OffsetDateTime;
 import java.util.Optional;
 
+import org.jspecify.annotations.Nullable;
+
 import jakarta.validation.constraints.NotBlank;
 
 /**
@@ -38,15 +40,40 @@ import jakarta.validation.constraints.NotBlank;
  */
 public record AiUsageQueryRequest(
 		@NotBlank String tenantId,
-		Optional<String> unitId,
-		Optional<String> userId,
-		Optional<String> flag,
-		Optional<OffsetDateTime> from,
-		Optional<OffsetDateTime> to
+		@Nullable String unitId,
+		@Nullable String userId,
+		@Nullable String flag,
+		@Nullable OffsetDateTime from,
+		@Nullable OffsetDateTime to
 ) {
 
 	/** Whether the caller asked for an explicit period rather than the configured budget window. */
 	public boolean hasExplicitRange() {
-		return from.isPresent() || to.isPresent();
+		return from != null || to != null;
+	}
+
+	/** {@link #unitId}, as an {@code Optional}. */
+	public Optional<String> optUnitId() {
+		return Optional.ofNullable(unitId);
+	}
+
+	/** {@link #userId}, as an {@code Optional}. */
+	public Optional<String> optUserId() {
+		return Optional.ofNullable(userId);
+	}
+
+	/** {@link #flag}, as an {@code Optional}. */
+	public Optional<String> optFlag() {
+		return Optional.ofNullable(flag);
+	}
+
+	/** {@link #from}, as an {@code Optional}. */
+	public Optional<OffsetDateTime> optFrom() {
+		return Optional.ofNullable(from);
+	}
+
+	/** {@link #to}, as an {@code Optional}. */
+	public Optional<OffsetDateTime> optTo() {
+		return Optional.ofNullable(to);
 	}
 }

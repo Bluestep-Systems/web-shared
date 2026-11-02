@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
-import java.util.Optional;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -152,7 +151,7 @@ class GlobalUserRecordWireTest {
 	@DisplayName("a re-encode round-trips as a re-encode")
 	void reencodingRoundTrips() throws Exception {
 		GlobalUserCredentialUpdateRequest reencode =
-				new GlobalUserCredentialUpdateRequest(STORED_CREDENTIAL, Optional.of(true));
+				new GlobalUserCredentialUpdateRequest(STORED_CREDENTIAL, true);
 
 		assertTrue(reencode.isReencode());
 		assertEquals(reencode, JACKSON3.readValue(JACKSON3.writeValueAsString(reencode),
@@ -173,28 +172,16 @@ class GlobalUserRecordWireTest {
 						+ "\"disabled\":false,\"emailValidated\":false,\"linkedAccounts\":[]}",
 				GlobalUserRecordResponse.class);
 
-		assertTrue(bound.credentialVersion().isEmpty());
-	}
-
-	/** The pre-5.0.1 constructor a consumer may still call: the count is not known, never zero. */
-	@Test
-	@DisplayName("the constructor without credentialVersion records it as not known")
-	void compatibilityConstructorIsNotKnown() {
-		GlobalUserRecordResponse response = new GlobalUserRecordResponse(
-				new GlobalUserKey(CLASSID, -51_001L), Optional.of("Del"), Optional.of("Novak"),
-				Optional.of("del.novak"), Optional.empty(), Optional.empty(), false, false,
-				Optional.empty(), Optional.empty(), false, Optional.empty(), List.of());
-
-		assertTrue(response.credentialVersion().isEmpty());
+		assertTrue(bound.optCredentialVersion().isEmpty());
 	}
 
 	@Test
 	@DisplayName("a response's credentialVersion round-trips")
 	void credentialVersionRoundTrips() throws Exception {
 		GlobalUserRecordResponse response = new GlobalUserRecordResponse(
-				new GlobalUserKey(CLASSID, -51_001L), Optional.of("Del"), Optional.of("Novak"),
-				Optional.of("del.novak"), Optional.empty(), Optional.empty(), false, false,
-				Optional.empty(), Optional.empty(), false, Optional.empty(), List.of(), Optional.of(3L));
+				new GlobalUserKey(CLASSID, -51_001L), "Del", "Novak",
+				"del.novak", null, null, false, false,
+				null, null, false, null, List.of(), 3L);
 
 		assertEquals(response, JACKSON3.readValue(JACKSON3.writeValueAsString(response),
 				GlobalUserRecordResponse.class));
@@ -207,15 +194,15 @@ class GlobalUserRecordWireTest {
 	}
 
 	private static GlobalUserRecordCreateRequest create() {
-		return new GlobalUserRecordCreateRequest(CLASSID, Optional.empty(), Optional.of("Del"),
-				Optional.of("Novak"), Optional.of("del.novak"), Optional.of("del@example.test"),
-				Optional.empty(), false, false, Optional.empty(), Optional.empty(), false,
-				Optional.empty(), List.of(), Optional.of(STORED_CREDENTIAL));
+		return new GlobalUserRecordCreateRequest(CLASSID, null, "Del",
+				"Novak", "del.novak", "del@example.test",
+				null, false, false, null, null, false,
+				null, List.of(), STORED_CREDENTIAL);
 	}
 
 	private static GlobalUserRecordUpdateRequest update() {
-		return new GlobalUserRecordUpdateRequest(Optional.of("Del"), Optional.of("Novak"),
-				Optional.of("del.novak"), Optional.of("del@example.test"), Optional.empty(), false,
-				false, Optional.empty(), Optional.empty(), false, Optional.empty(), List.of());
+		return new GlobalUserRecordUpdateRequest("Del", "Novak",
+				"del.novak", "del@example.test", null, false,
+				false, null, null, false, null, List.of());
 	}
 }

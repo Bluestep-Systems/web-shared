@@ -1,6 +1,8 @@
 package dev.bluestep.global.dto.tenant;
 
 import java.util.Optional;
+import java.util.OptionalDouble;
+import java.util.OptionalInt;
 
 import org.jspecify.annotations.Nullable;
 
@@ -48,13 +50,13 @@ public record TenantSignIn(
 		return Optional.ofNullable(logoutUrl);
 	}
 
-	/** {@link #passwordGraceDays}, as an {@code Optional}. */
-	public Optional<Integer> optPasswordGraceDays() {
-		return Optional.ofNullable(passwordGraceDays);
+	/** {@link #passwordGraceDays}, as an {@code OptionalInt}. */
+	public OptionalInt optPasswordGraceDays() {
+		return passwordGraceDays == null ? OptionalInt.empty() : OptionalInt.of(passwordGraceDays);
 	}
 
-	/** {@link #maxLoginAttempts}, as an {@code Optional}. */
-	public Optional<Double> optMaxLoginAttempts() {
-		return Optional.ofNullable(maxLoginAttempts);
+	/** {@link #maxLoginAttempts}, as an {@code OptionalDouble}. */
+	public OptionalDouble optMaxLoginAttempts() {
+		return maxLoginAttempts == null ? OptionalDouble.empty() : OptionalDouble.of(maxLoginAttempts);
 	}
 }

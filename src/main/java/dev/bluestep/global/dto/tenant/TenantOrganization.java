@@ -1,6 +1,7 @@
 package dev.bluestep.global.dto.tenant;
 
 import java.util.Optional;
+import java.util.OptionalInt;
 
 import org.jspecify.annotations.Nullable;
 
@@ -64,9 +65,9 @@ public record TenantOrganization(
 		return Optional.ofNullable(description);
 	}
 
-	/** {@link #storageSpace}, as an {@code Optional}. */
-	public Optional<Integer> optStorageSpace() {
-		return Optional.ofNullable(storageSpace);
+	/** {@link #storageSpace}, as an {@code OptionalInt}. */
+	public OptionalInt optStorageSpace() {
+		return storageSpace == null ? OptionalInt.empty() : OptionalInt.of(storageSpace);
 	}
 
 	/** {@link #homePageUrl}, as an {@code Optional}. */

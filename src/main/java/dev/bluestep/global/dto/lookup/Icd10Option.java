@@ -2,6 +2,8 @@ package dev.bluestep.global.dto.lookup;
 
 import java.util.Optional;
 
+import org.jspecify.annotations.Nullable;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
@@ -13,12 +15,48 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public record Icd10Option(
     String label,
     String code,
-    @JsonProperty("short") Optional<String> dxShort,
-    @JsonProperty("long") Optional<String> dxLong,
+    @JsonProperty("short") @Nullable String dxShort,
+    @JsonProperty("long") @Nullable String dxLong,
     @JsonProperty("final") String isFinal,
-    Optional<String> category,
-    Optional<String> nonsurgical,
-    Optional<String> nonortho,
-    Optional<String> ortho,
-    Optional<String> majorjoint
-) {}
+    @Nullable String category,
+    @Nullable String nonsurgical,
+    @Nullable String nonortho,
+    @Nullable String ortho,
+    @Nullable String majorjoint
+) {
+
+    /** {@link #dxShort}, as an {@code Optional}. */
+    public Optional<String> optDxShort() {
+        return Optional.ofNullable(dxShort);
+    }
+
+    /** {@link #dxLong}, as an {@code Optional}. */
+    public Optional<String> optDxLong() {
+        return Optional.ofNullable(dxLong);
+    }
+
+    /** {@link #category}, as an {@code Optional}. */
+    public Optional<String> optCategory() {
+        return Optional.ofNullable(category);
+    }
+
+    /** {@link #nonsurgical}, as an {@code Optional}. */
+    public Optional<String> optNonsurgical() {
+        return Optional.ofNullable(nonsurgical);
+    }
+
+    /** {@link #nonortho}, as an {@code Optional}. */
+    public Optional<String> optNonortho() {
+        return Optional.ofNullable(nonortho);
+    }
+
+    /** {@link #ortho}, as an {@code Optional}. */
+    public Optional<String> optOrtho() {
+        return Optional.ofNullable(ortho);
+    }
+
+    /** {@link #majorjoint}, as an {@code Optional}. */
+    public Optional<String> optMajorjoint() {
+        return Optional.ofNullable(majorjoint);
+    }
+}

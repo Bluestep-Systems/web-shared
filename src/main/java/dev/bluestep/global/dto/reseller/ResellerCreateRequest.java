@@ -1,6 +1,9 @@
 package dev.bluestep.global.dto.reseller;
 
 import java.util.Optional;
+import java.util.OptionalLong;
+
+import org.jspecify.annotations.Nullable;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
@@ -49,22 +52,13 @@ import jakarta.validation.constraints.NotNull;
 public record ResellerCreateRequest(
 		@NotNull BaseTableKey creator,
 		@NotBlank @CodePointSize(max = 1000) String displayName,
-		Optional<@CodePointSize(max = 256) String> supportEmail,
-		Optional<@CodePointSize(max = 256) String> defaultDomain,
-		Optional<String> privacyPageUrl,
-		Optional<String> termsPageUrl,
+		@CodePointSize(max = 256) @Nullable String supportEmail,
+		@CodePointSize(max = 256) @Nullable String defaultDomain,
+		@Nullable String privacyPageUrl,
+		@Nullable String termsPageUrl,
 		@NotNull ResellerIcons icons,
-		Optional<Long> flags
+		@Nullable Long flags
 ) {
-
-	/** Normalizes a {@code null} passed by Java code, as {@link ResellerUpdateRequest}'s does. */
-	public ResellerCreateRequest {
-		supportEmail = supportEmail == null ? Optional.empty() : supportEmail;
-		defaultDomain = defaultDomain == null ? Optional.empty() : defaultDomain;
-		privacyPageUrl = privacyPageUrl == null ? Optional.empty() : privacyPageUrl;
-		termsPageUrl = termsPageUrl == null ? Optional.empty() : termsPageUrl;
-		flags = flags == null ? Optional.empty() : flags;
-	}
 
 	/**
 	 * Refuses a creator that names no row.
@@ -83,5 +77,30 @@ public record ResellerCreateRequest(
 	@AssertTrue(message = "creator must name a row, not the unset key")
 	public boolean isCreatorKeyed() {
 		return creator == null || (creator.classid() != 0 && creator.seqnum() != 0);
+	}
+
+	/** {@link #supportEmail}, as an {@code Optional}. */
+	public Optional<String> optSupportEmail() {
+		return Optional.ofNullable(supportEmail);
+	}
+
+	/** {@link #defaultDomain}, as an {@code Optional}. */
+	public Optional<String> optDefaultDomain() {
+		return Optional.ofNullable(defaultDomain);
+	}
+
+	/** {@link #privacyPageUrl}, as an {@code Optional}. */
+	public Optional<String> optPrivacyPageUrl() {
+		return Optional.ofNullable(privacyPageUrl);
+	}
+
+	/** {@link #termsPageUrl}, as an {@code Optional}. */
+	public Optional<String> optTermsPageUrl() {
+		return Optional.ofNullable(termsPageUrl);
+	}
+
+	/** {@link #flags}, as an {@code OptionalLong}. */
+	public OptionalLong optFlags() {
+		return flags == null ? OptionalLong.empty() : OptionalLong.of(flags);
 	}
 }

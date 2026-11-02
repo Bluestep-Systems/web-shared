@@ -3,6 +3,9 @@ package dev.bluestep.global.dto.globaluserrecord;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalLong;
+
+import org.jspecify.annotations.Nullable;
 
 import dev.bluestep.global.dto.tenantaccess.GlobalUserKey;
 import dev.bluestep.global.dto.tenantaccess.ResellerKey;
@@ -70,27 +73,27 @@ import dev.bluestep.global.dto.tenantaccess.ResellerKey;
  *                  earlier that no longer matches means the password changed since — so it says
  *                  nothing about the password itself, and two accounts sharing a value share
  *                  nothing but a count. The column is {@code NOT NULL DEFAULT 0}, so this service
- *                  always fills it; it is an {@code Optional} for the reader instead. A consumer on
+ *                  always fills it; it is a nullable {@code Long} for the reader instead. A consumer on
  *                  this jar talking to a service that predates the column receives no such
  *                  property, and Jackson 3 refuses to bind a missing property onto a primitive — so a
  *                  {@code long} here would fail every account read during that window rather than
- *                  report the one thing it does not know. Empty means "not known", never zero.
+ *                  report the one thing it does not know. Absent means "not known", never zero.
  */
 public record GlobalUserRecordResponse(
 		GlobalUserKey user,
-		Optional<String> firstName,
-		Optional<String> lastName,
-		Optional<String> username,
-		Optional<String> userEmail,
-		Optional<ResellerKey> reseller,
+		@Nullable String firstName,
+		@Nullable String lastName,
+		@Nullable String username,
+		@Nullable String userEmail,
+		@Nullable ResellerKey reseller,
 		boolean superUser,
 		boolean disabled,
-		Optional<String> attribs,
-		Optional<LocalDateTime> passwordExpireStart,
+		@Nullable String attribs,
+		@Nullable LocalDateTime passwordExpireStart,
 		boolean emailValidated,
-		Optional<LocalDateTime> emailValidatedExpireStart,
+		@Nullable LocalDateTime emailValidatedExpireStart,
 		List<LinkedAccount> linkedAccounts,
-		Optional<Long> credentialVersion
+		@Nullable Long credentialVersion
 ) {
 
 	/**
@@ -100,21 +103,50 @@ public record GlobalUserRecordResponse(
 	 */
 	public GlobalUserRecordResponse {
 		linkedAccounts = linkedAccounts == null ? List.of() : List.copyOf(linkedAccounts);
-		credentialVersion = credentialVersion == null ? Optional.empty() : credentialVersion;
 	}
 
-	/**
-	 * The shape before {@code credentialVersion}, kept so that a consumer taking this patch release
-	 * still compiles. It records the count as not known, which is what a reader treats an absent one as
-	 * — so nothing built through it can bind a device to a credential version.
-	 */
-	public GlobalUserRecordResponse(GlobalUserKey user, Optional<String> firstName,
-			Optional<String> lastName, Optional<String> username, Optional<String> userEmail,
-			Optional<ResellerKey> reseller, boolean superUser, boolean disabled, Optional<String> attribs,
-			Optional<LocalDateTime> passwordExpireStart, boolean emailValidated,
-			Optional<LocalDateTime> emailValidatedExpireStart, List<LinkedAccount> linkedAccounts) {
-		this(user, firstName, lastName, username, userEmail, reseller, superUser, disabled, attribs,
-				passwordExpireStart, emailValidated, emailValidatedExpireStart, linkedAccounts,
-				Optional.empty());
+	/** {@link #firstName}, as an {@code Optional}. */
+	public Optional<String> optFirstName() {
+		return Optional.ofNullable(firstName);
+	}
+
+	/** {@link #lastName}, as an {@code Optional}. */
+	public Optional<String> optLastName() {
+		return Optional.ofNullable(lastName);
+	}
+
+	/** {@link #username}, as an {@code Optional}. */
+	public Optional<String> optUsername() {
+		return Optional.ofNullable(username);
+	}
+
+	/** {@link #userEmail}, as an {@code Optional}. */
+	public Optional<String> optUserEmail() {
+		return Optional.ofNullable(userEmail);
+	}
+
+	/** {@link #reseller}, as an {@code Optional}. */
+	public Optional<ResellerKey> optReseller() {
+		return Optional.ofNullable(reseller);
+	}
+
+	/** {@link #attribs}, as an {@code Optional}. */
+	public Optional<String> optAttribs() {
+		return Optional.ofNullable(attribs);
+	}
+
+	/** {@link #passwordExpireStart}, as an {@code Optional}. */
+	public Optional<LocalDateTime> optPasswordExpireStart() {
+		return Optional.ofNullable(passwordExpireStart);
+	}
+
+	/** {@link #emailValidatedExpireStart}, as an {@code Optional}. */
+	public Optional<LocalDateTime> optEmailValidatedExpireStart() {
+		return Optional.ofNullable(emailValidatedExpireStart);
+	}
+
+	/** {@link #credentialVersion}, as an {@code OptionalLong}. */
+	public OptionalLong optCredentialVersion() {
+		return credentialVersion == null ? OptionalLong.empty() : OptionalLong.of(credentialVersion);
 	}
 }
