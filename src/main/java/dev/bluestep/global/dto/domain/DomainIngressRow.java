@@ -21,7 +21,7 @@ import org.jspecify.annotations.Nullable;
 public record DomainIngressRow(
 		DomainHost host,
 		@Nullable Integer ingressReadTimeoutSeconds,
-		@Nullable String domainPrefix,
+		@Nullable DomainPrefix domainPrefix,
 		@Nullable String wildcard) {
 
 	/** {@link #ingressReadTimeoutSeconds}, as an {@code OptionalInt}. */
@@ -30,7 +30,7 @@ public record DomainIngressRow(
 	}
 
 	/** {@link #domainPrefix}, as an {@code Optional}. */
-	public Optional<String> optDomainPrefix() {
+	public Optional<DomainPrefix> optDomainPrefix() {
 		return Optional.ofNullable(domainPrefix);
 	}
 

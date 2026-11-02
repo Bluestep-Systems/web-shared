@@ -10,6 +10,7 @@ import java.util.stream.Collectors;
 import org.hibernate.validator.messageinterpolation.ParameterMessageInterpolator;
 import org.junit.jupiter.api.Test;
 
+import dev.bluestep.global.dto.domain.DomainPrefix;
 import dev.bluestep.global.dto.tenant.TenantLock;
 
 import jakarta.validation.ConstraintViolation;
@@ -133,7 +134,7 @@ class FleetWireTest {
 	@Test
 	void reservedDomain_pinsItsKeysAndAbsence() {
 		assertEquals("{\"domain\":\"admin\",\"holder\":\"Fleet\"}",
-				JSON.writeValueAsString(new ReservedDomainResponse("admin", "Fleet")));
+				JSON.writeValueAsString(new ReservedDomainResponse(DomainPrefix.of("admin"), "Fleet")));
 		assertTrue(JSON.readValue("{\"domain\":\"admin\"}", ReservedDomainResponse.class).optHolder().isEmpty());
 	}
 }

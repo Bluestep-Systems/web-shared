@@ -6,6 +6,7 @@ import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
 import dev.bluestep.global.dto.basetable.BaseTableKey;
+import dev.bluestep.global.dto.domain.DomainSuffix;
 import dev.bluestep.global.dto.tenantaccess.ResellerKey;
 
 /**
@@ -78,7 +79,8 @@ import dev.bluestep.global.dto.tenantaccess.ResellerKey;
  *                       when the name came from a nullable {@code basetable} column; a reseller
  *                       without one sorts last rather than being hidden.
  * @param supportEmail   where this reseller's users are told to write
- * @param defaultDomain  the host its tenants front by default
+ * @param defaultDomain  the domain its tenants' site hosts are built under, or absent (blank is
+ *                       absent too, kept as stored; see {@link DomainSuffix})
  * @param privacyPageUrl the privacy policy it renders
  * @param termsPageUrl   the terms it renders
  * @param icons          its icon set
@@ -91,7 +93,7 @@ public record ResellerRecordResponse(
 		ResellerKey reseller,
 		@Nullable String displayName,
 		@Nullable String supportEmail,
-		@Nullable String defaultDomain,
+		@Nullable DomainSuffix defaultDomain,
 		@Nullable String privacyPageUrl,
 		@Nullable String termsPageUrl,
 		ResellerIcons icons,
@@ -111,7 +113,7 @@ public record ResellerRecordResponse(
 	}
 
 	/** {@link #defaultDomain}, as an {@code Optional}. */
-	public Optional<String> optDefaultDomain() {
+	public Optional<DomainSuffix> optDefaultDomain() {
 		return Optional.ofNullable(defaultDomain);
 	}
 

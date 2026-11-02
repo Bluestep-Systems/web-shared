@@ -27,6 +27,8 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.dataformat.cbor.CBORMapper;
 
+import dev.bluestep.global.dto.fleet.NamespaceName;
+
 /**
  * Pins every wire key of the usage metering DTOs.
  *
@@ -69,12 +71,12 @@ class UsageWireContractTest {
 	}
 
 	private static UsageBatchRequest batch() {
-		return new UsageBatchRequest("a3a189c2-3a9e-4f6b-9be1-0d0a54c9a11f", "b6p-07",
+		return new UsageBatchRequest("a3a189c2-3a9e-4f6b-9be1-0d0a54c9a11f", NamespaceName.of("b6p-07"),
 				List.of(window()));
 	}
 
 	private static StorageSampleBatchRequest storageBatch() {
-		return new StorageSampleBatchRequest("b6p-07", PERIOD,
+		return new StorageSampleBatchRequest(NamespaceName.of("b6p-07"), PERIOD,
 				List.of(new StorageSample("U1000001",
 						Map.of("db", 31L, "file_logical", 32L, "file_physical", 33L))));
 	}
@@ -261,7 +263,7 @@ class UsageWireContractTest {
 			""";
 
 	private static DbUsageBatchRequest dbBatch() {
-		return new DbUsageBatchRequest("b6p-07", PERIOD, PERIOD.plusMinutes(5), 71, true, 72, 73,
+		return new DbUsageBatchRequest(NamespaceName.of("b6p-07"), PERIOD, PERIOD.plusMinutes(5), 71, true, 72, 73,
 				List.of(new DbUsageRow("U1000001", 61, 62, 63, 64)));
 	}
 

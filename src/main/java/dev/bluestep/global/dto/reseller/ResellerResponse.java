@@ -4,6 +4,7 @@ import java.util.Optional;
 
 import org.jspecify.annotations.Nullable;
 
+import dev.bluestep.global.dto.domain.DomainSuffix;
 import dev.bluestep.global.dto.tenantaccess.ResellerKey;
 
 /**
@@ -22,7 +23,8 @@ import dev.bluestep.global.dto.tenantaccess.ResellerKey;
  *
  * @param reseller     the key, in the spelling a classification uses
  * @param supportEmail where this reseller's users are told to write
- * @param defaultDomain the host its tenants front by default
+ * @param defaultDomain the domain its tenants' site hosts are built under, or absent (blank is
+ *                       absent too, kept as stored; see {@link DomainSuffix})
  * @param privacyPageUrl the privacy policy it renders
  * @param termsPageUrl   the terms it renders
  * @param icons          its icon set
@@ -30,7 +32,7 @@ import dev.bluestep.global.dto.tenantaccess.ResellerKey;
 public record ResellerResponse(
 		ResellerKey reseller,
 		@Nullable String supportEmail,
-		@Nullable String defaultDomain,
+		@Nullable DomainSuffix defaultDomain,
 		@Nullable String privacyPageUrl,
 		@Nullable String termsPageUrl,
 		ResellerIcons icons
@@ -42,7 +44,7 @@ public record ResellerResponse(
 	}
 
 	/** {@link #defaultDomain}, as an {@code Optional}. */
-	public Optional<String> optDefaultDomain() {
+	public Optional<DomainSuffix> optDefaultDomain() {
 		return Optional.ofNullable(defaultDomain);
 	}
 

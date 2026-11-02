@@ -3,7 +3,6 @@ package dev.bluestep.global.dto;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.HashSet;
 import java.util.Optional;
@@ -14,15 +13,19 @@ import java.util.stream.Collectors;
 import org.hibernate.validator.messageinterpolation.ParameterMessageInterpolator;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
 import dev.bluestep.global.dto.basetable.BaseTableKey;
+import dev.bluestep.global.dto.domain.DomainSuffix;
 import dev.bluestep.global.dto.reseller.ResellerCreateRequest;
 import dev.bluestep.global.dto.reseller.ResellerDeleteRefusal;
 import dev.bluestep.global.dto.reseller.ResellerIcons;
+import dev.bluestep.global.dto.reseller.ResellerUpdateRequest;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
@@ -68,7 +71,7 @@ class ResellerWriteShapesTest {
 
 	private static ResellerCreateRequest create(String displayName) {
 		return new ResellerCreateRequest(CREATOR, displayName, "help@example.test",
-				"example.test", null, null, noIcons(), 1L);
+				DomainSuffix.of("example.test"), null, null, noIcons(), 1L);
 	}
 
 	// ---------------------------------------------------------------- create: wire
@@ -144,18 +147,45 @@ class ResellerWriteShapesTest {
 	}
 
 	@Test
-	@DisplayName("the email and domain bounds fire on a present value, in code points")
-	void lengthBoundsFireOnAPresentValue() {
+	@DisplayName("the email bound fires on a present value, in code points")
+	void emailBoundFiresOnAPresentValue() {
 		String overLong = "x".repeat(257);
 		String atBoundInSupplementaryCharacters = "😀".repeat(256);
-		ResellerCreateRequest request = new ResellerCreateRequest(CREATOR, "Example Reseller",
-				overLong, atBoundInSupplementaryCharacters, null,
-				null, noIcons(), null);
 
-		Set<String> paths = violatedPaths(request);
+		assertEquals(Set.of("supportEmail"), violatedPaths(new ResellerCreateRequest(CREATOR, "Example Reseller",
+				overLong, null, null, null, noIcons(), null)));
+		assertEquals(Set.of(), violatedPaths(new ResellerCreateRequest(CREATOR, "Example Reseller",
+				atBoundInSupplementaryCharacters, null, null, null, noIcons(), null)));
+	}
 
-		assertEquals(1, paths.size(), "only the over-long email, not the domain at its bound: " + paths);
-		assertTrue(paths.iterator().next().startsWith("supportEmail"), paths.toString());
+	/**
+	 * The default domain is a {@link DomainSuffix}: blank (the monolith's "none", which a whole-set edit sends
+	 * back as stored) or a host name. Create and update hold it to the same rule.
+	 */
+	@ParameterizedTest
+	@ValueSource(strings = {"", "example.test", "sites.example.test"})
+	@DisplayName("a blank or host-shaped default domain passes")
+	void defaultDomainBlankOrHostPasses(String suffix) {
+		assertEquals(Set.of(), violatedPaths(withDefaultDomain(suffix)), suffix);
+		assertEquals(Set.of(), violatedPaths(updateWithDefaultDomain(suffix)), suffix);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {" ", "Example.test", " example.test", "localhost", "https://example.test", "10.0.0.1", "😀"})
+	@DisplayName("any other default domain is refused on create and update")
+	void defaultDomainOtherwiseRefused(String suffix) {
+		assertEquals(Set.of("defaultDomain.value"), violatedPaths(withDefaultDomain(suffix)), suffix);
+		assertEquals(Set.of("defaultDomain.value"), violatedPaths(updateWithDefaultDomain(suffix)), suffix);
+	}
+
+	private static ResellerCreateRequest withDefaultDomain(String suffix) {
+		return new ResellerCreateRequest(CREATOR, "Example Reseller", null, DomainSuffix.of(suffix), null, null,
+				noIcons(), null);
+	}
+
+	private static ResellerUpdateRequest updateWithDefaultDomain(String suffix) {
+		return new ResellerUpdateRequest("Example Reseller", null, DomainSuffix.of(suffix), null, null, noIcons(),
+				null, null);
 	}
 
 	// ---------------------------------------------------------------- delete refusal

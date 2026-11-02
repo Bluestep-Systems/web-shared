@@ -17,6 +17,8 @@ import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import jakarta.validation.ValidatorFactory;
 
+import dev.bluestep.global.dto.fleet.NamespaceName;
+
 /**
  * The {@link DbUsageBatchRequest} constraints, run through a real Bean Validation provider,
  * including the {@code @Valid} cascade into each row. Every bound is exercised one past the limit
@@ -45,7 +47,7 @@ class DbUsageValidationTest {
 
 	private static DbUsageBatchRequest batch(final long dealloc, final long entries, final long entriesMax,
 			final List<DbUsageRow> tenants) {
-		return new DbUsageBatchRequest("b6p-07", START, START.plusMinutes(5), dealloc, false, entries,
+		return new DbUsageBatchRequest(NamespaceName.of("b6p-07"), START, START.plusMinutes(5), dealloc, false, entries,
 				entriesMax, tenants);
 	}
 
@@ -64,7 +66,7 @@ class DbUsageValidationTest {
 	@Test
 	void namespaceAndWindowAreRequired() {
 		assertEquals(Set.of("namespace", "windowStart", "windowEnd"), violatedPaths(
-				new DbUsageBatchRequest(" ", null, null, 0, false, 0, 100, List.of())));
+				new DbUsageBatchRequest(null, null, null, 0, false, 0, 100, List.of())));
 	}
 
 	@Test

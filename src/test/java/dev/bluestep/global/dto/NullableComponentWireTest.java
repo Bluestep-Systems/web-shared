@@ -30,6 +30,7 @@ import dev.bluestep.global.dto.aiunitrate.AiUnitRateResponse;
 import dev.bluestep.global.dto.aiusage.AiUsageQueryRequest;
 import dev.bluestep.global.dto.aiusage.AiUsageQueryResponse;
 import dev.bluestep.global.dto.basetable.BaseTableKey;
+import dev.bluestep.global.dto.domain.DomainSuffix;
 import dev.bluestep.global.dto.globaluser.CatalogScopeKind;
 import dev.bluestep.global.dto.globaluser.GlobalUserScopeDecision;
 import dev.bluestep.global.dto.globaluser.GlobalUserScopeResponse;
@@ -113,12 +114,12 @@ class NullableComponentWireTest {
 		c.put("reseller.ResellerRecordResponse.absent", new ResellerRecordResponse(RESELLER, null, null,
 				null, null, null, icons(null), 0L, null, null));
 		c.put("reseller.ResellerRecordResponse.present", new ResellerRecordResponse(RESELLER, "House",
-				"help@example.test", "example.test", "https://p.example.test", "https://t.example.test",
+				"help@example.test", DomainSuffix.of("example.test"), "https://p.example.test", "https://t.example.test",
 				icons("i"), 5L, new BaseTableKey(9L, 10L), L1));
 		c.put("reseller.ResellerCreateRequest.absent", new ResellerCreateRequest(new BaseTableKey(9L, 10L), "House",
 				null, null, null, null, icons(null), null));
 		c.put("reseller.ResellerCreateRequest.present", new ResellerCreateRequest(new BaseTableKey(9L, 10L), "House",
-				"help@example.test", "example.test", "https://p.example.test", "https://t.example.test",
+				"help@example.test", DomainSuffix.of("example.test"), "https://p.example.test", "https://t.example.test",
 				icons("i"), 5L));
 		c.put("globaluser.GlobalUserScopeResponse.absent", new GlobalUserScopeResponse(USER, CatalogScopeKind.FLEET,
 				null, null));
