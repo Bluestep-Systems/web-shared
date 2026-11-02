@@ -571,7 +571,30 @@ group = 'dev.bluestep'
 // NAMESPACES, FLEET_LOCKOUT, RESERVED_DOMAINS, DOMAINS and REGISTRY. RELEASE ORDER: this artifact only
 // after web-global's drafts serving all of them build green against it from mavenLocal (a shape bug
 // found after publishing costs a 6.0.1), then web-global released serving V6_0_0, then the monolith.
-version = '6.0.0'
+//
+// 6.1.0 adds global knowledge bases (CU-86bcvmhck): dto.knowledgebase, new shapes only. web-global
+// holds the registry (which knowledge bases exist, and which tenants each is connected to). The
+// monolith reads each one's git repo and serves its content.
+//   * GlobalKnowledgeBase {id, name, title, liveBranch, created, modified, creator, modifier}, its
+//     version in the ETag. GlobalKnowledgeBaseId is a uuid. KnowledgeBaseName and LiveBranch use the
+//     monolith's tenant rules (myassn.knowledgebase): [a-z0-9-], at most 64, no leading or trailing '-';
+//     a subset of git check-ref-format, at most 200, not HEAD. Each is a bare string on the wire and
+//     refuses an invalid value when built, so a request carrying one fails binding (400).
+//     GlobalKnowledgeBase.title(String) is the title rule (trimmed, 1-200, no control character).
+//   * GlobalKnowledgeBaseCreateRequest {name, title?, liveBranch?, creator?}: title defaults to the
+//     name, branch to main. GlobalKnowledgeBasePatchRequest {name?, title?, liveBranch?, actor?}: no
+//     rename, so name must be absent or the current one.
+//   * KnowledgeBaseTenantConnection {knowledgeBase, tenant, created, creator} and
+//     KnowledgeBaseConnectRequest {actor?}. GlobalKnowledgeBaseWriteRefusal {NAME_TAKEN, TENANT_ABSENT}
+//     is the 409 body.
+//   * The repo is never stored. It is KnowledgeBaseName.globalRepoPath(), knowledge-base/kb-<name> in
+//     the fleet forge, made by ops for now, and web-global neither creates nor checks it.
+// web-global's V6_1_0 adds the KNOWLEDGE_BASES surface (/global-knowledge-bases: CRUD with no rename,
+// connect/disconnect, a knowledge base's tenants, and by-tenant/{classid}/{seqnum}, the read the
+// monolith makes) and declares every 6.0.0 surface. A MINOR: new shapes only. RELEASE ORDER: 6.0.0
+// first, then this artifact once web-global's draft serving V6_1_0 builds green against it, then
+// web-global released serving V6_1_0, then the monolith moving its contract tag to 6.1.0.
+version = '6.1.0'
 
 repositories {
     mavenCentral()
