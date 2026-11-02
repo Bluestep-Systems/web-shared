@@ -553,7 +553,7 @@ group = 'dev.bluestep'
 //     gain @CodePointSize bounds at the production column widths (and @NotNull on their two NOT NULL
 //     strings), checked only where a write marks them @Valid; their wire is unchanged.
 //   * dto.domain, new: DomainKey (120100), DomainRecordResponse, DomainCreateRequest,
-//     DomainUpdateRequest (host checked against DomainCreateRequest.HOST_PATTERN, the monolith's
+//     DomainUpdateRequest (host a DomainHost checked against DomainHost.HOST_PATTERN, the monolith's
 //     isValidDomain), LoginTypeSetting {type, data} with LoginTypeName, DomainWriteRefusal {HOST_TAKEN,
 //     RESERVED, TENANT_ABSENT} and DomainIngressRow.
 //   * dto.fleet, new: FleetNamespaceResponse, NamespaceModifiedRequest, FleetLockout,
@@ -561,9 +561,22 @@ group = 'dev.bluestep'
 //   * dto.fleet.NamespaceName, new: a Kubernetes namespace name, refused unless a DNS label (1-63 of
 //     [a-z0-9-], alphanumeric at both ends; every production name is one). Its JSON is the bare string,
 //     so the components retyped to it keep their wire byte for byte: TenantSettings.namespace,
-//     TenantRecordResponse.namespace, TenantSnapshotEntry.namespace, FleetNamespaceResponse.name. A
-//     write naming an invalid one now fails to bind (400) instead of reaching @NotBlank/@CodePointSize.
+//     TenantRecordResponse.namespace, TenantSnapshotEntry.namespace, FleetNamespaceResponse.name. It
+//     accepts any string when bound or built (a stored name reads as stored); a request is refused by
+//     bean validation (400) when it names one that is not a DNS label.
 //     The usage batch requests keep a String namespace (metering ingest, outside this contract).
+//   * dto.domain.DomainHost, new: a host name, typed the way NamespaceName is (bare string on the wire,
+//     any string when bound or built, DomainHost.HOST_PATTERN checked by bean validation on requests
+//     only) with one normalization for comparisons (normalized(): stripped, lower-cased; sameHostAs).
+//     It types DomainCreateRequest.host, DomainUpdateRequest.host, DomainRecordResponse.host,
+//     DomainIngressRow.host, RegistryHost.host and RegistryTenantResponse.defaultHost, wire unchanged.
+//     A site prefix (ReservedDomainResponse.domain, the domainPrefix components) and
+//     DomainIngressRow.wildcard (a zone) are not hosts and stay strings.
+//   * TenantLock.status and FleetLockout.status are held to 0..TenantLock.MAX_STATUS (6) on requests:
+//     the monolith decodes them with LockStatus.values()[status], so one outside the enum would fail
+//     every association load. GlobalUserAuthenticationRequest bounds username (50, the column's CHECK)
+//     and candidate (1024 code points). toString redacts TenantSettings/TenantRecordResponse
+//     requiredEndorsement (enciphered with the monolith's key) and CreateTokenResponse.rawtoken.
 //   * dto.registry, new in this library: RegistryTenantResponse and RegistryHost, for web-global's
 //     versioned registry surface. web-global's own RegistryOrgResponse/RegistryHostResponse stay in
 //     the app, in the same package, for the unversioned /registry/orgs.

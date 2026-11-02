@@ -108,6 +108,24 @@ class GlobalUserAuthenticationWireTest {
 		assertEquals(Set.of("tenant"), violatedPaths(nullTenant()));
 	}
 
+	/**
+	 * Each candidate is hashed with Argon2id, so its size is bounded ({@value
+	 * GlobalUserAuthenticationRequest#MAX_CANDIDATE_LENGTH} code points, counted as code points so a
+	 * supplementary character is one); the username at its column's 50.
+	 */
+	@Test
+	void theRequestBoundsTheCandidateAndTheUsername() {
+		String clef = "\uD834\uDD1E";
+		int max = GlobalUserAuthenticationRequest.MAX_CANDIDATE_LENGTH;
+		assertEquals(Set.of(), violatedPaths(new GlobalUserAuthenticationRequest(TENANT, "ada", "p".repeat(max))));
+		assertEquals(Set.of(), violatedPaths(new GlobalUserAuthenticationRequest(TENANT, "ada", clef.repeat(max))));
+		assertEquals(Set.of("candidate"),
+				violatedPaths(new GlobalUserAuthenticationRequest(TENANT, "ada", "p".repeat(max + 1))));
+		assertEquals(Set.of(), violatedPaths(new GlobalUserAuthenticationRequest(TENANT, "u".repeat(50), CANDIDATE)));
+		assertEquals(Set.of("username"),
+				violatedPaths(new GlobalUserAuthenticationRequest(TENANT, "u".repeat(51), CANDIDATE)));
+	}
+
 	@Test
 	void aPasswordOfSpacesIsStillAPassword() {
 		assertEquals(Set.of(), violatedPaths(new GlobalUserAuthenticationRequest(TENANT, "ada", "   ")));

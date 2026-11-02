@@ -68,13 +68,13 @@ class DomainWireTest {
 	}
 
 	private static DomainCreateRequest create(String host) {
-		return new DomainCreateRequest(TENANT, host, UNIT, "harbor", 0L, 300, OAUTH,
+		return new DomainCreateRequest(TENANT, DomainHost.of(host), UNIT, "harbor", 0L, 300, OAUTH,
 				new TenantActor.GlobalUser(new GlobalUserKey(222_222L, -180L)));
 	}
 
 	@Test
 	void record_roundTripsAndPinsItsKeys() {
-		DomainRecordResponse sent = new DomainRecordResponse(DOMAIN, "harbor.example.org", TENANT, UNIT, "harbor",
+		DomainRecordResponse sent = new DomainRecordResponse(DOMAIN, DomainHost.of("harbor.example.org"), TENANT, UNIT, "harbor",
 				4L, 120, OAUTH, LocalDateTime.of(2020, 1, 2, 3, 4, 5), LocalDateTime.of(2026, 10, 28, 9, 0),
 				new TenantActor.GlobalUser(new GlobalUserKey(222_222L, -180L)),
 				new TenantActor.TenantUser(TENANT, new TenantUserKey(222_222L, 42L)));
@@ -111,7 +111,7 @@ class DomainWireTest {
 	@Test
 	void createAndUpdate_roundTripWithTheirKeys() {
 		DomainCreateRequest create = create("harbor.example.org");
-		DomainUpdateRequest update = new DomainUpdateRequest("harbor.example.org", null, null, 0L, null, null, null);
+		DomainUpdateRequest update = new DomainUpdateRequest(DomainHost.of("harbor.example.org"), null, null, 0L, null, null, null);
 
 		assertEquals(Set.of("tenant", "host", "organization", "domainPrefix", "flags", "ingressReadTimeoutSeconds",
 				"signIn", "creator"), Set.copyOf(JSON.valueToTree(create).propertyNames()));
@@ -152,7 +152,7 @@ class DomainWireTest {
 
 	@Test
 	void ingressRow_pinsItsKeysAndAbsence() {
-		DomainIngressRow row = new DomainIngressRow("a.harbor.example.org", 120, "a", "harbor.example.org");
+		DomainIngressRow row = new DomainIngressRow(DomainHost.of("a.harbor.example.org"), 120, "a", "harbor.example.org");
 
 		assertEquals("{\"host\":\"a.harbor.example.org\",\"ingressReadTimeoutSeconds\":120,\"domainPrefix\":\"a\","
 				+ "\"wildcard\":\"harbor.example.org\"}", JSON.writeValueAsString(row));
@@ -171,27 +171,29 @@ class DomainWireTest {
 	@ValueSource(strings = {"harbor.example.org", "a.b", "x-1.example.org", "123.example.org", "a1.example.c0m"})
 	void host_aServableNameIsAccepted(String host) {
 		assertEquals(Set.of(), violatedPaths(create(host)));
-		assertEquals(Set.of(), violatedPaths(new DomainUpdateRequest(host, null, null, 0L, null, null, null)));
+		assertEquals(Set.of(),
+				violatedPaths(new DomainUpdateRequest(DomainHost.of(host), null, null, 0L, null, null, null)));
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = {"Harbor.example.org", "localhost", "10.0.0.1", "-a.example.org", "a-.example.org",
 		"a_b.example.org", "a..example.org", "example.org.", ".example.org", "a.example.123", " "})
 	void host_anUnservableNameIsRefused(String host) {
-		assertEquals(Set.of("host"), violatedPaths(create(host)));
-		assertEquals(Set.of("host"), violatedPaths(new DomainUpdateRequest(host, null, null, 0L, null, null, null)));
+		assertEquals(Set.of("host.value"), violatedPaths(create(host)));
+		assertEquals(Set.of("host.value"),
+				violatedPaths(new DomainUpdateRequest(DomainHost.of(host), null, null, 0L, null, null, null)));
 	}
 
 	@Test
 	void host_holdsTheLabelAndTotalLengths() {
 		String label63 = "a".repeat(63);
 		assertEquals(Set.of(), violatedPaths(create(label63 + ".example.org")));
-		assertEquals(Set.of("host"), violatedPaths(create("a".repeat(64) + ".example.org")));
+		assertEquals(Set.of("host.value"), violatedPaths(create("a".repeat(64) + ".example.org")));
 
 		String name253 = String.join(".", label63, label63, label63, "a".repeat(57), "org");
 		assertEquals(253, name253.length());
 		assertEquals(Set.of(), violatedPaths(create(name253)));
-		assertEquals(Set.of("host"), violatedPaths(create("b" + name253)));
+		assertEquals(Set.of("host.value"), violatedPaths(create("b" + name253)));
 	}
 
 	@Test
@@ -209,5 +211,13 @@ class DomainWireTest {
 				DomainCreateRequest.class);
 
 		assertEquals(Set.of("tenant"), violatedPaths(tenantless));
+	}
+
+	@Test
+	void createAndUpdate_requireTheirHost() {
+		assertEquals(Set.of("host"), violatedPaths(JSON.readValue(
+				"{\"tenant\":{\"classid\":111111,\"seqnum\":137803},\"flags\":0}", DomainCreateRequest.class)));
+		assertEquals(Set.of("host"), violatedPaths(JSON.readValue("{\"host\":null,\"flags\":0}",
+				DomainUpdateRequest.class)));
 	}
 }

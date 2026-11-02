@@ -4,6 +4,8 @@ import java.util.OptionalInt;
 
 import org.jspecify.annotations.Nullable;
 
+import dev.bluestep.global.dto.domain.DomainHost;
+
 /**
  * One host a tenant is reachable at, paired with the ingress read timeout registered against
  * <em>that</em> host.
@@ -16,7 +18,7 @@ import org.jspecify.annotations.Nullable;
  * @param ingressReadTimeoutSeconds the host's ingress read timeout in seconds, absent when none is
  *                                  registered
  */
-public record RegistryHost(String host, @Nullable Integer ingressReadTimeoutSeconds) {
+public record RegistryHost(DomainHost host, @Nullable Integer ingressReadTimeoutSeconds) {
 
 	/** {@link #ingressReadTimeoutSeconds}, as an {@code OptionalInt}. */
 	public OptionalInt optIngressReadTimeoutSeconds() {

@@ -11,9 +11,7 @@ import dev.bluestep.global.dto.tenant.TenantActor;
 import dev.bluestep.global.dto.tenant.TenantKey;
 
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 
 /**
@@ -27,10 +25,9 @@ import jakarta.validation.constraints.Positive;
  *
  * <h2>The host</h2>
  *
- * <p>{@link #HOST_PATTERN} is the monolith's {@code DomainName.isValidDomain}: lower-case labels of
- * letters, digits and inner hyphens, at most 63 each and 253 in all, at least one dot, and a last label
- * that is not all digits (so never an IP address). Every host can become an ingress host with a publicly
- * issued certificate. Every production host satisfies it.</p>
+ * <p>A {@link DomainHost}, validated ({@code @Valid}) against {@link DomainHost#HOST_PATTERN}, the
+ * monolith's {@code DomainName.isValidDomain}: a request naming a host the fleet cannot serve is a
+ * {@code 400}. Every production host satisfies it.</p>
  *
  * @param tenant                    the tenant the host serves
  * @param host                      the host name
@@ -44,20 +41,13 @@ import jakarta.validation.constraints.Positive;
  */
 public record DomainCreateRequest(
 		@NotNull TenantKey tenant,
-		@NotBlank @CodePointSize(max = 255) @Pattern(regexp = HOST_PATTERN) String host,
+		@NotNull @Valid DomainHost host,
 		@Nullable BaseTableKey organization,
 		@CodePointSize(max = 256) @Nullable String domainPrefix,
 		long flags,
 		@Positive @Nullable Integer ingressReadTimeoutSeconds,
 		@Valid @Nullable LoginTypeSetting signIn,
 		@Nullable TenantActor creator) {
-
-	/**
-	 * A host name the fleet can serve: the monolith's {@code DomainName.isValidDomain} as one expression.
-	 * The look-aheads hold the 253 total and the last label's letter; each label is at most 63.
-	 */
-	public static final String HOST_PATTERN = "(?=.{1,253}$)(?=.*\\.[-a-z0-9]*[a-z][-a-z0-9]*$)"
-			+ "[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)+";
 
 	/** {@link #organization}, as an {@code Optional}. */
 	public Optional<BaseTableKey> optOrganization() {

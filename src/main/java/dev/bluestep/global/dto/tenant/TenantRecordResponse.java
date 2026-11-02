@@ -164,4 +164,22 @@ public record TenantRecordResponse(
 	public Optional<TenantActor> optModifier() {
 		return Optional.ofNullable(modifier);
 	}
+
+	/**
+	 * Every component but {@link #requiredEndorsement}, which is replaced by a fixed placeholder when
+	 * present, as {@link TenantSettings#toString()} does: it is enciphered with the monolith's key.
+	 */
+	@Override
+	public String toString() {
+		return "TenantRecordResponse[tenant=" + tenant + ", name=" + name + ", displayName=" + displayName
+				+ ", shortName=" + shortName + ", mission=" + mission + ", associationId=" + associationId
+				+ ", reseller=" + reseller + ", namespace=" + namespace + ", flags=" + flags + ", features=" + features
+				+ ", lock=" + lock + ", requiredEndorsement=" + TenantSettings.redacted(requiredEndorsement)
+				+ ", assignedServers=" + assignedServers + ", formulaServer=" + formulaServer + ", distributionCount="
+				+ distributionCount + ", defaultEmailValidatedCountdown=" + defaultEmailValidatedCountdown
+				+ ", pageLockMillis=" + pageLockMillis + ", pageLockWarningMillis=" + pageLockWarningMillis
+				+ ", helpTopicTemplate=" + helpTopicTemplate + ", signIn=" + signIn + ", storage=" + storage
+				+ ", organization=" + organization + ", created=" + created + ", modified=" + modified + ", creator="
+				+ creator + ", modifier=" + modifier + "]";
+	}
 }

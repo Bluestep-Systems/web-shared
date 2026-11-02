@@ -18,7 +18,8 @@ import dev.bluestep.global.dto.tenant.TenantKey;
  * pinned to.</p>
  *
  * @param domain                    the key
- * @param host                      the host name, lower case, unique across the fleet
+ * @param host                      the host name, as stored; unique across the fleet as
+ *                                  {@link DomainHost#sameHostAs} compares hosts
  * @param tenant                    the tenant it serves (the monolith's root)
  * @param organization              the unit inside the tenant's schema that the host lands on: its root
  *                                  organization (classid 111111) or a unit (111000); absent for the
@@ -36,7 +37,7 @@ import dev.bluestep.global.dto.tenant.TenantKey;
  */
 public record DomainRecordResponse(
 		DomainKey domain,
-		String host,
+		DomainHost host,
 		TenantKey tenant,
 		@Nullable BaseTableKey organization,
 		@Nullable String domainPrefix,

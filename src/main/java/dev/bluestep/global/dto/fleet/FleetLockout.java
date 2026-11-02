@@ -7,6 +7,10 @@ import java.util.OptionalInt;
 import org.jspecify.annotations.Nullable;
 
 import dev.bluestep.global.dto.constraints.CodePointSize;
+import dev.bluestep.global.dto.tenant.TenantLock;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 
 /**
  * The fleet-wide lockout: web-global's {@code fleet_lockout}, the monolith's single
@@ -18,7 +22,9 @@ import dev.bluestep.global.dto.constraints.CodePointSize;
  * {@code timestamp without time zone}.</p>
  *
  * <p>Each message is bounded at the width of its {@code varchar(2000)} column, checked where a request
- * marks the lockout {@code @Valid}.</p>
+ * marks the lockout {@code @Valid}; so is {@code status}, to {@code 0..}{@value TenantLock#MAX_STATUS}: the
+ * monolith decodes it with {@code LockStatus.values()[status]} on every association load in every ring,
+ * so an ordinal outside the enum would fail them all. A read answers the stored value as it is.</p>
  *
  * @param status          the monolith's {@code LockStatus} ordinal, verbatim; zero when the column is
  *                        absent, as the monolith reads it
@@ -30,7 +36,7 @@ import dev.bluestep.global.dto.constraints.CodePointSize;
  * @param postMessage     shown after it lifts
  */
 public record FleetLockout(
-		int status,
+		@Min(0) @Max(TenantLock.MAX_STATUS) int status,
 		boolean autoOff,
 		@Nullable LocalDateTime lockedOut,
 		@Nullable Integer durationMinutes,

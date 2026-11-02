@@ -126,4 +126,32 @@ public record TenantSettings(
 	public Optional<String> optHelpTopicTemplate() {
 		return Optional.ofNullable(helpTopicTemplate);
 	}
+
+	/**
+	 * Every component but {@link #requiredEndorsement}, which is replaced by a fixed placeholder when
+	 * present: it is enciphered with the monolith's key and decrypted on every association read, so a
+	 * request reaching a log line through a framework's argument logging must not carry it. The update
+	 * and create requests print their settings through this.
+	 */
+	@Override
+	public String toString() {
+		return "TenantSettings[name=" + name + ", shortName=" + shortName + ", mission=" + mission
+				+ ", reseller=" + reseller + ", namespace=" + namespace + ", flags=" + flags + ", features=" + features
+				+ ", requiredEndorsement=" + redacted(requiredEndorsement) + ", assignedServers=" + assignedServers
+				+ ", formulaServer=" + formulaServer + ", distributionCount=" + distributionCount
+				+ ", defaultEmailValidatedCountdown=" + defaultEmailValidatedCountdown + ", pageLockMillis="
+				+ pageLockMillis + ", pageLockWarningMillis=" + pageLockWarningMillis + ", helpTopicTemplate="
+				+ helpTopicTemplate + ", signIn=" + signIn + ", organization=" + organization + "]";
+	}
+
+	/**
+	 * How a tenant record's {@code toString} prints a value enciphered with the monolith's key: never the
+	 * value, only whether one is there.
+	 *
+	 * @param enciphered the stored value, or {@code null} where there is none
+	 * @return {@code "<redacted>"} for a value, {@code "null"} for none, as a record prints a null
+	 */
+	static String redacted(@Nullable String enciphered) {
+		return enciphered == null ? "null" : "<redacted>";
+	}
 }
