@@ -582,11 +582,12 @@ group = 'dev.bluestep'
 //     with a hyphen. It types ReservedDomainResponse.domain and the domainPrefix of DomainCreateRequest,
 //     DomainUpdateRequest (both @Valid), DomainRecordResponse and DomainIngressRow, wire unchanged. The
 //     reserved list is still matched without regard to case, in the database.
-//   * dto.domain.DomainSuffix, new: the domain a site prefix is put under, typed the same way; request
-//     rule blank or DomainHost.HOST_PATTERN (blank is the monolith's "none": a reseller column holds
-//     NULL, '' and host names, and a whole-set edit sends back what it read). It types defaultDomain on
-//     ResellerRecordResponse, ResellerResponse, ResellerCreateRequest and ResellerUpdateRequest (both
-//     @Valid, in place of a 256 code-point bound); null stays null and "" stays "" on the wire
+//   * dto.domain.DomainSuffix, new: the domain a site prefix is put under, typed the same way. Its one
+//     bean constraint is the column width (@CodePointSize 256, as before); its shape, isValid() = blank or
+//     DomainHost.HOST_PATTERN, is NOT a bean constraint: the reseller records are bound under every
+//     contract version and old monoliths pass admin text unchecked, so web-global applies it on 6.0.0
+//     writes only. It types defaultDomain on ResellerRecordResponse, ResellerResponse,
+//     ResellerCreateRequest and ResellerUpdateRequest (both @Valid); null stays null and "" stays "" on the wire
 //     (ResellerDefaultDomainWireTest pins 5.5.0's bytes). Source break for callers of the accessors.
 //   * TenantLock.status and FleetLockout.status are held to 0..TenantLock.MAX_STATUS (6) on requests:
 //     the monolith decodes them with LockStatus.values()[status], so one outside the enum would fail

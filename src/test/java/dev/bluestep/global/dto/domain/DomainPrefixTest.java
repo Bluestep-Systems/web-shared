@@ -102,10 +102,17 @@ class DomainPrefixTest {
 	@ParameterizedTest
 	@ValueSource(strings = {" ", "localhost", "Example.test", " example.test", "10.0.0.1", "https://example.test",
 		"-a.example.test"})
-	void anyOtherSuffixBuildsAndBindsAsStored_butFailsTheRule(String suffix) {
+	void anyOtherSuffixBuildsAndBindsAsStored_failsIsValid_butNoBeanConstraint(String suffix) {
 		assertEquals(DomainSuffix.of(suffix), JSON.readValue(JSON.writeValueAsString(suffix), DomainSuffix.class));
 		assertFalse(DomainSuffix.of(suffix).isValid(), suffix);
-		assertEquals(Set.of("value"), violatedPaths(DomainSuffix.of(suffix)), suffix);
+		assertEquals(Set.of(), violatedPaths(DomainSuffix.of(suffix)), "the shape is a per-version server rule: " + suffix);
+	}
+
+	/** The one bean constraint is the column's width, counted in code points as {@code varchar} counts. */
+	@Test
+	void suffix_isBoundedAtTheColumnWidth() {
+		assertEquals(Set.of(), violatedPaths(DomainSuffix.of("😀".repeat(DomainSuffix.MAX_LENGTH))));
+		assertEquals(Set.of("value"), violatedPaths(DomainSuffix.of("x".repeat(DomainSuffix.MAX_LENGTH + 1))));
 	}
 
 	@Test

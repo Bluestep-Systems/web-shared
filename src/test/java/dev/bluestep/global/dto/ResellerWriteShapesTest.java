@@ -159,23 +159,25 @@ class ResellerWriteShapesTest {
 	}
 
 	/**
-	 * The default domain is a {@link DomainSuffix}: blank (the monolith's "none", which a whole-set edit sends
-	 * back as stored) or a host name. Create and update hold it to the same rule.
+	 * The default domain is a {@link DomainSuffix}, bound under every contract version: bean validation holds
+	 * it to the column's width only, so an older version still takes an administrator's text as sent. Its
+	 * shape (blank or a host) is web-global's rule from 6.0.0, not a constraint here.
 	 */
 	@ParameterizedTest
-	@ValueSource(strings = {"", "example.test", "sites.example.test"})
-	@DisplayName("a blank or host-shaped default domain passes")
-	void defaultDomainBlankOrHostPasses(String suffix) {
+	@ValueSource(strings = {"", "example.test", " ", "Example.com", " padded.example.com ", "1.2.3.4", "localhost"})
+	@DisplayName("any default domain within the column width passes bean validation, on create and update")
+	void defaultDomainWithinTheWidthPasses(String suffix) {
 		assertEquals(Set.of(), violatedPaths(withDefaultDomain(suffix)), suffix);
 		assertEquals(Set.of(), violatedPaths(updateWithDefaultDomain(suffix)), suffix);
 	}
 
-	@ParameterizedTest
-	@ValueSource(strings = {" ", "Example.test", " example.test", "localhost", "https://example.test", "10.0.0.1", "😀"})
-	@DisplayName("any other default domain is refused on create and update")
-	void defaultDomainOtherwiseRefused(String suffix) {
-		assertEquals(Set.of("defaultDomain.value"), violatedPaths(withDefaultDomain(suffix)), suffix);
-		assertEquals(Set.of("defaultDomain.value"), violatedPaths(updateWithDefaultDomain(suffix)), suffix);
+	@Test
+	@DisplayName("a default domain over the column width is refused, counted in code points")
+	void defaultDomainOverTheWidthRefused() {
+		String over = "x".repeat(DomainSuffix.MAX_LENGTH + 1);
+		assertEquals(Set.of("defaultDomain.value"), violatedPaths(withDefaultDomain(over)));
+		assertEquals(Set.of("defaultDomain.value"), violatedPaths(updateWithDefaultDomain(over)));
+		assertEquals(Set.of(), violatedPaths(withDefaultDomain("😀".repeat(DomainSuffix.MAX_LENGTH))));
 	}
 
 	private static ResellerCreateRequest withDefaultDomain(String suffix) {
