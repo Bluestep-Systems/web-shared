@@ -129,4 +129,14 @@ class KnowledgeBaseWireTest {
 
 		assertEquals("{\"reasons\":[\"NAME_TAKEN\"]}", json);
 	}
+
+	@Test
+	void anId_bindsOnlyFromTheCanonicalForm() throws Exception {
+		assertEquals(ID, JSON.readValue("\"0f8fad5b-d9cb-469f-a165-70867728950e\"", GlobalKnowledgeBaseId.class));
+		assertThrows(JacksonException.class, () -> JSON.readValue("\"1-1-1-1-1\"", GlobalKnowledgeBaseId.class));
+		assertThrows(JacksonException.class,
+				() -> JSON.readValue("\"0F8FAD5B-D9CB-469F-A165-70867728950E\"", GlobalKnowledgeBaseId.class));
+		assertThrows(JacksonException.class,
+				() -> JSON.readValue("\"0f8fad5bd9cb469fa16570867728950e\"", GlobalKnowledgeBaseId.class));
+	}
 }

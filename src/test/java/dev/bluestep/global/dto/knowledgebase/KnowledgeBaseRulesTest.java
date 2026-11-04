@@ -111,4 +111,20 @@ class KnowledgeBaseRulesTest {
 		assertEquals(id, GlobalKnowledgeBaseId.parse(id.toString()).orElseThrow());
 		assertTrue(GlobalKnowledgeBaseId.parse("not-a-uuid").isEmpty());
 	}
+
+	@Test
+	void anId_parsesOnlyTheCanonicalLowercaseForm() {
+		String canonical = "0f8fad5b-d9cb-469f-a165-70867728950e";
+
+		assertEquals(UUID.fromString(canonical), GlobalKnowledgeBaseId.parse(canonical).orElseThrow().value());
+		assertTrue(GlobalKnowledgeBaseId.parse("1-1-1-1-1").isEmpty());
+		assertTrue(GlobalKnowledgeBaseId.parse("0f8fad5bd9cb469fa16570867728950e").isEmpty());
+		assertTrue(GlobalKnowledgeBaseId.parse(canonical.substring(1)).isEmpty());
+		assertTrue(GlobalKnowledgeBaseId.parse(canonical + "0").isEmpty());
+		assertTrue(GlobalKnowledgeBaseId.parse(" " + canonical).isEmpty());
+		assertTrue(GlobalKnowledgeBaseId.parse(canonical + " ").isEmpty());
+		assertTrue(GlobalKnowledgeBaseId.parse(canonical.toUpperCase(java.util.Locale.ROOT)).isEmpty());
+		assertTrue(GlobalKnowledgeBaseId.parse("").isEmpty());
+		assertTrue(GlobalKnowledgeBaseId.parse(null).isEmpty());
+	}
 }
