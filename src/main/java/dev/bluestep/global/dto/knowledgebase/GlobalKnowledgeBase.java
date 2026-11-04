@@ -1,6 +1,7 @@
 package dev.bluestep.global.dto.knowledgebase;
 
 import java.time.Instant;
+import java.util.Objects;
 import java.util.Optional;
 
 import org.jspecify.annotations.Nullable;
@@ -34,6 +35,19 @@ public record GlobalKnowledgeBase(
 		Instant modified,
 		@Nullable TenantActor creator,
 		@Nullable TenantActor modifier) {
+
+	/**
+	 * Holds the parts to their rules: the title must be
+	 * one {@link #title} would return unchanged, so a title that is padded, blank, too long or holds a
+	 * control character fails here and, when read from JSON, fails binding.
+	 */
+	public GlobalKnowledgeBase {
+		Objects.requireNonNull(title, "title");
+		if (!title(title).equals(Optional.of(title))) {
+			throw new IllegalArgumentException("Not a valid knowledge base title (trimmed, not blank, at most "
+					+ MAX_TITLE_LENGTH + " characters, no control character): " + title);
+		}
+	}
 
 	/** The longest title, in UTF-16 units, which is what the monolith's tenant rule counts. */
 	public static final int MAX_TITLE_LENGTH = 200;

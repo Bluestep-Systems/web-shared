@@ -139,4 +139,38 @@ class KnowledgeBaseWireTest {
 		assertThrows(JacksonException.class,
 				() -> JSON.readValue("\"0f8fad5bd9cb469fa16570867728950e\"", GlobalKnowledgeBaseId.class));
 	}
+
+	private static GlobalKnowledgeBase withTitle(String title) {
+		return new GlobalKnowledgeBase(ID, new KnowledgeBaseName("handbook"), title, new LiveBranch("main"),
+				Instant.parse("2026-10-30T12:00:00Z"), Instant.parse("2026-10-30T12:00:00Z"), null, null);
+	}
+
+	@Test
+	void aTitle_thatItsOwnRuleWouldChange_isRefusedAtConstruction() {
+		assertThrows(IllegalArgumentException.class, () -> withTitle(" Handbook"));
+		assertThrows(IllegalArgumentException.class, () -> withTitle("Handbook\t"));
+		assertThrows(IllegalArgumentException.class, () -> withTitle(""));
+		assertThrows(IllegalArgumentException.class, () -> withTitle("   "));
+		assertThrows(IllegalArgumentException.class, () -> withTitle("x".repeat(201)));
+		assertThrows(IllegalArgumentException.class, () -> withTitle("a\nb"));
+		assertThrows(IllegalArgumentException.class, () -> withTitle("a\u0085b"));
+		assertThrows(NullPointerException.class, () -> withTitle(null));
+		assertEquals("x".repeat(200), withTitle("x".repeat(200)).title());
+	}
+
+	@Test
+	void aBadTitle_failsBinding() {
+		String template = """
+				{"id":"0f8fad5b-d9cb-469f-a165-70867728950e","name":"handbook","title":"%s",
+				 "liveBranch":"main","created":"2026-10-30T12:00:00Z","modified":"2026-10-30T12:00:00Z"}""";
+
+		assertThrows(JacksonException.class,
+				() -> JSON.readValue(template.formatted(" padded"), GlobalKnowledgeBase.class));
+		assertThrows(JacksonException.class,
+				() -> JSON.readValue(template.formatted("x".repeat(201)), GlobalKnowledgeBase.class));
+		assertThrows(JacksonException.class,
+				() -> JSON.readValue(template.formatted("a\\tb"), GlobalKnowledgeBase.class));
+		assertEquals("x".repeat(200),
+				JSON.readValue(template.formatted("x".repeat(200)), GlobalKnowledgeBase.class).title());
+	}
 }
