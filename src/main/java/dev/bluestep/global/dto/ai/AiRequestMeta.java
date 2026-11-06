@@ -1,10 +1,13 @@
 package dev.bluestep.global.dto.ai;
 
+import java.math.BigInteger;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
 
 import org.jspecify.annotations.Nullable;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
@@ -55,6 +58,51 @@ public record AiRequestMeta(
 	 * null and validation reports each missing field.
 	 */
 	public static final AiRequestMeta ABSENT = new AiRequestMeta(null, null, null, null, null);
+
+	/**
+	 * Reads one element of {@code "rm"} as it arrived, never throwing: what Jackson binds every element through.
+	 *
+	 * <p>A field of the wrong type or out of range becomes absent, and {@code @NotNull} / {@code @NotBlank} report it,
+	 * so malformed metadata costs the turn nothing but the metadata (Codex r2: a {@code "t"} past a long, or a
+	 * {@code "p"} of {@code "unknown"}, threw while binding and lost the whole completion). {@code t} and {@code f}
+	 * take only an integral number that fits a long; {@code m} and {@code id} only a string; {@code p} only a
+	 * boolean. An element that is not an object at all reads as {@link #ABSENT}. {@code id} is the one field whose
+	 * absence is allowed, so a malformed one is dropped without a violation: it identifies the request, it carries
+	 * nothing that is billed. A JSON {@code null} element never reaches this method; {@link AiCompletionRequest} maps
+	 * it to {@link #ABSENT}.</p>
+	 *
+	 * <p>Bound through Jackson's natural types (a map, list, string, number or boolean), so this artifact needs only
+	 * jackson-annotations and works the same for JSON and CBOR.</p>
+	 *
+	 * @param node the element as read: a {@code Map} for an object, anything else otherwise
+	 * @return the element, with every unreadable field absent
+	 */
+	@JsonCreator(mode = JsonCreator.Mode.DELEGATING)
+	public static AiRequestMeta fromWire(Object node) {
+		if (!(node instanceof Map<?, ?> fields)) {
+			return ABSENT;
+		}
+		return new AiRequestMeta(epochMillis(fields.get("t")), epochMillis(fields.get("f")), string(fields.get("m")),
+				string(fields.get("id")), bool(fields.get("p")));
+	}
+
+	private static @Nullable Long epochMillis(@Nullable Object field) {
+		if (field instanceof Integer || field instanceof Long || field instanceof Short || field instanceof Byte) {
+			return ((Number) field).longValue();
+		}
+		if (field instanceof BigInteger big && big.bitLength() < Long.SIZE) {
+			return big.longValue();
+		}
+		return null;
+	}
+
+	private static @Nullable String string(@Nullable Object field) {
+		return field instanceof String text ? text : null;
+	}
+
+	private static @Nullable Boolean bool(@Nullable Object field) {
+		return field instanceof Boolean flag ? flag : null;
+	}
 
 	/** The longest model name accepted; matches the width web-global stores it in. */
 	public static final int MAX_MODEL_LENGTH = 100;

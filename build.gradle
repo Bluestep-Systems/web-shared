@@ -643,7 +643,9 @@ group = 'dev.bluestep'
 // 6.3.0 adds per-request metadata to AiCompletionRequest (CU-86bczr1e7): one optional component, requestMeta under
 // "rm", one AiRequestMeta {t startedAt, f finishedAt, m model, id providerRequestId?, p partial} per element of "r",
 // in the same order. Every component of an element is boxed, and a null element binds as AiRequestMeta.ABSENT, so a
-// missing or null value binds under Jackson 3 (which refuses a missing primitive) and is reported by @NotNull. It is
+// missing or null value binds under Jackson 3 (which refuses a missing primitive) and is reported by @NotNull; an
+// element is read through a tolerant delegating creator (AiRequestMeta.fromWire), so a malformed field (out of range,
+// wrong type) is absent rather than thrown on and a non-object element is ABSENT. It is
 // what lets web-global place each request's usage in the hour the provider billed it and
 // reconcile against the provider's usage report. Every check on an element is a bean-validation constraint, never a
 // throw, so wrong metadata cannot cost a turn its amounts; alignment with "r" is web-global's check, not the DTO's

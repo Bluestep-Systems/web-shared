@@ -245,6 +245,50 @@ class AiCompletionRequestRequestMetaTest {
 		}
 	}
 
+	/**
+	 * Codex r2: a present but malformed field (out of range, wrong type, an array or object where a scalar belongs) or
+	 * an element that is not an object must bind too, as an absent field, in JSON and in CBOR; 6.2.1 accepted these
+	 * payloads by ignoring "rm", so throwing on them would lose usage 6.2.1 kept.
+	 */
+	@Test
+	void malformedMetadata_binds_inJsonAndCbor_asAbsentFields() throws Exception {
+		String ok = "\"f\":6,\"m\":\"m\",\"p\":false";
+		Set<String> all = Set.of("requestMeta[0].startedAt", "requestMeta[0].finishedAt", "requestMeta[0].model",
+				"requestMeta[0].partial");
+		Map<String, Set<String>> cases = Map.ofEntries(
+				Map.entry("{\"t\":9223372036854775808," + ok + "}", Set.of("requestMeta[0].startedAt")),
+				Map.entry("{\"t\":-9223372036854775809," + ok + "}", Set.of("requestMeta[0].startedAt")),
+				Map.entry("{\"t\":1.5," + ok + "}", Set.of("requestMeta[0].startedAt")),
+				Map.entry("{\"t\":\"5\"," + ok + "}", Set.of("requestMeta[0].startedAt")),
+				Map.entry("{\"t\":[5]," + ok + "}", Set.of("requestMeta[0].startedAt")),
+				Map.entry("{\"t\":5,\"f\":{\"x\":1},\"m\":\"m\",\"p\":false}", Set.of("requestMeta[0].finishedAt")),
+				Map.entry("{\"t\":5,\"f\":6,\"m\":7,\"p\":false}", Set.of("requestMeta[0].model")),
+				Map.entry("{\"t\":5,\"f\":6,\"m\":[\"m\"],\"p\":false}", Set.of("requestMeta[0].model")),
+				Map.entry("{\"t\":5,\"f\":6,\"m\":\"m\",\"p\":\"unknown\"}", Set.of("requestMeta[0].partial")),
+				Map.entry("{\"t\":5,\"f\":6,\"m\":\"m\",\"p\":1}", Set.of("requestMeta[0].partial")),
+				Map.entry("{\"t\":5,\"f\":6,\"m\":\"m\",\"id\":42,\"p\":false}", Set.of()),
+				Map.entry("5", all), Map.entry("\"x\"", all), Map.entry("[]", all), Map.entry("[1,2]", all),
+				Map.entry("true", all));
+		for (Map.Entry<String, Set<String>> c : cases.entrySet()) {
+			String json = "{\"t\":\"trk\",\"i\":1,\"o\":2,\"l\":3,\"n\":1,\"u\":{\"text_input\":1},"
+					+ "\"r\":[{\"text_input\":1}],\"rm\":[" + c.getKey() + "]}";
+			AiCompletionRequest viaJson = JSON.readValue(json, AiCompletionRequest.class);
+			AiCompletionRequest viaCbor = CBOR.readValue(CBOR.writeValueAsBytes(JSON.readTree(json)),
+					AiCompletionRequest.class);
+			for (AiCompletionRequest request : List.of(viaJson, viaCbor)) {
+				assertEquals(c.getValue(), violatedPaths(request), c.getKey());
+				assertEquals(Optional.of(List.of(Map.of(UnitKeys.TEXT_INPUT, 1L))), request.optRequestUnitAmounts(),
+						c.getKey());
+				assertEquals(Optional.empty(), request.requestMeta().get(0).optProviderRequestId(), c.getKey());
+			}
+		}
+		AiCompletionRequest exact = JSON.readValue("{\"t\":\"trk\",\"i\":1,\"o\":2,\"l\":3,\"n\":1,"
+				+ "\"rm\":[{\"t\":9223372036854775807,\"f\":9223372036854775807,\"m\":\"m\",\"id\":\"req\",\"p\":true}]}",
+				AiCompletionRequest.class);
+		assertEquals(List.of(new AiRequestMeta(Long.MAX_VALUE, Long.MAX_VALUE, "m", "req", true)), exact.requestMeta(),
+				"the edge of a long is still read");
+	}
+
 	/** The optX() accessors are how a reader sees a component before validation has proved it present. */
 	@Test
 	void optAccessors_reportPresence() {
