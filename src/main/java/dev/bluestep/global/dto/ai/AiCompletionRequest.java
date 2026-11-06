@@ -8,6 +8,7 @@ import java.util.OptionalInt;
 
 import org.jspecify.annotations.Nullable;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import jakarta.validation.Valid;
@@ -78,7 +79,11 @@ import jakarta.validation.constraints.Size;
  *                          when each request ran, the model that answered and the provider's id for it. Present only
  *                          alongside {@code requestUnitAmounts} and the same size; web-global checks that alignment,
  *                          not the DTO, and on a mismatch records the turn without the metadata and marks it
- *                          {@link UnitKeys#INVALID_REQUEST_META_MARKER}. Absent on a caller that predates it
+ *                          {@link UnitKeys#INVALID_REQUEST_META_MARKER}. Absent on a caller that predates it.
+ *                          A value that is not an array (an object, number, string or boolean) binds as a one-element
+ *                          list of it, read by {@link AiRequestMeta#fromWire} into an element with its fields absent:
+ *                          present but invalid, so validation flags it and the amounts are kept, distinct from
+ *                          absent
  */
 public record AiCompletionRequest(
 		@NotBlank @JsonProperty("t") String trackingId,
@@ -99,7 +104,8 @@ public record AiCompletionRequest(
 				@NotNull @Size(max = MAX_UNIT_KEYS) Map<
 						@NotBlank @Size(max = UnitKeys.MAX_KEY_LENGTH) @Pattern(regexp = UnitKeys.REPORTED_KEY_PATTERN) String,
 						@PositiveOrZero Long>> requestUnitAmounts,
-		@JsonProperty("rm") @Size(max = MAX_REQUESTS) @Nullable List<@NotNull @Valid AiRequestMeta> requestMeta) {
+		@JsonProperty("rm") @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+		@Size(max = MAX_REQUESTS) @Nullable List<@NotNull @Valid AiRequestMeta> requestMeta) {
 
 	/**
 	 * How many distinct keys one turn may report.

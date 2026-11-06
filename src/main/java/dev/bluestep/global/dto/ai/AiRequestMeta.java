@@ -1,5 +1,6 @@
 package dev.bluestep.global.dto.ai;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.Map;
 import java.util.Optional;
@@ -65,7 +66,7 @@ public record AiRequestMeta(
 	 * <p>A field of the wrong type or out of range becomes absent, and {@code @NotNull} / {@code @NotBlank} report it,
 	 * so malformed metadata costs the turn nothing but the metadata (Codex r2: a {@code "t"} past a long, or a
 	 * {@code "p"} of {@code "unknown"}, threw while binding and lost the whole completion). {@code t} and {@code f}
-	 * take only an integral number that fits a long; {@code m} and {@code id} only a string; {@code p} only a
+	 * take only an integral number that fits a long (an integer, or a decimal that is exactly one); {@code m} and {@code id} only a string; {@code p} only a
 	 * boolean. An element that is not an object at all reads as {@link #ABSENT}. {@code id} is the one field whose
 	 * absence is allowed, so a malformed one is dropped without a violation: it identifies the request, it carries
 	 * nothing that is billed. A JSON {@code null} element never reaches this method; {@link AiCompletionRequest} maps
@@ -92,6 +93,14 @@ public record AiRequestMeta(
 		}
 		if (field instanceof BigInteger big && big.bitLength() < Long.SIZE) {
 			return big.longValue();
+		}
+		if (field instanceof BigDecimal decimal) {
+			// CBOR can carry an integer as a decimal (e.g. BigDecimal("1")); exact and in range is still a timestamp.
+			try {
+				return decimal.longValueExact();
+			} catch (ArithmeticException fractionalOrOutOfRange) {
+				return null;
+			}
 		}
 		return null;
 	}

@@ -5,7 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -287,6 +289,68 @@ class AiCompletionRequestRequestMetaTest {
 				AiCompletionRequest.class);
 		assertEquals(List.of(new AiRequestMeta(Long.MAX_VALUE, Long.MAX_VALUE, "m", "req", true)), exact.requestMeta(),
 				"the edge of a long is still read");
+	}
+
+	/**
+	 * Codex r3: an "rm" that is not an array must not stop the completion binding. It binds as a one-element list of
+	 * what was sent, so it is present (not absent) and, unless that one value is itself a well-formed element,
+	 * flagged by validation; the amounts are kept. JSON and CBOR.
+	 */
+	@Test
+	void nonArrayMetadata_binds_presentAndFlagged_inJsonAndCbor() throws Exception {
+		Set<String> all = Set.of("requestMeta[0].startedAt", "requestMeta[0].finishedAt", "requestMeta[0].model",
+				"requestMeta[0].partial");
+		Map<String, Set<String>> cases = Map.of("{}", all, "5", all, "1.5", all, "\"x\"", all, "\"\"", all, "true", all,
+				"{\"t\":5,\"f\":6,\"m\":\"m\",\"p\":false}", Set.of());
+		for (Map.Entry<String, Set<String>> c : cases.entrySet()) {
+			String json = "{\"t\":\"trk\",\"i\":1,\"o\":2,\"l\":3,\"n\":1,\"u\":{\"text_input\":1},"
+					+ "\"r\":[{\"text_input\":1}],\"rm\":" + c.getKey() + "}";
+			AiCompletionRequest viaJson = JSON.readValue(json, AiCompletionRequest.class);
+			AiCompletionRequest viaCbor = CBOR.readValue(CBOR.writeValueAsBytes(JSON.readTree(json)),
+					AiCompletionRequest.class);
+			for (AiCompletionRequest request : List.of(viaJson, viaCbor)) {
+				assertEquals(c.getValue(), violatedPaths(request), c.getKey());
+				assertEquals(1, request.optRequestMeta().orElseThrow().size(), c.getKey() + " is present, not absent");
+				assertEquals(Optional.of(List.of(Map.of(UnitKeys.TEXT_INPUT, 1L))), request.optRequestUnitAmounts(),
+						c.getKey());
+			}
+		}
+		String absent = "{\"t\":\"trk\",\"i\":1,\"o\":2,\"l\":3,\"n\":1,\"rm\":null}";
+		assertEquals(Optional.empty(), JSON.readValue(absent, AiCompletionRequest.class).optRequestMeta(),
+				"null stays absent");
+	}
+
+	/**
+	 * Codex r3: CBOR can carry an integer as a decimal. An exactly integral decimal in range is a timestamp; a
+	 * fractional or out-of-range one stays absent and is flagged.
+	 */
+	@Test
+	void exactIntegralDecimalTimestamps_bind_inCbor() throws Exception {
+		Map<BigDecimal, Optional<Long>> cases = Map.of(
+				new BigDecimal("1"), Optional.of(1L),
+				new BigDecimal("1.000"), Optional.of(1L),
+				new BigDecimal("9223372036854775807"), Optional.of(Long.MAX_VALUE),
+				new BigDecimal("1.5"), Optional.empty(),
+				new BigDecimal("9223372036854775808"), Optional.empty());
+		for (Map.Entry<BigDecimal, Optional<Long>> c : cases.entrySet()) {
+			Map<String, Object> element = new LinkedHashMap<>();
+			element.put("t", c.getKey());
+			element.put("f", c.getKey());
+			element.put("m", "m");
+			element.put("p", false);
+			Map<String, Object> report = new LinkedHashMap<>();
+			report.put("t", "trk");
+			report.put("i", 1);
+			report.put("o", 2);
+			report.put("l", 3);
+			report.put("n", 1);
+			report.put("rm", List.of(element));
+			AiRequestMeta meta = CBOR.readValue(CBOR.writeValueAsBytes(report), AiCompletionRequest.class)
+					.requestMeta().get(0);
+			assertEquals(c.getValue().isPresent(), meta.optStartedAt().isPresent(), c.getKey().toString());
+			c.getValue().ifPresent(v -> assertEquals(v, meta.optStartedAt().getAsLong(), c.getKey().toString()));
+			c.getValue().ifPresent(v -> assertEquals(v, meta.optFinishedAt().getAsLong(), c.getKey().toString()));
+		}
 	}
 
 	/** The optX() accessors are how a reader sees a component before validation has proved it present. */
