@@ -197,9 +197,9 @@ class LegacyWireCompatTest {
 
 		List<String> added = new ArrayList<>(currentKeys);
 		added.removeAll(legacyKeys);
-		assertEquals(List.of("u"), added, "3.0.0 may add \"u\" and nothing else");
+		assertEquals(List.of("u", "r"), added, "3.0.0 added \"u\" and 6.2.0 added \"r\"; nothing else may appear");
 
-		assertEquals(legacyKeys, currentKeys.stream().filter(k -> !"u".equals(k)).toList(),
+		assertEquals(legacyKeys, currentKeys.stream().filter(k -> !"u".equals(k) && !"r".equals(k)).toList(),
 				"every legacy key must keep its name and its position");
 		for (String key : legacyKeys) {
 			assertEquals(legacy.get(key), current.get(key),

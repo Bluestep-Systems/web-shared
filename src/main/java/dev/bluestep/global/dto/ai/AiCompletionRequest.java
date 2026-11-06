@@ -1,5 +1,7 @@
 package dev.bluestep.global.dto.ai;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
@@ -9,6 +11,7 @@ import org.jspecify.annotations.Nullable;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
@@ -34,6 +37,11 @@ import jakarta.validation.constraints.Size;
  * legacy branch for a current caller whose adapter failed to populate the vector — pricing audio tokens at the text
  * rate while {@code unpriced_units} claimed the turn was fully priced. Absence is therefore carried as absence.</p>
  *
+ * <p><b>Per-request amounts are optional for the same reason.</b> A turn with tool iterations makes several provider
+ * API requests, and a price that depends on the size of one request (a threshold-spec model) cannot be computed
+ * from the sum. {@code requestUnitAmounts} carries the amounts request by request. Absent means an older caller,
+ * and the pricing side prices the turn as one request, an upper bound for such a model, so it never under-bills.</p>
+ *
  * <p><b>The legacy components are a transition lane, not a second way of saying the same thing.</b> web and
  * web-global are separate deployments and web rolls out per namespace, so old and new callers report to the same
  * gate concurrently and for a long time. A pre-vector pod reports through
@@ -54,6 +62,11 @@ import jakarta.validation.constraints.Size;
  * @param audioInputTokens  legacy lane: a pre-vector caller's audio input
  * @param cachedInputTokens legacy lane: a pre-vector caller's cached input
  * @param audioOutputTokens legacy lane: a pre-vector caller's audio output
+ * @param requestUnitAmounts one amount map per provider API request in the turn, in order, under the same
+ *                          vocabulary and per-entry validation as {@code unitAmounts}; for every key the elements
+ *                          sum to {@code unitAmounts}' value (web-global rejects a report that breaks that, so
+ *                          the DTO does not). Absent on a caller that predates per-request reporting, which the
+ *                          pricing side then treats as a single request
  */
 public record AiCompletionRequest(
 		@NotBlank @JsonProperty("t") String trackingId,
@@ -69,7 +82,11 @@ public record AiCompletionRequest(
 		@JsonProperty("a") @Nullable Integer audioSeconds,
 		@JsonProperty("ai") @Nullable Integer audioInputTokens,
 		@JsonProperty("ci") @Nullable Integer cachedInputTokens,
-		@JsonProperty("ao") @Nullable Integer audioOutputTokens) {
+		@JsonProperty("ao") @Nullable Integer audioOutputTokens,
+		@JsonProperty("r") @Size(max = MAX_REQUESTS) @Nullable List<
+				@NotNull @Size(max = MAX_UNIT_KEYS) Map<
+						@NotBlank @Size(max = UnitKeys.MAX_KEY_LENGTH) @Pattern(regexp = UnitKeys.KEY_PATTERN) String,
+						@PositiveOrZero Long>> requestUnitAmounts) {
 
 	/**
 	 * How many distinct keys one turn may report.
@@ -79,6 +96,14 @@ public record AiCompletionRequest(
 	 * billing table.</p>
 	 */
 	public static final int MAX_UNIT_KEYS = 64;
+
+	/**
+	 * How many provider API requests one turn may itemize in {@code requestUnitAmounts}.
+	 *
+	 * <p>Sized from the monolith's tool-loop hard cap of 200 iterations (one request each) with headroom for a
+	 * retried request, and low enough that a runaway emitter is rejected rather than persisted.</p>
+	 */
+	public static final int MAX_REQUESTS = 256;
 
 	/**
 	 * Takes a checked, defensive copy of a present vector; an absent one (a pre-vector caller omits {@code "u"}
@@ -99,6 +124,34 @@ public record AiCompletionRequest(
 	 */
 	public AiCompletionRequest {
 		unitAmounts = unitAmounts == null ? null : checkedCopy(unitAmounts);
+		requestUnitAmounts = requestUnitAmounts == null ? null : checkedRequests(requestUnitAmounts);
+	}
+
+	/**
+	 * The pre-per-request shape of the constructor, kept so a caller built against 6.1.0 and earlier still
+	 * compiles. Leaves {@code requestUnitAmounts} absent.
+	 */
+	public AiCompletionRequest(String trackingId, int totalInputTokens, int totalOutputTokens, long totalLatencyMs,
+			int iterationsUsed, @Nullable String stopReason, @Nullable String errorMessage,
+			@Nullable Map<String, Long> unitAmounts, @Nullable Integer audioSeconds,
+			@Nullable Integer audioInputTokens, @Nullable Integer cachedInputTokens,
+			@Nullable Integer audioOutputTokens) {
+		this(trackingId, totalInputTokens, totalOutputTokens, totalLatencyMs, iterationsUsed, stopReason,
+				errorMessage, unitAmounts, audioSeconds, audioInputTokens, cachedInputTokens,
+				audioOutputTokens, null);
+	}
+
+	private static List<Map<String, Long>> checkedRequests(List<Map<String, Long>> requests) {
+		List<Map<String, Long>> copy = new ArrayList<>(requests.size());
+		int index = 0;
+		for (Map<String, Long> request : requests) {
+			if (request == null) {
+				throw new IllegalArgumentException("request unit amounts contain a null entry at index " + index);
+			}
+			copy.add(checkedCopy(request));
+			index++;
+		}
+		return List.copyOf(copy);
 	}
 
 	private static Map<String, Long> checkedCopy(Map<String, Long> amounts) {
@@ -134,7 +187,24 @@ public record AiCompletionRequest(
 			int iterationsUsed, Optional<String> stopReason, Optional<String> errorMessage,
 			Map<String, Long> unitAmounts) {
 		return new AiCompletionRequest(trackingId, totalInput, totalOutput, totalLatencyMs, iterationsUsed,
-				stopReason.orElse(null), errorMessage.orElse(null), unitAmounts, null, null, null, null);
+				stopReason.orElse(null), errorMessage.orElse(null), unitAmounts, null, null, null, null, null);
+	}
+
+	/**
+	 * {@link #of(String, int, int, long, int, Optional, Optional, Map)} that also itemizes the amounts per provider
+	 * API request.
+	 *
+	 * @param requestUnitAmounts one amount map per provider API request, in order; for every key the elements sum
+	 *                           to the matching {@code unitAmounts} value, which web-global enforces
+	 * @return the report, with every legacy breakdown component absent
+	 * @see #of(String, int, int, long, int, Optional, Optional, Map)
+	 */
+	public static AiCompletionRequest of(String trackingId, int totalInput, int totalOutput, long totalLatencyMs,
+			int iterationsUsed, Optional<String> stopReason, Optional<String> errorMessage,
+			Map<String, Long> unitAmounts, List<Map<String, Long>> requestUnitAmounts) {
+		return new AiCompletionRequest(trackingId, totalInput, totalOutput, totalLatencyMs, iterationsUsed,
+				stopReason.orElse(null), errorMessage.orElse(null), unitAmounts, null, null,
+				null, null, requestUnitAmounts);
 	}
 
 	/** {@link #stopReason}, as an {@code Optional}: empty when the provider gave none. */
@@ -150,6 +220,11 @@ public record AiCompletionRequest(
 	/** {@link #unitAmounts}, as an {@code Optional}: empty on a legacy caller that sends no vector. */
 	public Optional<Map<String, Long>> optUnitAmounts() {
 		return Optional.ofNullable(unitAmounts);
+	}
+
+	/** {@link #requestUnitAmounts}, as an {@code Optional}: empty on a caller that does not itemize requests. */
+	public Optional<List<Map<String, Long>>> optRequestUnitAmounts() {
+		return Optional.ofNullable(requestUnitAmounts);
 	}
 
 	/** {@link #audioSeconds}, as an {@code OptionalInt}: legacy lane. */

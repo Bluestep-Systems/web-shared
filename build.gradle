@@ -624,7 +624,16 @@ group = 'dev.bluestep'
 // monolith makes) and declares every 6.0.0 surface. A MINOR: new shapes only. RELEASE ORDER: 6.0.0
 // first, then this artifact once web-global's draft serving V6_1_0 builds green against it, then
 // web-global released serving V6_1_0, then the monolith moving its contract tag to 6.1.0.
-version = '6.1.0'
+//
+// 6.2.0 adds per-request unit amounts to AiCompletionRequest (CU-86bczpn19): one optional component,
+// requestUnitAmounts under "r", a list with one amount map per provider API request in the turn. A price
+// that depends on the size of one request (a threshold-spec model) cannot be computed from the turn's sum.
+// Same key vocabulary and per-entry validation as "u"; the list is capped at MAX_REQUESTS (256). The sum
+// invariant (per key, the elements add up to "u") is enforced by web-global, not here. Absent means an older
+// caller and is priced as a single request. ADDITIVE and wire-compatible: every existing key is unchanged,
+// the 8-argument of(...) keeps its signature, and the pre-6.2.0 12-argument constructor is kept. A MINOR.
+// RELEASE ORDER: this artifact before web-global and the monolith can consume it.
+version = '6.2.0'
 
 repositories {
     mavenCentral()
