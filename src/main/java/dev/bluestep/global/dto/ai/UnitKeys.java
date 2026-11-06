@@ -23,6 +23,11 @@ import java.util.Set;
  * charge rather than the model: a cache write's time-to-live is part of what is charged for, so
  * {@link #CACHE_WRITE_5M} and {@link #CACHE_WRITE_1H} are two keys in one {@code (CACHE_WRITE, TOKEN)} cell rather
  * than one key that means different things by model.</p>
+ *
+ * <p><b>Two patterns, two places.</b> {@link #KEY_PATTERN} governs every key that becomes, or selects, a rate row
+ * ({@code AiUnitRateRequest.unitKey}, the DB constraint, anything that seeds or looks up {@code ai_unit_rate}).
+ * {@link #REPORTED_KEY_PATTERN} governs only the keys of a completion report, which may additionally carry a
+ * reserved marker such as {@link #INVALID_BREAKDOWN_MARKER}.</p>
  */
 public final class UnitKeys {
 
@@ -34,6 +39,31 @@ public final class UnitKeys {
 	 * and stays unpriced however many times an operator retries.</p>
 	 */
 	public static final String KEY_PATTERN = "^[a-z0-9]+(_[a-z0-9]+)*$";
+
+	/**
+	 * The prefix that makes a reported key a reserved marker rather than a unit key.
+	 *
+	 * <p>Forbidden by {@link #KEY_PATTERN}, so a marker can never be seeded into, or select, a rate row.</p>
+	 */
+	public static final String MARKER_PREFIX = "!";
+
+	/**
+	 * The shape a key may have in a completion report: a {@link #KEY_PATTERN} key, or {@link #MARKER_PREFIX}
+	 * followed by a body of that same shape.
+	 *
+	 * <p>Applies only to the keys of {@code AiCompletionRequest}. Everywhere a key becomes or selects a rate row,
+	 * {@link #KEY_PATTERN} stays the rule.</p>
+	 */
+	public static final String REPORTED_KEY_PATTERN = "^!?[a-z0-9]+(_[a-z0-9]+)*$";
+
+	/**
+	 * The marker reported when a turn's token breakdown could not be trusted.
+	 *
+	 * <p>It is not a unit key: it is never seedable, never priced, and has no rate row. It exists so the metering
+	 * side can tell that the turn's breakdown is invalid (and handle it as such) instead of the whole report being
+	 * rejected and the turn never metered.</p>
+	 */
+	public static final String INVALID_BREAKDOWN_MARKER = MARKER_PREFIX + "invalid_token_breakdown";
 
 	/** Matches {@code ai_unit_rate.unit_key}'s column width; a longer key is likewise unseedable. */
 	public static final int MAX_KEY_LENGTH = 64;

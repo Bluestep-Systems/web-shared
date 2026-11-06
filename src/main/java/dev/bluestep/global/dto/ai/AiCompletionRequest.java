@@ -77,7 +77,7 @@ public record AiCompletionRequest(
 		@JsonProperty("s") @Nullable String stopReason,
 		@JsonProperty("e") @Nullable String errorMessage,
 		@JsonProperty("u") @Size(max = MAX_UNIT_KEYS) @Nullable Map<
-				@NotBlank @Size(max = UnitKeys.MAX_KEY_LENGTH) @Pattern(regexp = UnitKeys.KEY_PATTERN) String,
+				@NotBlank @Size(max = UnitKeys.MAX_KEY_LENGTH) @Pattern(regexp = UnitKeys.REPORTED_KEY_PATTERN) String,
 				@PositiveOrZero Long> unitAmounts,
 		@JsonProperty("a") @Nullable Integer audioSeconds,
 		@JsonProperty("ai") @Nullable Integer audioInputTokens,
@@ -85,7 +85,7 @@ public record AiCompletionRequest(
 		@JsonProperty("ao") @Nullable Integer audioOutputTokens,
 		@JsonProperty("r") @Size(max = MAX_REQUESTS) @Nullable List<
 				@NotNull @Size(max = MAX_UNIT_KEYS) Map<
-						@NotBlank @Size(max = UnitKeys.MAX_KEY_LENGTH) @Pattern(regexp = UnitKeys.KEY_PATTERN) String,
+						@NotBlank @Size(max = UnitKeys.MAX_KEY_LENGTH) @Pattern(regexp = UnitKeys.REPORTED_KEY_PATTERN) String,
 						@PositiveOrZero Long>> requestUnitAmounts) {
 
 	/**
