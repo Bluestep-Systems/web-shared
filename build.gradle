@@ -633,7 +633,13 @@ group = 'dev.bluestep'
 // caller and is priced as a single request. ADDITIVE and wire-compatible: every existing key is unchanged,
 // the 8-argument of(...) keeps its signature, and the pre-6.2.0 12-argument constructor is kept. A MINOR.
 // RELEASE ORDER: this artifact before web-global and the monolith can consume it.
-version = '6.2.0'
+//
+// 6.2.1 fixes the completion DTO rejecting a reserved marker key (CU-86bczqj4j): AiCompletionRequest's "u"
+// and "r" keys now accept UnitKeys.REPORTED_KEY_PATTERN (a KEY_PATTERN key, or "!" plus a body of that shape),
+// so web's "!invalid_token_breakdown" marker is no longer a 400 that leaves the turn unmetered. KEY_PATTERN is
+// unchanged for AiUnitRateRequest.unitKey and anything that seeds or selects a rate row. UnitKeys gains
+// MARKER_PREFIX, REPORTED_KEY_PATTERN and INVALID_BREAKDOWN_MARKER. Validation loosened, no shape change: a PATCH.
+version = '6.2.1'
 
 repositories {
     mavenCentral()
