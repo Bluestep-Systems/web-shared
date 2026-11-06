@@ -92,6 +92,25 @@ class AiCompletionMarkerKeyTest {
 		assertEquals("!invalid_token_breakdown", UnitKeys.INVALID_BREAKDOWN_MARKER);
 	}
 
+	/** The 6.3.0 markers: spelled as the metering contract reserves them, reportable, never a rate-row key. */
+	@Test
+	void meteringMarkers_areReservedReportableAndUnseedable() {
+		Map<String, String> spelled = Map.of(
+				UnitKeys.INVALID_REQUEST_META_MARKER, "!invalid_request_meta",
+				UnitKeys.PARTIAL_USAGE_MARKER, "!partial_usage",
+				UnitKeys.ABANDONED_MARKER, "!abandoned",
+				UnitKeys.INVALID_COMPLETION_MARKER, "!invalid_completion",
+				UnitKeys.MEASURED_AUDIO_MARKER, "!measured_audio");
+		spelled.forEach((marker, expected) -> {
+			assertEquals(expected, marker);
+			assertTrue(marker.matches(UnitKeys.REPORTED_KEY_PATTERN), marker);
+			assertFalse(marker.matches(UnitKeys.KEY_PATTERN), marker);
+			assertTrue(marker.length() <= UnitKeys.MAX_KEY_LENGTH, marker);
+			assertFalse(UnitKeys.KNOWN.contains(marker), marker);
+			assertTrue(VALIDATOR.validate(request(withKey(marker), List.of(withKey(marker)))).isEmpty(), marker);
+		});
+	}
+
 	@Test
 	void roundTrip_json_andCbor_keepTheMarker() throws Exception {
 		AiCompletionRequest request = request(withKey(UnitKeys.INVALID_BREAKDOWN_MARKER),

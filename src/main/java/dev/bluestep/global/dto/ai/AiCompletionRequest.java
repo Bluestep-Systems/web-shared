@@ -8,8 +8,10 @@ import java.util.OptionalInt;
 
 import org.jspecify.annotations.Nullable;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -42,6 +44,12 @@ import jakarta.validation.constraints.Size;
  * from the sum. {@code requestUnitAmounts} carries the amounts request by request. Absent means an older caller,
  * and the pricing side prices the turn as one request, an upper bound for such a model, so it never under-bills.</p>
  *
+ * <p><b>Per-request metadata rides beside the amounts, never inside them.</b> {@code requestMeta} says when each
+ * request ran and which model answered, which is what reconciling against the provider's own usage report needs.
+ * It is a parallel list rather than extra keys in each amount map so the amount vocabulary stays amounts only, and so
+ * metadata that turns out wrong can be set aside without touching what is billed. Nothing about it is thrown while
+ * binding: a bad timestamp or model name is a constraint violation, so the amounts are never lost for it.</p>
+ *
  * <p><b>The legacy components are a transition lane, not a second way of saying the same thing.</b> web and
  * web-global are separate deployments and web rolls out per namespace, so old and new callers report to the same
  * gate concurrently and for a long time. A pre-vector pod reports through
@@ -67,6 +75,15 @@ import jakarta.validation.constraints.Size;
  *                          sum to {@code unitAmounts}' value (web-global rejects a report that breaks that, so
  *                          the DTO does not). Absent on a caller that predates per-request reporting, which the
  *                          pricing side then treats as a single request
+ * @param requestMeta       one {@link AiRequestMeta} per element of {@code requestUnitAmounts}, in the same order:
+ *                          when each request ran, the model that answered and the provider's id for it. Present only
+ *                          alongside {@code requestUnitAmounts} and the same size; web-global checks that alignment,
+ *                          not the DTO, and on a mismatch records the turn without the metadata and marks it
+ *                          {@link UnitKeys#INVALID_REQUEST_META_MARKER}. Absent on a caller that predates it.
+ *                          A value that is not an array (an object, number, string or boolean) binds as a one-element
+ *                          list of it, read by {@link AiRequestMeta#fromWire} into an element with its fields absent:
+ *                          present but invalid, so validation flags it and the amounts are kept, distinct from
+ *                          absent
  */
 public record AiCompletionRequest(
 		@NotBlank @JsonProperty("t") String trackingId,
@@ -86,7 +103,9 @@ public record AiCompletionRequest(
 		@JsonProperty("r") @Size(max = MAX_REQUESTS) @Nullable List<
 				@NotNull @Size(max = MAX_UNIT_KEYS) Map<
 						@NotBlank @Size(max = UnitKeys.MAX_KEY_LENGTH) @Pattern(regexp = UnitKeys.REPORTED_KEY_PATTERN) String,
-						@PositiveOrZero Long>> requestUnitAmounts) {
+						@PositiveOrZero Long>> requestUnitAmounts,
+		@JsonProperty("rm") @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+		@Size(max = MAX_REQUESTS) @Nullable List<@NotNull @Valid AiRequestMeta> requestMeta) {
 
 	/**
 	 * How many distinct keys one turn may report.
@@ -120,16 +139,23 @@ public record AiCompletionRequest(
 	 * can be in, so it is rejected; the message names the key, because the whole point of failing here is that
 	 * somebody can tell which one.</p>
 	 *
-	 * @throws IllegalArgumentException if any key or amount is null, or any amount is negative
+	 * <p>{@code requestMeta} is copied the same way. Unlike an amount, a null element is not thrown on: it is a
+	 * statement about timing, not about what was consumed, so it binds as {@link AiRequestMeta#ABSENT}, whose missing
+	 * fields bean validation reports like every other fault in the metadata. A wrong or missing element never costs
+	 * the amounts.</p>
+	 *
+	 * @throws IllegalArgumentException if any key or amount is null, any amount is negative, or any element of
+	 *                                  {@code requestUnitAmounts} is null
 	 */
 	public AiCompletionRequest {
 		unitAmounts = unitAmounts == null ? null : checkedCopy(unitAmounts);
 		requestUnitAmounts = requestUnitAmounts == null ? null : checkedRequests(requestUnitAmounts);
+		requestMeta = requestMeta == null ? null : checkedMeta(requestMeta);
 	}
 
 	/**
 	 * The pre-per-request shape of the constructor, kept so a caller built against 6.1.0 and earlier still
-	 * compiles. Leaves {@code requestUnitAmounts} absent.
+	 * compiles. Leaves {@code requestUnitAmounts} and {@code requestMeta} absent.
 	 */
 	public AiCompletionRequest(String trackingId, int totalInputTokens, int totalOutputTokens, long totalLatencyMs,
 			int iterationsUsed, @Nullable String stopReason, @Nullable String errorMessage,
@@ -138,7 +164,30 @@ public record AiCompletionRequest(
 			@Nullable Integer audioOutputTokens) {
 		this(trackingId, totalInputTokens, totalOutputTokens, totalLatencyMs, iterationsUsed, stopReason,
 				errorMessage, unitAmounts, audioSeconds, audioInputTokens, cachedInputTokens,
-				audioOutputTokens, null);
+				audioOutputTokens, null, null);
+	}
+
+	/**
+	 * The 6.2.x shape of the constructor, kept so a caller built against it still compiles. Leaves
+	 * {@code requestMeta} absent.
+	 */
+	public AiCompletionRequest(String trackingId, int totalInputTokens, int totalOutputTokens, long totalLatencyMs,
+			int iterationsUsed, @Nullable String stopReason, @Nullable String errorMessage,
+			@Nullable Map<String, Long> unitAmounts, @Nullable Integer audioSeconds,
+			@Nullable Integer audioInputTokens, @Nullable Integer cachedInputTokens,
+			@Nullable Integer audioOutputTokens, @Nullable List<Map<String, Long>> requestUnitAmounts) {
+		this(trackingId, totalInputTokens, totalOutputTokens, totalLatencyMs, iterationsUsed, stopReason,
+				errorMessage, unitAmounts, audioSeconds, audioInputTokens, cachedInputTokens,
+				audioOutputTokens, requestUnitAmounts, null);
+	}
+
+	private static List<AiRequestMeta> checkedMeta(List<AiRequestMeta> meta) {
+		List<AiRequestMeta> copy = new ArrayList<>(meta.size());
+		for (@Nullable AiRequestMeta element : meta) {
+			// A null element stands for an element with nothing in it, which validation reports field by field.
+			copy.add(element == null ? AiRequestMeta.ABSENT : element);
+		}
+		return List.copyOf(copy);
 	}
 
 	private static List<Map<String, Long>> checkedRequests(List<Map<String, Long>> requests) {
@@ -187,7 +236,7 @@ public record AiCompletionRequest(
 			int iterationsUsed, Optional<String> stopReason, Optional<String> errorMessage,
 			Map<String, Long> unitAmounts) {
 		return new AiCompletionRequest(trackingId, totalInput, totalOutput, totalLatencyMs, iterationsUsed,
-				stopReason.orElse(null), errorMessage.orElse(null), unitAmounts, null, null, null, null, null);
+				stopReason.orElse(null), errorMessage.orElse(null), unitAmounts, null, null, null, null, null, null);
 	}
 
 	/**
@@ -204,7 +253,25 @@ public record AiCompletionRequest(
 			Map<String, Long> unitAmounts, List<Map<String, Long>> requestUnitAmounts) {
 		return new AiCompletionRequest(trackingId, totalInput, totalOutput, totalLatencyMs, iterationsUsed,
 				stopReason.orElse(null), errorMessage.orElse(null), unitAmounts, null, null,
-				null, null, requestUnitAmounts);
+				null, null, requestUnitAmounts, null);
+	}
+
+	/**
+	 * {@link #of(String, int, int, long, int, Optional, Optional, Map, List)} that also says, per provider API
+	 * request, when it ran, which model answered and the provider's id for it.
+	 *
+	 * @param requestMeta one element per element of {@code requestUnitAmounts}, in the same order; web-global
+	 *                    checks the alignment
+	 * @return the report, with every legacy breakdown component absent
+	 * @see #of(String, int, int, long, int, Optional, Optional, Map, List)
+	 */
+	public static AiCompletionRequest of(String trackingId, int totalInput, int totalOutput, long totalLatencyMs,
+			int iterationsUsed, Optional<String> stopReason, Optional<String> errorMessage,
+			Map<String, Long> unitAmounts, List<Map<String, Long>> requestUnitAmounts,
+			List<AiRequestMeta> requestMeta) {
+		return new AiCompletionRequest(trackingId, totalInput, totalOutput, totalLatencyMs, iterationsUsed,
+				stopReason.orElse(null), errorMessage.orElse(null), unitAmounts, null, null,
+				null, null, requestUnitAmounts, requestMeta);
 	}
 
 	/** {@link #stopReason}, as an {@code Optional}: empty when the provider gave none. */
@@ -225,6 +292,11 @@ public record AiCompletionRequest(
 	/** {@link #requestUnitAmounts}, as an {@code Optional}: empty on a caller that does not itemize requests. */
 	public Optional<List<Map<String, Long>>> optRequestUnitAmounts() {
 		return Optional.ofNullable(requestUnitAmounts);
+	}
+
+	/** {@link #requestMeta}, as an {@code Optional}: empty on a caller that does not report per-request metadata. */
+	public Optional<List<AiRequestMeta>> optRequestMeta() {
+		return Optional.ofNullable(requestMeta);
 	}
 
 	/** {@link #audioSeconds}, as an {@code OptionalInt}: legacy lane. */

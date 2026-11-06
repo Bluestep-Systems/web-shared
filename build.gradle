@@ -639,7 +639,26 @@ group = 'dev.bluestep'
 // so web's "!invalid_token_breakdown" marker is no longer a 400 that leaves the turn unmetered. KEY_PATTERN is
 // unchanged for AiUnitRateRequest.unitKey and anything that seeds or selects a rate row. UnitKeys gains
 // MARKER_PREFIX, REPORTED_KEY_PATTERN and INVALID_BREAKDOWN_MARKER. Validation loosened, no shape change: a PATCH.
-version = '6.2.1'
+//
+// 6.3.0 adds per-request metadata to AiCompletionRequest (CU-86bczr1e7): one optional component, requestMeta under
+// "rm", one AiRequestMeta {t startedAt, f finishedAt, m model, id providerRequestId?, p partial} per element of "r",
+// in the same order. Every component of an element is boxed, and a null element binds as AiRequestMeta.ABSENT, so a
+// missing or null value binds under Jackson 3 (which refuses a missing primitive) and is reported by @NotNull; an
+// element is read through a tolerant delegating creator (AiRequestMeta.fromWire), so a malformed field (out of range,
+// wrong type) is absent rather than thrown on and a non-object element is ABSENT. An "rm" that is not an array binds as a one-element list of it
+// (ACCEPT_SINGLE_VALUE_AS_ARRAY): present and, unless that value is a well-formed element, flagged by validation. An
+// exactly integral decimal (CBOR BigDecimal) is read as a timestamp by longValueExact. It is
+// what lets web-global place each request's usage in the hour the provider billed it and
+// reconcile against the provider's usage report. Every check on an element is a bean-validation constraint, never a
+// throw, so wrong metadata cannot cost a turn its amounts; alignment with "r" is web-global's check, not the DTO's
+// (a mismatch is recorded with the "!invalid_request_meta" marker). UnitKeys gains the reserved markers this work
+// records: INVALID_REQUEST_META_MARKER, PARTIAL_USAGE_MARKER, ABANDONED_MARKER, INVALID_COMPLETION_MARKER and
+// MEASURED_AUDIO_MARKER (a caller-measured audio duration when the provider gave no usage). ADDITIVE and wire-compatible both ways: a 6.2.x payload binds with "rm" absent, and a
+// 6.2.x reader ignores "rm" (Jackson 3 does not fail on unknown properties; AiCompletionRequestRequestMetaTest pins
+// it). The 12- and 13-argument constructors and both existing of(...) keep their signatures. A MINOR. No new
+// surface, so web-global takes no contract constant (the 6.2.x precedent). RELEASE ORDER: this artifact, then
+// web-global on it, deployed, then the monolith sending "rm".
+version = '6.3.0'
 
 repositories {
     mavenCentral()

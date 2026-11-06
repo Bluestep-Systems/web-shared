@@ -65,6 +65,37 @@ public final class UnitKeys {
 	 */
 	public static final String INVALID_BREAKDOWN_MARKER = MARKER_PREFIX + "invalid_token_breakdown";
 
+	/**
+	 * The marker recorded when a completion's per-request metadata ({@code AiCompletionRequest}'s {@code "rm"}) is
+	 * unusable: not aligned with its per-request amounts, or failing validation. The amounts are recorded without it.
+	 */
+	public static final String INVALID_REQUEST_META_MARKER = MARKER_PREFIX + "invalid_request_meta";
+
+	/**
+	 * The marker recorded when at least one of a turn's provider requests did not finish cleanly, so its amounts are
+	 * what was observed rather than what the provider finally reported.
+	 */
+	public static final String PARTIAL_USAGE_MARKER = MARKER_PREFIX + "partial_usage";
+
+	/**
+	 * The marker recorded on a turn that was authorized and never completed, closed by web-global after it could no
+	 * longer be in flight.
+	 */
+	public static final String ABANDONED_MARKER = MARKER_PREFIX + "abandoned";
+
+	/**
+	 * The marker recorded when a completion's itemization is inconsistent (its per-request amounts do not sum to the
+	 * turn's, or cannot be used), so the turn was priced as a single request from its turn amounts.
+	 */
+	public static final String INVALID_COMPLETION_MARKER = MARKER_PREFIX + "invalid_completion";
+
+	/**
+	 * The marker a caller reports when the provider gave no usage for an audio request and the caller measured the
+	 * audio's duration itself and reported that as {@link #AUDIO_INPUT_MILLIS}: the amount is the caller's
+	 * measurement, not the provider's figure. Provider usage, when there is any, is always reported instead.
+	 */
+	public static final String MEASURED_AUDIO_MARKER = MARKER_PREFIX + "measured_audio";
+
 	/** Matches {@code ai_unit_rate.unit_key}'s column width; a longer key is likewise unseedable. */
 	public static final int MAX_KEY_LENGTH = 64;
 
