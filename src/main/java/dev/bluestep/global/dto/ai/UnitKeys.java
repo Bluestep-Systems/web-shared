@@ -90,10 +90,11 @@ public final class UnitKeys {
 	public static final String INVALID_COMPLETION_MARKER = MARKER_PREFIX + "invalid_completion";
 
 	/**
-	 * The marker recorded on an abandoned turn once web-global has priced it from usage the provider reported that
-	 * no completion explained: its cost is an estimate attributed by reconciliation, not a caller's report.
+	 * The marker a caller reports when the provider gave no usage for an audio request and the caller measured the
+	 * audio's duration itself and reported that as {@link #AUDIO_INPUT_MILLIS}: the amount is the caller's
+	 * measurement, not the provider's figure. Provider usage, when there is any, is always reported instead.
 	 */
-	public static final String RECONCILED_ESTIMATE_MARKER = MARKER_PREFIX + "reconciled_estimate";
+	public static final String MEASURED_AUDIO_MARKER = MARKER_PREFIX + "measured_audio";
 
 	/** Matches {@code ai_unit_rate.unit_key}'s column width; a longer key is likewise unseedable. */
 	public static final int MAX_KEY_LENGTH = 64;

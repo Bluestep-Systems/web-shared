@@ -133,12 +133,13 @@ public record AiCompletionRequest(
 	 * can be in, so it is rejected; the message names the key, because the whole point of failing here is that
 	 * somebody can tell which one.</p>
 	 *
-	 * <p>{@code requestMeta} is copied the same way. A null element in it is rejected for the same reason a null
-	 * amount is; everything else about an element is left to bean validation, so a wrong value never costs the
-	 * amounts.</p>
+	 * <p>{@code requestMeta} is copied the same way. Unlike an amount, a null element is not thrown on: it is a
+	 * statement about timing, not about what was consumed, so it binds as {@link AiRequestMeta#ABSENT}, whose missing
+	 * fields bean validation reports like every other fault in the metadata. A wrong or missing element never costs
+	 * the amounts.</p>
 	 *
-	 * @throws IllegalArgumentException if any key or amount is null, any amount is negative, or any element of either
-	 *                                  per-request list is null
+	 * @throws IllegalArgumentException if any key or amount is null, any amount is negative, or any element of
+	 *                                  {@code requestUnitAmounts} is null
 	 */
 	public AiCompletionRequest {
 		unitAmounts = unitAmounts == null ? null : checkedCopy(unitAmounts);
@@ -175,14 +176,12 @@ public record AiCompletionRequest(
 	}
 
 	private static List<AiRequestMeta> checkedMeta(List<AiRequestMeta> meta) {
-		int index = 0;
-		for (AiRequestMeta element : meta) {
-			if (element == null) {
-				throw new IllegalArgumentException("request meta contains a null entry at index " + index);
-			}
-			index++;
+		List<AiRequestMeta> copy = new ArrayList<>(meta.size());
+		for (@Nullable AiRequestMeta element : meta) {
+			// A null element stands for an element with nothing in it, which validation reports field by field.
+			copy.add(element == null ? AiRequestMeta.ABSENT : element);
 		}
-		return List.copyOf(meta);
+		return List.copyOf(copy);
 	}
 
 	private static List<Map<String, Long>> checkedRequests(List<Map<String, Long>> requests) {

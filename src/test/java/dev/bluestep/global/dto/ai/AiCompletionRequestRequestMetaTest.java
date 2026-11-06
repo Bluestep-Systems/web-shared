@@ -118,15 +118,21 @@ class AiCompletionRequestRequestMetaTest {
 		assertThrows(UnsupportedOperationException.class, () -> request.requestMeta().add(meta(5L, 6L)));
 	}
 
+	/** A null element is not thrown on: it becomes {@link AiRequestMeta#ABSENT}, the amounts survive, and validation
+	 * reports its missing fields at its index. */
 	@Test
-	void nullElement_isRejectedNamingTheIndex() {
+	void nullElement_bindsAsAbsent_andIsAViolation() {
 		List<AiRequestMeta> meta = new ArrayList<>();
 		meta.add(meta(1L, 2L));
 		meta.add(null);
 
-		IllegalArgumentException thrown = assertThrows(IllegalArgumentException.class,
-				() -> withMeta(twoRequests(), meta));
-		assertTrue(thrown.getMessage().contains("index 1"), thrown.getMessage());
+		AiCompletionRequest request = new AiCompletionRequest("trk", 10, 5, 100L, 2, null, null,
+				Map.of(UnitKeys.TEXT_INPUT, 10L), null, null, null, null, twoRequests(), meta);
+
+		assertEquals(Set.of("requestMeta[1].startedAt", "requestMeta[1].finishedAt", "requestMeta[1].model",
+				"requestMeta[1].partial"), violatedPaths(request));
+		assertEquals(List.of(meta(1L, 2L), AiRequestMeta.ABSENT), request.requestMeta());
+		assertEquals(Optional.of(twoRequests()), request.optRequestUnitAmounts());
 	}
 
 	@Test
@@ -140,8 +146,7 @@ class AiCompletionRequestRequestMetaTest {
 
 	@Test
 	void timestampsMustBePositive() {
-		assertEquals(Set.of("startedAt"), violatedPaths(new AiRequestMeta(0L, 5L, "m", null, false)),
-				"a missing \"t\" binds as 0 and is caught here");
+		assertEquals(Set.of("startedAt"), violatedPaths(new AiRequestMeta(0L, 5L, "m", null, false)));
 		assertEquals(Set.of("finishedAt", "finishedNotBeforeStarted"),
 				violatedPaths(new AiRequestMeta(5L, 0L, "m", null, false)));
 		assertEquals(Set.of("startedAt", "finishedAt"), violatedPaths(new AiRequestMeta(-5L, -1L, "m", null, false)));
@@ -204,6 +209,56 @@ class AiCompletionRequestRequestMetaTest {
 		assertEquals(Set.of("requestMeta[0].finishedNotBeforeStarted", "requestMeta[0].model"),
 				violatedPaths(request));
 		assertEquals(Optional.of(List.of(Map.of(UnitKeys.TEXT_INPUT, 1L))), request.optRequestUnitAmounts());
+	}
+
+	/**
+	 * Missing, null and null-element metadata must bind under Jackson 3 defaults (which refuse a missing or null
+	 * primitive) in JSON and in CBOR, keep the amounts, and be reported by validation, so web-global records the turn
+	 * with {@code !invalid_request_meta} instead of refusing it.
+	 */
+	@Test
+	void missingOrNullMetadata_binds_inJsonAndCbor_andIsAViolation() throws Exception {
+		assertTrue(JSON.isEnabled(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES), "Jackson 3 defaults");
+		Map<String, Set<String>> cases = Map.of(
+				"null", Set.of("requestMeta[0].startedAt", "requestMeta[0].finishedAt", "requestMeta[0].model",
+						"requestMeta[0].partial"),
+				"{\"f\":6,\"m\":\"m\",\"p\":false}", Set.of("requestMeta[0].startedAt"),
+				"{\"t\":5,\"m\":\"m\",\"p\":false}", Set.of("requestMeta[0].finishedAt"),
+				"{\"t\":5,\"f\":6,\"m\":\"m\"}", Set.of("requestMeta[0].partial"),
+				"{\"t\":5,\"f\":6,\"p\":true}", Set.of("requestMeta[0].model"),
+				"{\"t\":null,\"f\":null,\"m\":null,\"id\":null,\"p\":null}", Set.of("requestMeta[0].startedAt",
+						"requestMeta[0].finishedAt", "requestMeta[0].model", "requestMeta[0].partial"),
+				"{}", Set.of("requestMeta[0].startedAt", "requestMeta[0].finishedAt", "requestMeta[0].model",
+						"requestMeta[0].partial"));
+		for (Map.Entry<String, Set<String>> c : cases.entrySet()) {
+			String json = "{\"t\":\"trk\",\"i\":1,\"o\":2,\"l\":3,\"n\":1,\"u\":{\"text_input\":1},"
+					+ "\"r\":[{\"text_input\":1}],\"rm\":[" + c.getKey() + "]}";
+			AiCompletionRequest viaJson = JSON.readValue(json, AiCompletionRequest.class);
+			AiCompletionRequest viaCbor = CBOR.readValue(CBOR.writeValueAsBytes(JSON.readTree(json)),
+					AiCompletionRequest.class);
+			for (AiCompletionRequest request : List.of(viaJson, viaCbor)) {
+				assertEquals(c.getValue(), violatedPaths(request), c.getKey());
+				assertEquals(Optional.of(List.of(Map.of(UnitKeys.TEXT_INPUT, 1L))), request.optRequestUnitAmounts(),
+						c.getKey());
+				assertEquals(1, request.requestMeta().size(), c.getKey());
+			}
+		}
+	}
+
+	/** The optX() accessors are how a reader sees a component before validation has proved it present. */
+	@Test
+	void optAccessors_reportPresence() {
+		AiRequestMeta empty = new AiRequestMeta(null, null, null, null, null);
+		assertFalse(empty.optStartedAt().isPresent());
+		assertFalse(empty.optFinishedAt().isPresent());
+		assertEquals(Optional.empty(), empty.optModel());
+		assertEquals(Optional.empty(), empty.optPartial());
+		assertTrue(empty.isFinishedNotBeforeStarted(), "a missing timestamp is @NotNull's to report, not this rule's");
+		AiRequestMeta full = meta(1L, 2L);
+		assertEquals(1L, full.optStartedAt().getAsLong());
+		assertEquals(2L, full.optFinishedAt().getAsLong());
+		assertEquals(Optional.of("claude-haiku-5-5"), full.optModel());
+		assertEquals(Optional.of(false), full.optPartial());
 	}
 
 	@Test

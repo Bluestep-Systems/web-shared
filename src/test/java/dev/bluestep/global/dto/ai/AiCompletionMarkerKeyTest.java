@@ -100,7 +100,7 @@ class AiCompletionMarkerKeyTest {
 				UnitKeys.PARTIAL_USAGE_MARKER, "!partial_usage",
 				UnitKeys.ABANDONED_MARKER, "!abandoned",
 				UnitKeys.INVALID_COMPLETION_MARKER, "!invalid_completion",
-				UnitKeys.RECONCILED_ESTIMATE_MARKER, "!reconciled_estimate");
+				UnitKeys.MEASURED_AUDIO_MARKER, "!measured_audio");
 		spelled.forEach((marker, expected) -> {
 			assertEquals(expected, marker);
 			assertTrue(marker.matches(UnitKeys.REPORTED_KEY_PATTERN), marker);
