@@ -5,6 +5,16 @@ import java.util.Optional;
 /**
  * What an access token may be used for. Stored in {@code global.access_token.scopes} (text[]) and carried on the
  * wire by {@link #wire()}. A value outside this set is ignored by every reader: it grants nothing.
+ *
+ * <h2>Every scope after {@code mcp} is namespaced</h2>
+ *
+ * <p>Each spelling but {@link #MCP}'s is {@code <namespace>:<action>}, and <b>every scope a later release adds
+ * must contain {@code ':'}</b>. web-global reads a token whose stored values name no scope of this enum as a
+ * pre-scope (legacy) token holding exactly {@code mcp}, but only when none of its values contains {@code ':'}
+ * (free text such as web's {@code vicarious}). A namespaced value it does not know, such as {@code future:read},
+ * is a scope from a newer release, so an older reader grants that token nothing rather than {@code mcp}. A new
+ * un-namespaced spelling would instead read as {@code mcp} to every older reader: tenant-host sign-in for a token
+ * minted for something else.</p>
  */
 public enum TokenScope {
 	/** MCP through the gateway's /mcp, and Bearer b6pt_ authentication at tenant hosts (the monolith). Every

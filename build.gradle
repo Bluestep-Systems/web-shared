@@ -672,6 +672,10 @@ group = 'dev.bluestep'
 //     needs a super, a token holding the new TokenScope KB_REWRITE ("kb:rewrite"), and a history-manager grant
 //     given by ANOTHER super. dto.historymanager: HistoryManagerGrantRequest/RevokeRequest (actor = the acting
 //     super), HistoryManagerGrantResponse, HistoryManagerGrantsResponse, HistoryManagerGrantRefusal (409).
+//   * Review rulings (2026-11-09, "WS review 1-4", before publish): every scope after mcp is namespaced (':'),
+//     so web-global's legacy {mcp} rule never covers a scope a newer release adds; the refusal reasons and the
+//     untenanted outcome bind an unknown constant as UNKNOWN (@JsonEnumDefaultValue, per property), an UNKNOWN
+//     outcome being a denial with no record; grant/revoke requests validate a global-user actor with a key.
 // RELEASE ORDER: this artifact, then web-global on it, deployed, then the gateway asking 6.4.0.
 version = '6.4.0'
 

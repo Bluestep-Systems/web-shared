@@ -10,10 +10,13 @@ import dev.bluestep.global.dto.tenantaccess.GlobalUserKey;
  *
  * @param user   the global user the token belongs to
  * @param scopes what the token may do, each {@link TokenScope#wire()} spelling, sorted, no duplicates. The
- *               EFFECTIVE grant, after web-global's legacy rule (a token that stores no vocabulary scope holds
- *               {@code mcp}); values outside the vocabulary are never sent. Strings rather than
- *               {@code TokenScope} so a reader older than the app ignores a scope it does not know instead of
- *               failing to bind the whole answer.
+ *               EFFECTIVE grant, after web-global's legacy rule (a token that stores no vocabulary scope and
+ *               no namespaced value, none containing {@code ':'}, holds {@code mcp}); values outside the
+ *               vocabulary are never sent, so it may be empty: a token holding only a namespaced scope this app
+ *               does not know may do nothing. Strings rather than {@code TokenScope} so a reader older than the
+ *               app ignores a scope it does not know instead of failing to bind the whole answer, which is safe
+ *               because every scope after {@code mcp} is namespaced ({@link TokenScope}): an unknown one grants
+ *               nothing, never {@code mcp}.
  */
 public record TokenCheckResponse(GlobalUserKey user, List<String> scopes) {
 
