@@ -658,7 +658,22 @@ group = 'dev.bluestep'
 // it). The 12- and 13-argument constructors and both existing of(...) keep their signatures. A MINOR. No new
 // surface, so web-global takes no contract constant (the 6.2.x precedent). RELEASE ORDER: this artifact, then
 // web-global on it, deployed, then the monolith sending "rm".
-version = '6.3.0'
+// 6.4.0 adds the shapes the gateway's release 1 needs (CU-86bcz7rtm token scopes, CU-86bcz7rtg gateway surfaces).
+// ADDITIVE: no existing type changes, so no frozen snapshots; a MINOR whose ContractVersion tag is 6.4.0.
+//   * dto.accesstoken: TokenScope (the one vocabulary: mcp, kb:read, kb:push, registry:read, registry:push,
+//     tokens:self) and TokenCheckResponse (owner + effective scopes), the 200 body of GET /registry/token-check
+//     from 6.4.0 (6.3.0 and the unversioned path keep answering 204). Scopes travel as strings so an older reader
+//     ignores a scope it does not know rather than failing to bind the answer.
+//   * dto.globaluserrecord: the gateway's tenant-less sign-in (UntenantedUsernameLookupRequest,
+//     UntenantedAuthenticationRequest/Outcome/Response; a new outcome enum with DISABLED rather than a fourth
+//     constant on the 6.0.0 one, which older consumers could not bind) and the access facts one global user
+//     carries (GlobalUserAccessResponse, with historyManager).
+//   * History-manager endorsement (Brendan's ruling 2026-11-09): a KB history rewrite (force push, ref deletion)
+//     needs a super, a token holding the new TokenScope KB_REWRITE ("kb:rewrite"), and a history-manager grant
+//     given by ANOTHER super. dto.historymanager: HistoryManagerGrantRequest/RevokeRequest (actor = the acting
+//     super), HistoryManagerGrantResponse, HistoryManagerGrantsResponse, HistoryManagerGrantRefusal (409).
+// RELEASE ORDER: this artifact, then web-global on it, deployed, then the gateway asking 6.4.0.
+version = '6.4.0'
 
 repositories {
     mavenCentral()
