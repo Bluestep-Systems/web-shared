@@ -677,7 +677,19 @@ group = 'dev.bluestep'
 //     untenanted outcome bind an unknown constant as UNKNOWN (@JsonEnumDefaultValue, per property), an UNKNOWN
 //     outcome being a denial with no record; grant/revoke requests validate a global-user actor with a key.
 // RELEASE ORDER: this artifact, then web-global on it, deployed, then the gateway asking 6.4.0.
-version = '6.4.0'
+// 6.5.0 adds self-service access tokens (CU-86bczx4de, TK1): the gateway's /api/v1/tokens, served by web-global
+// under /api/v6.5.0/self-tokens to the gateway's registry key only. ADDITIVE: one new package, no existing type
+// changes, so no frozen snapshots; a MINOR whose ContractVersion tag is 6.5.0.
+//   * dto.selftoken: SelfTokenView / SelfTokensResponse (list; createdAt and lastUsedAt nullable, expired tokens
+//     listed, effective scopes as strings), SelfTokenMintRequest + SelfTokenExpiry (DEFAULT / NEVER / AT: the
+//     gateway resolves JSON's absent vs null expiresAt, which a nullable component cannot carry), SelfTokenMinted
+//     (the secret, once; redacted from toString), SelfTokenRefusal (reason + optional scope + message; an unknown
+//     reason binds as UNKNOWN, WS review 2; presentingExpiresAt for EXPIRY_EXCEEDS_PRESENTING). Both enums bind by
+//     exact constant name only (a @JsonCreator): Jackson would otherwise bind 1 or "1" by ordinal (Codex review).
+//   * Subject: no shape names a user. web-global re-derives the owner from the presenting token's hash
+//     (X-Access-Token) on every call (ruling 2026-11-10 "TK1 Q1"); the gateway key alone mints nothing.
+// RELEASE ORDER: this artifact, then web-global on it (restricted-mint switch off), then the gateway on 6.5.0.
+version = '6.5.0'
 
 repositories {
     mavenCentral()
