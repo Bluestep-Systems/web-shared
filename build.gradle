@@ -653,7 +653,28 @@ bluestepLibrary {
 //   * Subject: no shape names a user. web-global re-derives the owner from the presenting token's hash
 //     (X-Access-Token) on every call (ruling 2026-11-10 "TK1 Q1"); the gateway key alone mints nothing.
 // RELEASE ORDER: this artifact, then web-global on it (restricted-mint switch off), then the gateway on 6.5.0.
-version = '6.5.0'
+//
+// 6.6.0 splits the artifact and adds one package (CU-86bd2g5jc, the web-global -> web harness). dev.bluestep:web-shared
+// becomes an UMBRELLA with no classes of its own: its jar is empty, and it carries `api` dependencies on four artifacts
+// that hold the DTOs, packages and class names exactly as they were (every package moved with `git mv`, no source edit):
+//   * web-shared-identity: constraints, basetable, tenantaccess, tenant, fleet, domain, registry, globaluser,
+//     globaluserrecord, reseller, accesstoken, selftoken, historymanager, knowledgebase and the NEW tenantknowledgebase;
+//     test fixtures (Argon2idVectors). The packages import each other in a cycle (tenant -> fleet, tenantaccess,
+//     basetable, constraints; fleet -> domain, tenant; domain -> tenant, basetable), so this is the smallest sound core.
+//   * web-shared-ai: ai, aitenantblock, aitenantconfig, aiunitrate, aiusage (depend on nothing outside ai).
+//   * web-shared-usage: usage (depends on ai and identity).
+//   * web-shared-lookup: lookup, icd10updater, dsm5updater (depend on nothing).
+// All five share THIS version, declared once here, and are released together by the bare tag (publish.yml). A consumer
+// that depends on dev.bluestep:web-shared:6.6.0 gets the same classes through the umbrella; one that needs only the
+// tenant side (the gateway) may depend on web-shared-identity alone. Every group declares a constraint
+// dev.bluestep:web-shared >= 6.6.0, so a dependency graph that still holds the class-carrying 6.5.0 jar beside a group
+// jar is raised to the umbrella rather than putting two copies of a class on the classpath. THE CONSTRAINT LIVES IN GRADLE
+// MODULE METADATA, so a consumer must be a Gradle build (all are: web-global, web and its backports, oauth2-integrator,
+// sql-parser, k8s-api-web). A POM-only resolver does not apply it (a POM puts it in dependencyManagement, which does not
+// propagate) and could resolve 6.5.0 beside a group, 129 classes twice. See README.md.
+// ADDITIVE: tenantknowledgebase (web-global's tenant knowledge-base rows, GET /api/contract/tenant-knowledge-base-rows)
+// is the only new package; no existing type changes. `checkClassSet` (part of `check`) proves nothing else moved.
+version = '6.6.0'
 
 repositories {
     mavenLocal()
@@ -662,56 +683,26 @@ repositories {
 // NullAway runs from bluestep.library, with `OnlyNullMarked`: a package is analysed only once its package-info
 // opts in. Every dto package is already marked.
 
+apply from: 'gradle/dto-dependencies.gradle'
+
 dependencies {
-    // `api`, not `compileOnly`: the annotations are part of this module's published
-    // contract, so consumers compiling against these DTOs see the same nullness.
-    api 'org.jspecify:jspecify:1.0.1'
+    api project(':web-shared-identity')
+    api project(':web-shared-ai')
+    api project(':web-shared-usage')
+    api project(':web-shared-lookup')
 
-    // The ONLY Jackson artifact this module publishes, and the only one its source touches: the DTOs
-    // carry @JsonProperty / @JsonIgnore, and Jackson 3 kept com.fasterxml.jackson.annotation as its
-    // annotation package, so one jar serves both families. No mapper, no datatype module and no BOM
-    // ride along — a consumer brings its own Jackson 3 (Spring Boot 4 does), and Jackson 3 binds
-    // Optional<T> components in core, with nothing registered (OptionalWireContractTest pins that).
-    //
-    // Versioned explicitly because there is no platform to manage it any more. 2.21 is the
-    // jackson-annotations line the Jackson 3.1 BOM declares (jackson.version.annotations in
-    // tools.jackson:jackson-bom:3.1.6), so this asks for exactly what a 3.1 consumer already resolves
-    // rather than raising it. A consumer's own BOM still wins where it manages the artifact.
-    //
-    // 5.0.0 removed the two Jackson 2 declarations that used to sit here: the
-    // com.fasterxml.jackson:jackson-bom platform (which RAISED every consumer's whole Jackson 2
-    // family, highest-wins) and jackson-datatype-jdk8 (which existed so a Jackson 2 mapper could bind
-    // the Optional components). Their last consumer, web-global's msgpack converter, is retired.
-    api 'com.fasterxml.jackson.core:jackson-annotations:2.21'
-    api 'jakarta.validation:jakarta.validation-api:3.1.1'
-    // NOT declared here, and since 5.0.0 not declared anywhere: msgpack is retired fleet-wide.
-    // This module's source never referenced it — it was once a pass-through `api` dependency,
-    // which meant a DTO library forced a wire format onto every consumer.
-
-    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
-    // The constraint annotations ARE part of this module's published contract now — @Size derived
-    // from column widths, and two @AssertTrue guards over opaque columns — so "the annotation is
-    // present in the source" is not evidence that it fires. Without a provider on the test
-    // classpath, swapping two @Size values or moving one somewhere Bean Validation never reads it
-    // leaves the whole suite green. This is the provider the consumers run (Boot's starter-validation
-    // pulls the same family), so what fires here is what fires there.
-    testImplementation 'org.hibernate.validator:hibernate-validator:9.0.1.Final'
-    // 1.5.0+: earlier ArchUnit bundles an ASM that cannot read Java 25 class files (major
-    // 69). It fails silently — the import yields zero classes and every rule passes
-    // vacuously — which is what scanFoundTheDtoRecords() exists to catch.
-    testImplementation 'com.tngtech.archunit:archunit-junit5:1.5.0'
-    // Jackson 3 (tools.jackson.*), the family every consumer runs: web-global's and the monolith's
-    // Boot 4 mappers are Jackson 3, for JSON and for CBOR. The wire-contract tests are only worth
-    // anything if they exercise the Jackson the consumers actually run, so this tracks web-global's
-    // jackson-bom pin. 3.1.6 rather than 3.1.5: GHSA-q4xh-88c3-wmh7 (CVE-2026-68497) and
-    // GHSA-wjgm-6hv5-3cvf.
-    //
-    // No Jackson 2 and no msgpack on the test classpath either, since 5.0.0. The tests that compared
-    // a Jackson 2 or msgpack wire against the Jackson 3 one were retired with the last consumer that
-    // spoke either; their Jackson 3 assertions were kept and now pin the wire on their own.
-    testImplementation 'tools.jackson.core:jackson-databind:3.1.6'
-    // Test-only: UsageWireContractTest and LegacyWireCompatTest round-trip the DTOs through CBOR,
-    // the binary format producers and the AI gate client push them in.
-    testImplementation 'tools.jackson.dataformat:jackson-dataformat-cbor:3.1.6'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    // The test fixtures this coordinate has always had (Argon2idVectors, consumed as
+    // testFixtures('dev.bluestep:web-shared:<v>')) now live in web-shared-identity; the umbrella re-exports them.
+    testFixturesApi testFixtures(project(':web-shared-identity'))
 }
+
+// The umbrella is published after the four groups, whatever order the tasks are named in: web-shared:6.6.0 must never be
+// live without the artifacts it depends on. A same-named task of each group (publish, publishMavenJava...To...) comes first.
+tasks.matching { it.name.startsWith('publish') }.configureEach { task ->
+    task.mustRunAfter(['web-shared-identity', 'web-shared-ai', 'web-shared-usage', 'web-shared-lookup'].collect {
+        ":${it}:${task.name}"
+    })
+}
+
+apply from: 'gradle/class-set.gradle'
+

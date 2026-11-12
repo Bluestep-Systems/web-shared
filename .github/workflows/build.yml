@@ -18,6 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # checkClassSet resolves the published web-shared 6.5.0 from GitHub Packages as its baseline.
+      packages: read
 
     steps:
       - name: Checkout code
@@ -43,6 +45,9 @@ jobs:
       # builds every project, so every library subproject (secret-files, deadline-http, contract-negotiation,
       # harness-contract) and the build-logic plugin they build with are checked here too.
       - name: Build
+        env:
+          USERNAME: ${{ github.actor }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./gradlew build --no-daemon
 
       # Uploaded on failure only — the XML is what says which assertion broke, and a red CI

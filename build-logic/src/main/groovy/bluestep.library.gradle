@@ -75,6 +75,9 @@ dependencies {
     errorprone 'com.uber.nullaway:nullaway:0.13.8'
 }
 
+// GitHub Packages' Maven endpoint; -PpackagesUrl points a test run at a stand-in.
+def packagesUrl = (project.findProperty('packagesUrl') ?: 'https://maven.pkg.github.com/bluestep-systems/web-shared').toString()
+
 publishing {
     publications {
         mavenJava(MavenPublication) {
@@ -91,7 +94,7 @@ publishing {
 
         maven {
             name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/bluestep-systems/web-shared")
+            url = uri(packagesUrl)
             credentials {
                 username = project.findProperty("gpr.user") ?: System.getenv("USERNAME")
                 password = project.findProperty("gpr.key") ?: System.getenv("TOKEN")
@@ -115,5 +118,32 @@ tasks.register('checkReleaseTag') {
             throw new GradleException("Tag ${given.get()} does not match ${project.name}: expected ${expected.get()}")
         }
         logger.lifecycle("Tag ${given.get()} matches ${project.name} ${project.version}")
+    }
+}
+
+// A rerun of a release finishes what an earlier run left: GitHub Packages versions are immutable, so uploading a
+// version that is already there fails, and a bare tag publishes five artifacts in a row (the four DTO groups, then the
+// umbrella). The upload to GitHub Packages is skipped for a publication whose POM is already published at this
+// version, with a lifecycle line saying so; every other publication still uploads. The POM is uploaded after the jar
+// and the module metadata, so a publication whose POM exists is a complete one.
+tasks.withType(PublishToMavenRepository).configureEach { task ->
+    if (task.name.endsWith('ToGitHubPackagesRepository')) {
+        def pom = "${packagesUrl}/dev/bluestep/${project.name}/${project.version}/${project.name}-${project.version}.pom"
+        def user = project.findProperty('gpr.user') ?: System.getenv('USERNAME')
+        def key = project.findProperty('gpr.key') ?: System.getenv('TOKEN')
+        task.onlyIf {
+            def connection = new URL(pom).openConnection()
+            connection.requestMethod = 'HEAD'
+            if (user && key) {
+                connection.setRequestProperty('Authorization',
+                        'Basic ' + "${user}:${key}".bytes.encodeBase64().toString())
+            }
+            def status = connection.responseCode
+            if (status == 200) {
+                task.logger.lifecycle("${project.name} ${project.version} is already published; not uploading it again")
+                return false
+            }
+            return true
+        }
     }
 }

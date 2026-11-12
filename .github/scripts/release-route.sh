@@ -6,12 +6,18 @@
 #   TAG        the release's tag (release only)
 #   PICKED     the artifact picked (workflow_dispatch only)
 #   LIBRARIES  every artifact released by a prefixed tag, space-separated
-# Output: `artifact=` and `project=` lines appended to $GITHUB_OUTPUT. Exits 1, naming why, for a tag or pick that
+#   FAMILY     the four DTO artifacts released with the umbrella by a bare tag, space-separated
+# Output: `artifact=`, `check_tasks=` (each project's checkReleaseTag) and `publish_tasks=` (each project's publish),
+# appended to $GITHUB_OUTPUT. A bare tag, and a pick of web-shared, is the umbrella and every FAMILY member: one version
+# line, one contract tag. Any other pick is that artifact alone (a FAMILY member alone is a dispatch-only recovery for
+# a run that published some of them). The umbrella is always last, so a run that stops early leaves no umbrella without its
+# members, and rerunning the release finishes it: bluestep.library skips an upload whose version is already published. Exits 1, naming why, for a tag or pick that
 # names no artifact. Tested by release-route-test.sh, which build.yml runs.
 set -euo pipefail
 : "${GITHUB_OUTPUT:=/dev/null}"
 : "${TAG:=}"
 : "${PICKED:=}"
+: "${FAMILY:=}"
 artifact=''
 if [ "$EVENT" = release ]; then
   # The longest listed library whose name, followed by `-`, starts the tag. Matched against the list, never
@@ -30,18 +36,31 @@ if [ "$EVENT" = release ]; then
 else
   artifact="$PICKED"
 fi
-project=''
-if [ "$artifact" != web-shared ]; then
-  for library in $LIBRARIES; do
+check_tasks=''
+publish_tasks=''
+if [ "$artifact" = web-shared ]; then
+  # The umbrella is published LAST, after every member: web-shared:<v> must never be live without the artifacts it
+  # depends on, however the run ends. (build.gradle also orders the umbrella's publish tasks after the members'.)
+  check_tasks=":checkReleaseTag"
+  publish_tasks=""
+  for member in $FAMILY; do
+    check_tasks="$check_tasks :$member:checkReleaseTag"
+    publish_tasks="$publish_tasks :$member:publish"
+  done
+  publish_tasks="${publish_tasks# } :publish"
+else
+  for library in $LIBRARIES $FAMILY; do
     if [ "$library" = "$artifact" ]; then
-      project=":$library"
+      check_tasks=":$library:checkReleaseTag"
+      publish_tasks=":$library:publish"
     fi
   done
-  if [ -z "$project" ]; then
+  if [ -z "$publish_tasks" ]; then
     echo "::error::No artifact '$artifact' is published from this repository"
     exit 1
   fi
 fi
-echo "Publishing $artifact (task ${project}:publish)"
+echo "Publishing $artifact (tasks $publish_tasks)"
 echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
-echo "project=$project" >> "$GITHUB_OUTPUT"
+echo "check_tasks=$check_tasks" >> "$GITHUB_OUTPUT"
+echo "publish_tasks=$publish_tasks" >> "$GITHUB_OUTPUT"
