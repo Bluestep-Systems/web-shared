@@ -9,6 +9,14 @@ rootProject.name = 'web-shared'
 // released by a `<directory>-<version>` tag. They share this repository and its build conventions, not the root
 // library's version: that number is also the API path web-global serves, so it moves only for the DTO contract.
 include 'secret-files'
+// web-shared, from 6.6.0, is an umbrella with no classes of its own: the DTOs live in four artifacts that share its
+// one version line (the contract line) and are released with it by the bare tag. `identity` is the core (the DTO
+// packages import each other in a cycle through tenant, fleet and domain, so it is the smallest sound one);
+// `ai` depends on nothing, `usage` on ai and identity, and `lookup` on nothing.
+include 'web-shared-identity'
+include 'web-shared-ai'
+include 'web-shared-usage'
+include 'web-shared-lookup'
 // The deadline on a whole outbound HTTP exchange, off ForkJoinPool.commonPool(), and the ArchUnit rules that keep
 // a consumer's main code off that pool (test fixtures).
 include 'deadline-http'

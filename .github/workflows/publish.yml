@@ -8,21 +8,27 @@ name: Publish to GitHub Packages
 #                                                        followed by `-` (so secret-files-1.0.0-1 is secret-files at
 #                                                        1.0.0-1). Each library's tag prefix is its project name and
 #                                                        `-` (bluestep.library's default).
-#   a bare version        (e.g. 6.5.0)                -> dev.bluestep:web-shared, exactly as before the other
-#                                                        artifacts existed. Anything else is refused.
+#   a bare version        (e.g. 6.6.0)                -> dev.bluestep:web-shared (the umbrella from 6.6.0) AND the four
+#                                                        DTO artifacts web-shared-identity, -ai, -usage and -lookup,
+#                                                        which share its one version line and its bare tags (FAMILY
+#                                                        below). Anything else is refused.
 #
-# Either way `checkReleaseTag` runs first and refuses a tag that is not the project's prefix followed by the version
-# its build file declares (secret-files-1.0 for 1.0.0, 6.6.0 while the root says 6.5.0): GitHub Packages versions are
+# Either way `checkReleaseTag` runs first, for every project the tag publishes, and refuses a tag that is not the
+# project's prefix followed by the version its build file declares (secret-files-1.0 for 1.0.0, 6.6.0 while the root says 6.5.0): GitHub Packages versions are
 # immutable, so a mistyped tag must publish nothing. The check on a bare tag is new with this workflow and intentional:
 # every web-shared release so far (5.0.0 ... 6.5.0) was tagged with exactly its declared version, so it refuses only a
 # mistyped tag (6.6.0 while the root still says 6.5.0).
 #
-# The task is always project-qualified (`:publish`, `:deadline-http:publish`). An unqualified `./gradlew publish` runs
+# The tasks are always project-qualified (`:publish`, `:deadline-http:publish`). An unqualified `./gradlew publish` runs
 # in every project, so a release of one library would also try to republish whatever version every other library is
-# at, and a second publish of an existing version fails the job.
+# at, and a second publish of an existing version fails the job. A bare tag names all five of its projects, in one
+# Gradle run, after every tag check has passed: the four groups first and the umbrella LAST, so web-shared:<v> is never
+# live without what it depends on. A rerun of a release that stopped part-way finishes it: the library plugin skips the
+# upload of a version GitHub Packages already holds.
 #
-# workflow_dispatch publishes whichever artifact is picked (web-shared by default), at the version its build file
-# declares on the dispatched ref. No tag is involved, so there is no tag check.
+# workflow_dispatch publishes whichever artifact is picked (web-shared, meaning all five, by default), at the version
+# its build file declares on the dispatched ref. A member of the web-shared family can be picked alone, to finish a
+# run that published only some of them. No tag is involved, so there is no tag check.
 on:
   release:
     types:
@@ -34,6 +40,10 @@ on:
         type: choice
         options:
           - web-shared
+          - web-shared-identity
+          - web-shared-ai
+          - web-shared-usage
+          - web-shared-lookup
           - secret-files
           - deadline-http
           - contract-negotiation
@@ -66,18 +76,20 @@ jobs:
           # Every artifact released by a prefixed tag. A new library is added here, to workflow_dispatch's options
           # above and to settings.gradle.
           LIBRARIES: secret-files deadline-http contract-negotiation harness-contract
+          # The artifacts a bare tag publishes with the umbrella. Also in settings.gradle and dispatch's options.
+          FAMILY: web-shared-identity web-shared-ai web-shared-usage web-shared-lookup
         run: .github/scripts/release-route.sh
 
       - name: Check the tag matches the artifact's version
         if: github.event_name == 'release'
         env:
           TAG: ${{ github.event.release.tag_name }}
-          PROJECT: ${{ steps.route.outputs.project }}
-        run: ./gradlew -q "${PROJECT}:checkReleaseTag" "-PreleaseTag=$TAG"
+          TASKS: ${{ steps.route.outputs.check_tasks }}
+        run: ./gradlew -q $TASKS "-PreleaseTag=$TAG"
 
       - name: Publish to GitHub Packages
         env:
           USERNAME: ${{ github.actor }}
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PROJECT: ${{ steps.route.outputs.project }}
-        run: ./gradlew "${PROJECT}:publish"
+          TASKS: ${{ steps.route.outputs.publish_tasks }}
+        run: ./gradlew $TASKS

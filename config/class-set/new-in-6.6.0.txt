@@ -1,0 +1,4 @@
+dev/bluestep/global/dto/tenantknowledgebase/TenantKnowledgeBaseRow.class
+dev/bluestep/global/dto/tenantknowledgebase/TenantKnowledgeBaseRowsResponse.class
+dev/bluestep/global/dto/tenantknowledgebase/TenantKnowledgeBaseRowsState.class
+dev/bluestep/global/dto/tenantknowledgebase/package-info.class

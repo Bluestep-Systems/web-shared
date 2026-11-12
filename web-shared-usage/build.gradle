@@ -1,0 +1,29 @@
+plugins {
+    // The repository's library conventions (build-logic/src/main/groovy/bluestep.library.gradle).
+    id 'bluestep.library'
+}
+
+// One of the four artifacts that hold web-shared's DTOs (see the root build file). It shares the root's version, which
+// is the contract line, and is released with it by the bare tag (6.6.0), so its tag prefix is empty like the root's.
+bluestepLibrary {
+    tagPrefix = ''
+}
+version = rootProject.version
+
+apply from: "$rootDir/gradle/dto-dependencies.gradle"
+
+dependencies {
+    api project(':web-shared-ai')
+    api project(':web-shared-identity')
+    // No class-carrying dev.bluestep:web-shared (<= 6.5.0) beside this artifact: a graph that holds one is
+    // raised to the 6.6.0 umbrella, which has none. This is Gradle module metadata: a POM-only consumer (Maven, or a
+    // resolver that ignores .module files) does not get it, and could resolve 6.5.0 beside this artifact. See README.md.
+    constraints {
+        api('dev.bluestep:web-shared') {
+            version {
+                require rootProject.version.toString()
+            }
+            because 'web-shared 6.5.0 and earlier carry every DTO class, so they would duplicate this artifact\'s'
+        }
+    }
+}
