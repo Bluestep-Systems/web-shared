@@ -1,0 +1,119 @@
+// bluestep.library: the conventions every library this repository publishes builds with. Before this plugin the
+// root library and secret-files each carried a copy of these blocks; a library now applies the plugin and declares
+// only its version, its dependencies and, where it is not `<project name>-`, its release-tag prefix.
+//
+// What a project applying it gets:
+//   * java-library + java-test-fixtures (src/testFixtures is a second variant of the same coordinate, consumed as
+//     testFixtures('dev.bluestep:<artifact>:<version>')), toolchain 25;
+//   * NullAway in JSpecify mode as the only Error Prone check, on main and test fixtures (published code), not tests;
+//   * Checkstyle with the repository's ruleset (config/checkstyle/checkstyle.xml: unused and redundant imports);
+//   * JUnit Platform;
+//   * maven-publish of the java component (test-fixtures variants included, in Gradle module metadata) to
+//     mavenLocal and GitHub Packages, group dev.bluestep, artifact = project name;
+//   * checkReleaseTag (-PreleaseTag=<tag>): fails unless the tag is this project's prefix + its declared version.
+//
+// The project's own build file declares `version` (its version line) and its dependencies, including the jspecify
+// annotations in whichever scope it publishes them (`api` for DTOs, whose consumers compile against the nullness;
+// `compileOnly` for a library with no runtime dependencies).
+import dev.bluestep.buildlogic.BluestepLibraryExtension
+
+plugins {
+    id 'java-library'
+    id 'java-test-fixtures'
+    id 'maven-publish'
+    id 'net.ltgt.errorprone'
+    id 'checkstyle'
+}
+
+def library = extensions.create('bluestepLibrary', BluestepLibraryExtension)
+library.tagPrefix.convention("${project.name}-")
+
+group = 'dev.bluestep'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+// Unused imports fail the build. See config/checkstyle/checkstyle.xml for why this is Checkstyle rather than Error
+// Prone (no such bug pattern) or Spotless (rewrites hand-formatted files). The plugin wires checkstyleMain,
+// checkstyleTest and checkstyleTestFixtures into `check`. What fails the build is maxErrors (default 0, and the
+// ruleset declares severity=error); maxWarnings = 0 covers a warning-severity rule the ruleset might one day gain.
+checkstyle {
+    toolVersion = '10.21.4'
+    configFile = rootProject.file('config/checkstyle/checkstyle.xml')
+    maxWarnings = 0
+}
+
+// NullAway in JSpecify mode. `OnlyNullMarked` makes @NullMarked the single source of truth: a package is analysed
+// only once its package-info opts in. Tests are excluded: test code passes null on purpose to exercise the guards.
+tasks.withType(JavaCompile).configureEach {
+    options.errorprone {
+        // NullAway is the only check opted into; the rest of Error Prone's catalogue is a separate decision.
+        disableAllChecks = true
+        option('NullAway:OnlyNullMarked', 'true')
+        option('NullAway:JSpecifyMode', 'true')
+        error('NullAway')
+    }
+}
+
+tasks.named('compileTestJava') {
+    options.errorprone.enabled = false
+}
+
+tasks.named('test', Test) {
+    useJUnitPlatform()
+}
+
+dependencies {
+    errorprone 'com.google.errorprone:error_prone_core:2.50.0'
+    errorprone 'com.uber.nullaway:nullaway:0.13.8'
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            // The java component carries the test-fixtures variants too (Gradle module metadata only: a POM has no
+            // way to say "a second jar with its own dependencies"). Every consumer is a Gradle build, so the warning
+            // that Maven cannot see them is expected and silenced.
+            from components.java
+            suppressPomMetadataWarningsFor('testFixturesApiElements')
+            suppressPomMetadataWarningsFor('testFixturesRuntimeElements')
+        }
+    }
+    repositories {
+        mavenLocal()
+
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/bluestep-systems/web-shared")
+            credentials {
+                username = project.findProperty("gpr.user") ?: System.getenv("USERNAME")
+                password = project.findProperty("gpr.key") ?: System.getenv("TOKEN")
+            }
+        }
+    }
+}
+
+// The release guard publish.yml runs before publishing: GitHub Packages versions are immutable, so a tag whose
+// number disagrees with the declared version (secret-files-1.0 for 1.0.0) must publish nothing.
+tasks.register('checkReleaseTag') {
+    group = 'publishing'
+    description = 'Fails unless -PreleaseTag equals this library\'s tag prefix followed by its declared version.'
+    def given = providers.gradleProperty('releaseTag')
+    def expected = library.tagPrefix.map { prefix -> prefix + project.version }
+    doLast {
+        if (!given.present) {
+            throw new GradleException("Pass the release tag: -PreleaseTag=<tag> (this library's is ${expected.get()})")
+        }
+        if (given.get() != expected.get()) {
+            throw new GradleException("Tag ${given.get()} does not match ${project.name}: expected ${expected.get()}")
+        }
+        logger.lifecycle("Tag ${given.get()} matches ${project.name} ${project.version}")
+    }
+}

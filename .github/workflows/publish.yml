@@ -1,21 +1,28 @@
 name: Publish to GitHub Packages
 
-# This repository publishes two artifacts with independent version lines, and a release publishes
-# exactly one of them, chosen by its tag:
+# This repository publishes several artifacts, each on its own version line, and a release publishes exactly one of
+# them, chosen by its tag:
 #
-#   secret-files-<version>  (e.g. secret-files-1.0.0)  -> dev.bluestep:secret-files, and nothing else.
-#                                                          The tag's number must equal the version in
-#                                                          secret-files/build.gradle, or nothing publishes.
-#   any other tag           (e.g. 4.1.7)               -> dev.bluestep:web-shared, exactly as before
-#                                                          the second artifact existed.
+#   <artifact>-<version>  (e.g. deadline-http-1.0.0)  -> dev.bluestep:<artifact>, and nothing else, for <artifact> in
+#                                                        LIBRARIES below: the longest listed name the tag starts with,
+#                                                        followed by `-` (so secret-files-1.0.0-1 is secret-files at
+#                                                        1.0.0-1). Each library's tag prefix is its project name and
+#                                                        `-` (bluestep.library's default).
+#   a bare version        (e.g. 6.5.0)                -> dev.bluestep:web-shared, exactly as before the other
+#                                                        artifacts existed. Anything else is refused.
 #
-# The task is always project-qualified (`:publish`, `:secret-files:publish`). An unqualified
-# `./gradlew publish` now runs in every project, so a DTO release would also try to publish
-# whatever version secret-files is at — and GitHub Packages versions are immutable, so a second
-# publish of an existing one fails the job.
+# Either way `checkReleaseTag` runs first and refuses a tag that is not the project's prefix followed by the version
+# its build file declares (secret-files-1.0 for 1.0.0, 6.6.0 while the root says 6.5.0): GitHub Packages versions are
+# immutable, so a mistyped tag must publish nothing. The check on a bare tag is new with this workflow and intentional:
+# every web-shared release so far (5.0.0 ... 6.5.0) was tagged with exactly its declared version, so it refuses only a
+# mistyped tag (6.6.0 while the root still says 6.5.0).
 #
-# workflow_dispatch publishes whichever artifact is picked (web-shared by default), at the version
-# its build file declares on the dispatched ref. No tag is involved, so there is no tag check.
+# The task is always project-qualified (`:publish`, `:deadline-http:publish`). An unqualified `./gradlew publish` runs
+# in every project, so a release of one library would also try to republish whatever version every other library is
+# at, and a second publish of an existing version fails the job.
+#
+# workflow_dispatch publishes whichever artifact is picked (web-shared by default), at the version its build file
+# declares on the dispatched ref. No tag is involved, so there is no tag check.
 on:
   release:
     types:
@@ -28,6 +35,9 @@ on:
         options:
           - web-shared
           - secret-files
+          - deadline-http
+          - contract-negotiation
+          - harness-contract
         default: web-shared
 
 jobs:
@@ -53,36 +63,17 @@ jobs:
           EVENT: ${{ github.event_name }}
           TAG: ${{ github.event.release.tag_name }}
           PICKED: ${{ inputs.artifact }}
-        run: |
-          if [ "$EVENT" = release ]; then
-            case "$TAG" in
-              secret-files-*) artifact=secret-files ;;
-              *) artifact=web-shared ;;
-            esac
-          else
-            artifact="$PICKED"
-          fi
-          case "$artifact" in
-            secret-files) project=':secret-files' ;;
-            web-shared) project='' ;;
-            *) echo "::error::Unknown artifact '$artifact'"; exit 1 ;;
-          esac
-          echo "Publishing $artifact (task ${project}:publish)"
-          echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
-          echo "project=$project" >> "$GITHUB_OUTPUT"
+          # Every artifact released by a prefixed tag. A new library is added here, to workflow_dispatch's options
+          # above and to settings.gradle.
+          LIBRARIES: secret-files deadline-http contract-negotiation harness-contract
+        run: .github/scripts/release-route.sh
 
-      # secret-files only: its tags carry a prefix, which makes a mistyped tag (secret-files-1.0 for
-      # 1.0.0) easy to cut and impossible to take back once a version is published under it.
-      - name: Check the tag matches the secret-files version
-        if: github.event_name == 'release' && steps.route.outputs.artifact == 'secret-files'
+      - name: Check the tag matches the artifact's version
+        if: github.event_name == 'release'
         env:
           TAG: ${{ github.event.release.tag_name }}
-        run: |
-          declared=$(./gradlew -q :secret-files:properties --property version | sed -n 's/^version: //p')
-          if [ "${TAG#secret-files-}" != "$declared" ]; then
-            echo "::error::Tag $TAG does not match secret-files version $declared"
-            exit 1
-          fi
+          PROJECT: ${{ steps.route.outputs.project }}
+        run: ./gradlew -q "${PROJECT}:checkReleaseTag" "-PreleaseTag=$TAG"
 
       - name: Publish to GitHub Packages
         env:
