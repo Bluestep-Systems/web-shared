@@ -1,53 +1,17 @@
 plugins {
-    id 'java-library'
-    // Publishes src/testFixtures as a second variant of this coordinate (6.0.0: the pinned Argon2id
-    // vectors), as secret-files does.
-    id 'java-test-fixtures'
-    id 'maven-publish'
-    id 'net.ltgt.errorprone' version '5.1.0'
-    id 'checkstyle'
+    // The repository's library conventions (build-logic/src/main/groovy/bluestep.library.gradle): java-library,
+    // java-test-fixtures (src/testFixtures is a second variant of this coordinate, 6.0.0: the pinned Argon2id
+    // vectors), toolchain 25, NullAway in JSpecify mode, Checkstyle (unused imports fail the build), JUnit Platform,
+    // and maven-publish to mavenLocal + GitHub Packages as dev.bluestep:web-shared.
+    id 'bluestep.library'
 }
 
-// Unused imports fail the build. See config/checkstyle/checkstyle.xml for why this is Checkstyle
-// rather than Error Prone (no such bug pattern) or Spotless (rewrites hand-formatted files).
-//
-// The plugin wires checkstyleMain and checkstyleTest into `check` on its own, so `./gradlew build`
-// catches this and both source sets are covered without naming them here.
-checkstyle {
-    toolVersion = '10.21.4'
-    configFile = file('config/checkstyle/checkstyle.xml')
-    // What actually fails this build is maxErrors, which defaults to 0 — the ruleset declares
-    // severity=error, so a violation is an error and the default is already the strict one.
-    // maxWarnings is set for the case that ruleset ever gains a warning-severity rule: its default is
-    // Integer.MAX_VALUE, so such a rule would otherwise report and pass. Inert today, on purpose.
-    maxWarnings = 0
+// This library's tags are bare (6.5.0): the number is also the contract tag web-global serves, and every release of
+// it has been tagged that way. The other libraries here release under `<artifact>-<version>`.
+bluestepLibrary {
+    tagPrefix = ''
 }
 
-publishing {
-    publications {
-        mavenJava(MavenPublication) {
-            from components.java
-            // Gradle module metadata carries the test-fixtures variants; a POM cannot. Every consumer
-            // is a Gradle build.
-            suppressPomMetadataWarningsFor('testFixturesApiElements')
-            suppressPomMetadataWarningsFor('testFixturesRuntimeElements')
-        }
-    }
-    repositories {
-        mavenLocal()
-
-        maven {
-            name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/bluestep-systems/web-shared")
-            credentials {
-                username = project.findProperty("gpr.user") ?: System.getenv("USERNAME")
-                password = project.findProperty("gpr.key") ?: System.getenv("TOKEN")
-            }
-        }
-    }
-}
-
-group = 'dev.bluestep'
 // 2.0.0: nullable record components became Optional<T>.
 // 3.0.0: PricedUnit deleted — the metered-unit vocabulary is an open unit_key string plus the
 // descriptive UnitCategory/UnitMeasure axes and a RateVariant, and AiCompletionRequest carries an
@@ -692,45 +656,13 @@ group = 'dev.bluestep'
 version = '6.5.0'
 
 repositories {
-    mavenCentral()
     mavenLocal()
 }
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(25)
-    }
-}
-
-// NullAway in JSpecify mode. `OnlyNullMarked` makes @NullMarked the single source of
-// truth: a package is analysed only once its package-info opts in, so new packages can
-// be adopted one at a time instead of all at once. Every dto package is already marked.
-//
-// Tests are deliberately excluded — test code legitimately passes null to exercise the
-// guards, and NullAway would flag each of those as an error.
-tasks.withType(JavaCompile).configureEach {
-    options.errorprone {
-        // NullAway is the only check we opt into; the rest of Error Prone's catalogue is
-        // a separate decision with its own remediation cost.
-        disableAllChecks = true
-        option('NullAway:OnlyNullMarked', 'true')
-        option('NullAway:JSpecifyMode', 'true')
-        error('NullAway')
-    }
-}
-
-tasks.named('compileTestJava') {
-    options.errorprone.enabled = false
-}
-
-test {
-    useJUnitPlatform()
-}
+// NullAway runs from bluestep.library, with `OnlyNullMarked`: a package is analysed only once its package-info
+// opts in. Every dto package is already marked.
 
 dependencies {
-    errorprone 'com.google.errorprone:error_prone_core:2.50.0'
-    errorprone 'com.uber.nullaway:nullaway:0.13.8'
-
     // `api`, not `compileOnly`: the annotations are part of this module's published
     // contract, so consumers compiling against these DTOs see the same nullness.
     api 'org.jspecify:jspecify:1.0.1'

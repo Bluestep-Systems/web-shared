@@ -29,13 +29,19 @@ jobs:
           distribution: temurin
           java-version: 25
 
+      # publish.yml's release routing (which artifact a tag publishes) as a script, checked against every kind of
+      # tag before a release ever depends on it.
+      - name: Check release routing
+        run: .github/scripts/release-route-test.sh
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
 
       # `build` rather than `test`: it runs check (tests + the ArchUnit nullness rules) and
       # also assembles the jar, so a source change that compiles under test but breaks the
       # published artifact fails here rather than at release time. Unqualified on purpose: it
-      # builds every project, so the secret-files subproject is checked here too.
+      # builds every project, so every library subproject (secret-files, deadline-http, contract-negotiation,
+      # harness-contract) and the build-logic plugin they build with are checked here too.
       - name: Build
         run: ./gradlew build --no-daemon
 
@@ -48,5 +54,5 @@ jobs:
           name: test-results
           path: |
             build/reports/tests/test/
-            secret-files/build/reports/tests/test/
+            */build/reports/tests/test/
           retention-days: 7

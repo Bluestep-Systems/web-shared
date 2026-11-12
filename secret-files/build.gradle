@@ -1,48 +1,11 @@
 plugins {
-    id 'java-library'
-    // Publishes src/testFixtures as a second variant of this same coordinate, so a consumer's tests
-    // say testImplementation(testFixtures('dev.bluestep:secret-files:<version>')).
-    id 'java-test-fixtures'
-    id 'maven-publish'
-    // No version here: the root build already puts this plugin on the classpath, and Gradle refuses
-    // a second, versioned request for a plugin that is already resolved.
-    id 'net.ltgt.errorprone'
-    id 'checkstyle'
+    // The repository's library conventions (build-logic/src/main/groovy/bluestep.library.gradle): java-library,
+    // java-test-fixtures (a consumer's tests say testImplementation(testFixtures('dev.bluestep:secret-files:<v>'))),
+    // toolchain 25, NullAway in JSpecify mode over main and test fixtures, Checkstyle, JUnit Platform, and
+    // maven-publish as dev.bluestep:secret-files. Release tags are `secret-files-<version>`, the plugin's default.
+    id 'bluestep.library'
 }
 
-// Same ruleset as the root library (unused and redundant imports, nothing else).
-checkstyle {
-    toolVersion = '10.21.4'
-    configFile = rootProject.file('config/checkstyle/checkstyle.xml')
-    maxWarnings = 0
-}
-
-publishing {
-    publications {
-        mavenJava(MavenPublication) {
-            // The java component carries the test-fixtures variants too (Gradle module metadata
-            // only: a POM has no way to say "a second jar with its own dependencies"). Every consumer
-            // is a Gradle build, so the warning that Maven cannot see them is expected and silenced.
-            from components.java
-            suppressPomMetadataWarningsFor('testFixturesApiElements')
-            suppressPomMetadataWarningsFor('testFixturesRuntimeElements')
-        }
-    }
-    repositories {
-        mavenLocal()
-
-        maven {
-            name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/bluestep-systems/web-shared")
-            credentials {
-                username = project.findProperty("gpr.user") ?: System.getenv("USERNAME")
-                password = project.findProperty("gpr.key") ?: System.getenv("TOKEN")
-            }
-        }
-    }
-}
-
-group = 'dev.bluestep'
 // This artifact's OWN version line, independent of the root library's. The root number is also the
 // API path web-global serves, so it must not move for a change that has nothing to do with the DTO
 // contract — and this library's releases must not have to wait on, or invent, a DTO release either.
@@ -59,39 +22,7 @@ group = 'dev.bluestep'
 // Failures are logged by exception type only, never by message or stack trace.
 version = '1.0.0'
 
-repositories {
-    mavenCentral()
-}
-
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(25)
-    }
-}
-
-// NullAway in JSpecify mode, exactly as the root library runs it. Every package is @NullMarked.
-// This covers the main and test-fixtures source sets; the fixtures are published code too.
-tasks.withType(JavaCompile).configureEach {
-    options.errorprone {
-        disableAllChecks = true
-        option('NullAway:OnlyNullMarked', 'true')
-        option('NullAway:JSpecifyMode', 'true')
-        error('NullAway')
-    }
-}
-
-tasks.named('compileTestJava') {
-    options.errorprone.enabled = false
-}
-
-test {
-    useJUnitPlatform()
-}
-
 dependencies {
-    errorprone 'com.google.errorprone:error_prone_core:2.50.0'
-    errorprone 'com.uber.nullaway:nullaway:0.13.8'
-
     // NO runtime dependencies, on purpose. The core is plain Java and logs through System.Logger.
     // The Spring parts (dev.bluestep.secretfiles.spring..) are compiled against Spring Boot 4.1.1 and
     // HikariCP, but `compileOnly`: a consumer brings its own Spring Boot, and the auto-configuration

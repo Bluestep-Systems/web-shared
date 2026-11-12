@@ -1,0 +1,36 @@
+plugins {
+    // The repository's library conventions (build-logic/src/main/groovy/bluestep.library.gradle). Released by a
+    // `harness-contract-<version>` tag.
+    id 'bluestep.library'
+}
+
+// This artifact's own version line, and web's harness contract tag: HarnessContract's tags are versions of this
+// artifact (tag = DTO artifact version, as web-global's ContractVersion tags are web-shared versions). So the number
+// moves only for the harness's wire, and a published version with no HarnessContract constant in web is the same trap
+// web-global's contract CLAUDE.md names: a client resolving it would ask a tag web does not serve.
+//
+// Independent of the contract line on purpose: plain Strings with @Size/@Pattern and JDK types, never web-shared's
+// dto types, so neither line drags the other.
+//
+// 1.0.0 (CU-86bd2g5jc, H2 design §4.1): the first harness operation, GET /harness/tenant-knowledge-base-rows/{tenantId}
+// with B6P-Contract: 1.0.0 on web's harness port. One tenant per call. HarnessTenantKnowledgeBaseRows (tenant, state
+// FOUND/ABSENT/UNKNOWN, rows), HarnessKnowledgeBaseRow (web's KB uuid, name, title, live branch), HarnessPaths.
+// Test fixtures: HarnessWireSamples, JSON both sides' tests read (web's controller answers them, web-global's client
+// is served them by a stub).
+version = '1.0.0'
+
+dependencies {
+    // `api`, as the root DTO library: the annotations are part of the published contract.
+    api 'org.jspecify:jspecify:1.0.1'
+    api 'com.fasterxml.jackson.core:jackson-annotations:2.21'
+    api 'jakarta.validation:jakarta.validation-api:3.1.1'
+
+    testFixturesCompileOnly 'org.jspecify:jspecify:1.0.1'
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    testImplementation 'org.assertj:assertj-core:3.27.7'
+    testImplementation 'org.hibernate.validator:hibernate-validator:9.0.1.Final'
+    testImplementation 'tools.jackson.core:jackson-databind:3.1.6'
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.5.0'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}

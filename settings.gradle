@@ -1,6 +1,18 @@
+pluginManagement {
+    // bluestep.library, the conventions every library here builds with.
+    includeBuild 'build-logic'
+}
+
 rootProject.name = 'web-shared'
 
-// A separately published library with its own coordinate (dev.bluestep:secret-files) and its own
-// version line. It shares this repository and its build conventions, not the root library's version:
-// that number is also the API path web-global serves, so it moves only for the DTO contract.
+// Separately published libraries, each with its own coordinate (dev.bluestep:<directory>) and its own version line,
+// released by a `<directory>-<version>` tag. They share this repository and its build conventions, not the root
+// library's version: that number is also the API path web-global serves, so it moves only for the DTO contract.
 include 'secret-files'
+// The deadline on a whole outbound HTTP exchange, off ForkJoinPool.commonPool(), and the ArchUnit rules that keep
+// a consumer's main code off that pool (test fixtures).
+include 'deadline-http'
+// The contract-negotiation protocol: B6P-Contract, the handshake, the server filter and the per-peer client.
+include 'contract-negotiation'
+// The web-global -> web harness's wire shapes; its version is the harness's contract tag.
+include 'harness-contract'

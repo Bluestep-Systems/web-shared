@@ -1,0 +1,32 @@
+plugins {
+    // The repository's library conventions (build-logic/src/main/groovy/bluestep.library.gradle). Released by a
+    // `deadline-http-<version>` tag.
+    id 'bluestep.library'
+}
+
+// This artifact's own version line (see settings.gradle).
+//
+// 1.0.0: DeadlineHttp and ExecutorDeadlineHttp, moved from web-global's gateway (dev.bluestep.gateway.http, #78,
+// RG1flake2) unchanged in behaviour: one outbound exchange bounded as a whole, body included, run as a blocking
+// HttpClient.send on a virtual thread of its own, never on ForkJoinPool.commonPool(). The thread prefix is now the
+// consumer's (the gateway named its threads gateway-http-N). The body is a BufferedBody (ofString, ofByteArray,
+// discarding), not a JDK BodyHandler: a streaming handler would let send return at the headers and read the body
+// outside the deadline, so it cannot be passed at all. A deadline that is not positive or does not fit in a long of
+// nanoseconds is refused before anything is sent. Test fixtures: CommonPoolRules, the three ArchUnit rules
+// of the gateway's GatewayHttpRulesTest as rules a consumer checks over its own main classes.
+version = '1.0.0'
+
+dependencies {
+    // NO runtime dependencies: java.net.http and java.util.concurrent only. The annotations are compileOnly, as in
+    // secret-files: a consumer running NullAway has jspecify on its own classpath.
+    compileOnly 'org.jspecify:jspecify:1.0.1'
+
+    // The rules are ArchUnit rules, so ArchUnit is part of the fixtures' API. 1.5.0+: earlier ArchUnit bundles an ASM
+    // that cannot read Java 25 class files and imports nothing, which passes every rule vacuously.
+    testFixturesCompileOnly 'org.jspecify:jspecify:1.0.1'
+    testFixturesApi 'com.tngtech.archunit:archunit:1.5.0'
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    testImplementation 'org.assertj:assertj-core:3.27.7'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}

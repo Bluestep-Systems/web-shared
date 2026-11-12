@@ -1,0 +1,10 @@
+// The convention plugins this repository's libraries build with (bluestep.library). An included build rather than
+// buildSrc so that a composite consumer (web-global's settings.gradle includes ../web-shared) builds it as one more
+// participant instead of on every configuration of every project.
+dependencyResolutionManagement {
+    repositories {
+        gradlePluginPortal()
+    }
+}
+
+rootProject.name = 'build-logic'
