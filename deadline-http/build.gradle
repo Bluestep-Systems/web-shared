@@ -14,7 +14,14 @@ plugins {
 // outside the deadline, so it cannot be passed at all. A deadline that is not positive or does not fit in a long of
 // nanoseconds is refused before anything is sent. Test fixtures: CommonPoolRules, the three ArchUnit rules
 // of the gateway's GatewayHttpRulesTest as rules a consumer checks over its own main classes.
-version = '1.0.0'
+//
+// 1.1.0 (CU-86bd2g5jc): capped bodies, BufferedBody.ofByteArray(long maxBytes), ofString(long maxBytes) and
+// ofString(Charset, long maxBytes), for a peer not trusted to bound its answer (web-global reading tenant web pods).
+// A declared Content-Length over the cap is refused before any of the body is read; a streamed body (chunked, unknown
+// length) is refused the moment it passes the cap, the passing chunk never copied. Either is a BodyTooLargeException,
+// an IOException that send throws as itself (unwrapped from the JDK client's IOException), the exchange cancelled.
+// The uncapped factories are unchanged.
+version = '1.1.0'
 
 dependencies {
     // NO runtime dependencies: java.net.http and java.util.concurrent only. The annotations are compileOnly, as in

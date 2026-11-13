@@ -5,7 +5,10 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -68,7 +71,12 @@ public final class ExecutorDeadlineHttp implements DeadlineHttp, AutoCloseable {
 		HttpResponse.BodyHandler<T> handler = body.handler();
 		Future<HttpResponse<T>> exchange;
 		try {
-			exchange = executor.submit(() -> client.send(request, handler));
+			if (handler instanceof CappedBodyHandler<T>) {
+				exchange = executor.submit(() -> sendCapped(client, request, handler));
+			}
+			else {
+				exchange = executor.submit(() -> client.send(request, handler));
+			}
 		}
 		catch (RejectedExecutionException e) {
 			throw new IOException("The HTTP executor is shut down", e);
@@ -83,7 +91,7 @@ public final class ExecutorDeadlineHttp implements DeadlineHttp, AutoCloseable {
 		catch (ExecutionException e) {
 			Throwable cause = Objects.requireNonNullElse(e.getCause(), e);
 			if (cause instanceof IOException io) {
-				throw io;
+				throw tooLarge(io);
 			}
 			if (cause instanceof Error error) {
 				throw error;
@@ -92,6 +100,56 @@ public final class ExecutorDeadlineHttp implements DeadlineHttp, AutoCloseable {
 			// the callers, so one exception type carries it, the cause kept.
 			throw new IOException("The HTTP exchange failed: " + cause, cause);
 		}
+	}
+
+	/**
+	 * A capped body's exchange, which keeps the subscribers it hands the client (one per response, so a redirect makes
+	 * two) and, when the send fails, throws a breach any of them recorded. The breach cannot be left to the exception
+	 * the client throws: on HTTP/2 the client's cancellation can complete the exchange (with {@code IOException:
+	 * Stream N cancelled}) before it has looked at the body's future, and the breach is then nowhere in the cause
+	 * chain. The subscriber completes its body with the breach before it cancels, so it is always there to find.
+	 */
+	private static <T> HttpResponse<T> sendCapped(HttpClient client, HttpRequest request,
+			HttpResponse.BodyHandler<T> handler) throws IOException, InterruptedException {
+		List<HttpResponse.BodySubscriber<T>> issued = new CopyOnWriteArrayList<>();
+		HttpResponse.BodyHandler<T> watched = info -> {
+			HttpResponse.BodySubscriber<T> subscriber = handler.apply(info);
+			issued.add(subscriber);
+			return subscriber;
+		};
+		try {
+			return client.send(request, watched);
+		}
+		catch (IOException failure) {
+			for (HttpResponse.BodySubscriber<T> subscriber : issued) {
+				CompletableFuture<T> read = subscriber.getBody().toCompletableFuture();
+				if (read.isCompletedExceptionally() && tooLarge(read.exceptionNow()) instanceof BodyTooLargeException breach) {
+					throw breach;
+				}
+			}
+			throw failure;
+		}
+	}
+
+	/**
+	 * A capped body's {@link BodyTooLargeException} as itself: the JDK client's {@code send} rethrows a body's failure
+	 * as a new {@code IOException} with the original as its cause, which would hide the type callers map. Any other
+	 * failure is returned unchanged.
+	 */
+	private static IOException tooLarge(IOException failure) {
+		return tooLarge((Throwable) failure) instanceof BodyTooLargeException breach ? breach : failure;
+	}
+
+	/** The {@link BodyTooLargeException} in {@code failure}'s cause chain, or {@code failure}. */
+	private static Throwable tooLarge(Throwable failure) {
+		Throwable at = failure;
+		for (int depth = 0; at != null && depth < 8; depth++) {
+			if (at instanceof BodyTooLargeException tooLarge) {
+				return tooLarge;
+			}
+			at = at.getCause();
+		}
+		return failure;
 	}
 
 	private static long deadlineNanos(Duration deadline) {

@@ -33,6 +33,9 @@ public interface DeadlineHttp {
 	 * @param deadline positive, and at most about 292 years (what fits in a {@code long} of nanoseconds)
 	 * @throws IllegalArgumentException the deadline is zero, negative or too long; nothing was sent
 	 * @throws TimeoutException     past the deadline; the exchange has been cancelled
+	 * @throws BodyTooLargeException {@code body} is capped ({@code BufferedBody.ofByteArray(long)},
+	 *                              {@code ofString(long)}) and the response's body is larger, declared or streamed;
+	 *                              the exchange has been cancelled. An {@code IOException}, thrown as itself
 	 * @throws IOException          the exchange failed (an {@code HttpTimeoutException} for the request's own timeout),
 	 *                              or failed in any other way, the cause kept
 	 * @throws InterruptedException the calling thread was interrupted while waiting; the exchange has been cancelled
