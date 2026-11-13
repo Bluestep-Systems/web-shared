@@ -18,9 +18,10 @@ import javax.net.ssl.SSLParameters;
 
 /**
  * A client that records the thread its blocking {@code send} ran on, then delegates, or throws {@code failure} instead.
- * Its {@code sendAsync} refuses: {@link ExecutorDeadlineHttp} must never reach it.
+ * Its {@code sendAsync} refuses: {@link ExecutorDeadlineHttp} must never reach it. Not final: a test overrides
+ * {@code send} to stand in for a client behaving as HTTP/2 does.
  */
-final class RecordingHttpClient extends HttpClient {
+class RecordingHttpClient extends HttpClient {
 
 	private final HttpClient delegate;
 	private final AtomicReference<Thread> sender;
