@@ -674,7 +674,29 @@ bluestepLibrary {
 // propagate) and could resolve 6.5.0 beside a group, 129 classes twice. See README.md.
 // ADDITIVE: tenantknowledgebase (web-global's tenant knowledge-base rows, GET /api/contract/tenant-knowledge-base-rows)
 // is the only new package; no existing type changes. `checkClassSet` (part of `check`) proves nothing else moved.
-version = '6.6.0'
+//
+// 6.7.0 puts a tenant-access grant's provenance on the wire (CU-1k5g91bq58m, umbrella CU-1k5g91bq51k): a vouch now makes
+// its global user an Organization Administrator of the tenant, but only when a super or ops wrote it, never a tenant's
+// own administrators. In dto.tenantaccess:
+//   * TenantAccessGrantSource {SUPER, TENANT, OPS}, new: who wrote the grant. OPS (SQL, backfill) is treated like SUPER;
+//     TENANT is catalog-only. Bound by exact constant name only (a @JsonCreator), so an ordinal 0 is never read as
+//     SUPER, and no UNKNOWN default: a source a reader does not know fails to bind rather than provisioning or not.
+//     Declared in config/class-set/new-in-6.6.0.txt, the one list checkClassSet reads for classes beyond 6.5.0's.
+//   * TenantAccessGrantRequest gains an OPTIONAL source (optSource(), effectiveSource()), appended after expiresAt.
+//     Absent or null is read as TENANT, the source that provisions nothing (Brendan's ruling 2026-11-16): a monolith
+//     built before 6.7.0 posts {} or {expiresAt} exactly as before and its grants stay catalog-only, which is what every
+//     grant was before provenance existed. That keeps pre-bump web builds working through the staggered ring rollout.
+//     The 6.6.0 one-argument constructor is kept, so Java callers still compile.
+//   * TenantAccessGrantResponse gains source and a nullable adminProvisionedAt (optAdminProvisionedAt()): when the
+//     monolith provisioned admin membership for the grant, the marker that lets removal touch only memberships a grant
+//     added. A response naming no source binds as TENANT. Both appended at the end, so the older bytes stay where they
+//     were (NullableComponentWireTest holds the 5.5.0 capture plus exactly the appended components). The 6.6.0
+//     four-argument constructor and of(...) are kept, building a TENANT grant that was never provisioned.
+// A MINOR: additive on the wire both ways (an older reader ignores the new response fields, the monolith's
+// WebGlobalClient.mapper() having FAIL_ON_UNKNOWN_PROPERTIES off) and source-compatible. RELEASE ORDER: this artifact,
+// then web-global storing and serving source/adminProvisionedAt, deployed, then the monolith sending SUPER from the super
+// panel.
+version = '6.7.0'
 
 repositories {
     mavenLocal()

@@ -8,16 +8,37 @@ import org.jspecify.annotations.Nullable;
 /**
  * One tenant-access grant as the API reports it.
  *
- * @param user      the global user the grant is for
- * @param grantedAt when the grant was written
- * @param expiresAt when it stops counting, or absent for one that does not — the ordinary case
- * @param live      whether it counts as of this response. Derived by the server rather than left to
- *                  the reader: an expiry in the past and no expiry at all are both common, and
- *                  asking every caller to re-implement the comparison is how two callers come to
- *                  disagree about who has access
+ * @param user               the global user the grant is for
+ * @param grantedAt          when the grant was written
+ * @param expiresAt          when it stops counting, or absent for one that does not — the ordinary case
+ * @param live               whether it counts as of this response. Derived by the server rather than left to
+ *                           the reader: an expiry in the past and no expiry at all are both common, and
+ *                           asking every caller to re-implement the comparison is how two callers come to
+ *                           disagree about who has access
+ * @param source             who wrote the grant (6.7.0). A response that names none (a server before 6.7.0)
+ *                           binds as {@link TenantAccessGrantSource#TENANT}, the source that provisions nothing
+ * @param adminProvisionedAt when the monolith made the grant's user an Organization Administrator of the tenant
+ *                           because of this grant, or absent when it has not (6.7.0). The marker that lets
+ *                           removal take away only the memberships a grant added, never one an administrator gave
+ *                           by hand
  */
 public record TenantAccessGrantResponse(GlobalUserKey user, OffsetDateTime grantedAt,
-		@Nullable OffsetDateTime expiresAt, boolean live) {
+		@Nullable OffsetDateTime expiresAt, boolean live, TenantAccessGrantSource source,
+		@Nullable OffsetDateTime adminProvisionedAt) {
+
+	/** Jackson binds an omitted enum to null whatever the null-marking says: absent means TENANT. */
+	public TenantAccessGrantResponse {
+		source = source == null ? TenantAccessGrantSource.TENANT : source;
+	}
+
+	/**
+	 * A grant as a server before 6.7.0 reported it: source {@link TenantAccessGrantSource#TENANT}, never provisioned.
+	 * Kept so Java callers of the 6.6.0 constructor still compile.
+	 */
+	public TenantAccessGrantResponse(GlobalUserKey user, OffsetDateTime grantedAt, @Nullable OffsetDateTime expiresAt,
+			boolean live) {
+		this(user, grantedAt, expiresAt, live, TenantAccessGrantSource.TENANT, null);
+	}
 
 	/**
 	 * Builds a response, settling {@code live} against {@code asOf}.
@@ -26,13 +47,29 @@ public record TenantAccessGrantResponse(GlobalUserKey user, OffsetDateTime grant
 	 * have no entity classes, and a DTO that needed one would not be shareable at all.</p>
 	 */
 	public static TenantAccessGrantResponse of(GlobalUserKey user, OffsetDateTime grantedAt,
-			Optional<OffsetDateTime> expiresAt, OffsetDateTime asOf) {
+			Optional<OffsetDateTime> expiresAt, OffsetDateTime asOf, TenantAccessGrantSource source,
+			Optional<OffsetDateTime> adminProvisionedAt) {
 		return new TenantAccessGrantResponse(user, grantedAt, expiresAt.orElse(null),
-				expiresAt.map(end -> end.isAfter(asOf)).orElse(true));
+				expiresAt.map(end -> end.isAfter(asOf)).orElse(true), source, adminProvisionedAt.orElse(null));
+	}
+
+	/**
+	 * {@link #of(GlobalUserKey, OffsetDateTime, Optional, OffsetDateTime, TenantAccessGrantSource, Optional)} for a
+	 * grant with no provenance, as 6.6.0 built one: source {@link TenantAccessGrantSource#TENANT}, never provisioned.
+	 * Kept so Java callers of the 6.6.0 factory still compile.
+	 */
+	public static TenantAccessGrantResponse of(GlobalUserKey user, OffsetDateTime grantedAt,
+			Optional<OffsetDateTime> expiresAt, OffsetDateTime asOf) {
+		return of(user, grantedAt, expiresAt, asOf, TenantAccessGrantSource.TENANT, Optional.empty());
 	}
 
 	/** {@link #expiresAt}, as an {@code Optional}. */
 	public Optional<OffsetDateTime> optExpiresAt() {
 		return Optional.ofNullable(expiresAt);
+	}
+
+	/** {@link #adminProvisionedAt}, as an {@code Optional}. */
+	public Optional<OffsetDateTime> optAdminProvisionedAt() {
+		return Optional.ofNullable(adminProvisionedAt);
 	}
 }

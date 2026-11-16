@@ -43,6 +43,7 @@ import dev.bluestep.global.dto.tenantaccess.GlobalUserKey;
 import dev.bluestep.global.dto.tenantaccess.ResellerKey;
 import dev.bluestep.global.dto.tenantaccess.TenantAccessGrantRequest;
 import dev.bluestep.global.dto.tenantaccess.TenantAccessGrantResponse;
+import dev.bluestep.global.dto.tenantaccess.TenantAccessGrantSource;
 
 /**
  * Holds 6.0.0's move from {@code Optional<T>} record components to {@code @Nullable} ones to an
@@ -55,6 +56,10 @@ import dev.bluestep.global.dto.tenantaccess.TenantAccessGrantResponse;
  * must still serialize to those bytes, and those bytes must bind back to a value that serializes to them
  * again. The {@code ai} package's one-character wire is pinned separately, by
  * {@link LegacyWireCompatTest} and {@link OptionalWireContractTest}.</p>
+ *
+ * <p>A record that gained components after 5.5.0 is held to 5.5.0's bytes with exactly its new components
+ * appended ({@link #ADDED_SINCE_5_5_0}): record components serialize in declaration order, so a component
+ * added at the end leaves every older byte where it was.</p>
  */
 class NullableComponentWireTest {
 
@@ -67,6 +72,19 @@ class NullableComponentWireTest {
 	private static final byte[] FLAGS = {1, 2};
 	private static final GlobalUserKey USER = new GlobalUserKey(222_222L, -51_001L);
 	private static final ResellerKey RESELLER = new ResellerKey(111_222L, 1L);
+
+	/**
+	 * The components a case's record gained after 5.5.0, as the JSON its 5.5.0 bytes are extended by. 6.7.0
+	 * added a tenant-access grant's {@code source} (nullable on the request; on the response an absent one binds as
+	 * TENANT) and the response's nullable {@code adminProvisionedAt}, each held here to the same absent-or-present
+	 * rule as every other nullable component.
+	 */
+	private static final Map<String, String> ADDED_SINCE_5_5_0 = Map.of(
+			"tenantaccess.TenantAccessGrantRequest.absent", "\"source\":null",
+			"tenantaccess.TenantAccessGrantRequest.present", "\"source\":\"SUPER\"",
+			"tenantaccess.TenantAccessGrantResponse.absent", "\"source\":\"OPS\",\"adminProvisionedAt\":null",
+			"tenantaccess.TenantAccessGrantResponse.present",
+			"\"source\":\"SUPER\",\"adminProvisionedAt\":\"2026-02-03T11:05:06Z\"");
 
 	static Map<String, Object> cases() {
 		Map<String, Object> c = new LinkedHashMap<>();
@@ -107,10 +125,13 @@ class NullableComponentWireTest {
 				null, null, null));
 		c.put("lookup.Icd10Option.present", new Icd10Option("Label", "A00", "short", "long", "Y", "cat",
 				"ns", "no", "or", "mj"));
-		c.put("tenantaccess.TenantAccessGrantRequest.absent", new TenantAccessGrantRequest(null));
-		c.put("tenantaccess.TenantAccessGrantRequest.present", new TenantAccessGrantRequest(T1));
-		c.put("tenantaccess.TenantAccessGrantResponse.absent", new TenantAccessGrantResponse(USER, T1, null, true));
-		c.put("tenantaccess.TenantAccessGrantResponse.present", new TenantAccessGrantResponse(USER, T1, T2, false));
+		c.put("tenantaccess.TenantAccessGrantRequest.absent", new TenantAccessGrantRequest(null, null));
+		c.put("tenantaccess.TenantAccessGrantRequest.present", new TenantAccessGrantRequest(T1,
+				TenantAccessGrantSource.SUPER));
+		c.put("tenantaccess.TenantAccessGrantResponse.absent", new TenantAccessGrantResponse(USER, T1, null, true,
+				TenantAccessGrantSource.OPS, null));
+		c.put("tenantaccess.TenantAccessGrantResponse.present", new TenantAccessGrantResponse(USER, T1, T2, false,
+				TenantAccessGrantSource.SUPER, T2));
 		c.put("reseller.ResellerRecordResponse.absent", new ResellerRecordResponse(RESELLER, null, null,
 				null, null, null, icons(null), 0L, null, null));
 		c.put("reseller.ResellerRecordResponse.present", new ResellerRecordResponse(RESELLER, "House",
@@ -150,7 +171,7 @@ class NullableComponentWireTest {
 		Map<String, Object> cases = cases();
 		assertEquals(golden.keySet(), cases.keySet(), "the cases and the 5.5.0 capture must name the same values");
 		for (Map.Entry<String, Object> c : cases.entrySet()) {
-			assertEquals(golden.get(c.getKey()), MAPPER.writeValueAsString(c.getValue()), c.getKey());
+			assertEquals(expected(golden, c.getKey()), MAPPER.writeValueAsString(c.getValue()), c.getKey());
 		}
 	}
 
@@ -158,10 +179,35 @@ class NullableComponentWireTest {
 	void every550PayloadBindsAndWritesBackUnchanged() throws Exception {
 		Map<String, String> golden = golden();
 		for (Map.Entry<String, Object> c : cases().entrySet()) {
-			String json = golden.get(c.getKey());
+			String json = expected(golden, c.getKey());
 			Object bound = MAPPER.readValue(json, c.getValue().getClass());
 			assertEquals(json, MAPPER.writeValueAsString(bound), c.getKey());
 		}
+	}
+
+	@Test
+	void everyAddedNullableComponentBindsAbsentFromAMissingKey() throws Exception {
+		String unextended = golden().get("tenantaccess.TenantAccessGrantResponse.absent");
+		String sourceOnly = unextended.substring(0, unextended.length() - 1) + ",\"source\":\"OPS\"}";
+		TenantAccessGrantResponse bound = MAPPER.readValue(sourceOnly, TenantAccessGrantResponse.class);
+		assertEquals(cases().get("tenantaccess.TenantAccessGrantResponse.absent"), bound);
+		assertTrue(bound.optAdminProvisionedAt().isEmpty());
+
+		assertEquals(cases().get("tenantaccess.TenantAccessGrantRequest.absent"), MAPPER.readValue(
+				golden().get("tenantaccess.TenantAccessGrantRequest.absent"), TenantAccessGrantRequest.class));
+		TenantAccessGrantResponse preProvenance = MAPPER.readValue(unextended, TenantAccessGrantResponse.class);
+		assertEquals(TenantAccessGrantSource.TENANT, preProvenance.source());
+		assertTrue(preProvenance.optAdminProvisionedAt().isEmpty());
+	}
+
+	/** A case's 5.5.0 bytes, extended by the components its record gained since ({@link #ADDED_SINCE_5_5_0}). */
+	private static String expected(Map<String, String> golden, String key) {
+		String bytes = golden.get(key);
+		String added = ADDED_SINCE_5_5_0.get(key);
+		if (added == null) {
+			return bytes;
+		}
+		return bytes.substring(0, bytes.length() - 1) + "," + added + "}";
 	}
 
 	private static Map<String, String> golden() throws IOException {
