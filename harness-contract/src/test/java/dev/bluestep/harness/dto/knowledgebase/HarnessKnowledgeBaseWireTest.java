@@ -22,7 +22,7 @@ class HarnessKnowledgeBaseWireTest {
 
 	static final JsonMapper MAPPER = JsonMapper.builder().build();
 
-	static final HarnessTenantKnowledgeBaseRows FOUND = HarnessTenantKnowledgeBaseRows.found("U137803", List.of(
+	static final HarnessTenantKnowledgeBaseRows FOUND = HarnessTenantKnowledgeBaseRows.found("U9000000000001", List.of(
 		new HarnessKnowledgeBaseRow(UUID.fromString("3f0c6a52-8e1d-4c3b-9a57-2b8f4e9d1c07"), "handbook",
 			"Employee Handbook", "main"),
 		new HarnessKnowledgeBaseRow(UUID.fromString("9b2e4d71-0f6a-4e85-b3c9-7d1a5f8e2c40"), "policies",
@@ -45,8 +45,8 @@ class HarnessKnowledgeBaseWireTest {
 
 	@Test
 	void theEmptyAndAbsentSamplesBindAndRoundTrip() {
-		HarnessTenantKnowledgeBaseRows empty = HarnessTenantKnowledgeBaseRows.found("U137803", List.of());
-		HarnessTenantKnowledgeBaseRows absent = HarnessTenantKnowledgeBaseRows.absent("U142133");
+		HarnessTenantKnowledgeBaseRows empty = HarnessTenantKnowledgeBaseRows.found("U9000000000001", List.of());
+		HarnessTenantKnowledgeBaseRows absent = HarnessTenantKnowledgeBaseRows.absent("U9000000000002");
 		assertThat(read(HarnessWireSamples.TENANT_KNOWLEDGE_BASE_ROWS_FOUND_EMPTY.json())).isEqualTo(empty);
 		assertThat(read(HarnessWireSamples.TENANT_KNOWLEDGE_BASE_ROWS_ABSENT.json())).isEqualTo(absent);
 		assertThat(tree(MAPPER.writeValueAsString(absent)))
@@ -92,7 +92,7 @@ class HarnessKnowledgeBaseWireTest {
 	@Test
 	void anAnswerCannotChangeOnceBuilt() {
 		List<HarnessKnowledgeBaseRow> rows = new ArrayList<>(FOUND.knowledgeBases());
-		HarnessTenantKnowledgeBaseRows answer = HarnessTenantKnowledgeBaseRows.found("U137803", rows);
+		HarnessTenantKnowledgeBaseRows answer = HarnessTenantKnowledgeBaseRows.found("U9000000000001", rows);
 		rows.clear();
 		assertThat(answer.knowledgeBases()).hasSize(2);
 		assertThatThrownBy(() -> answer.knowledgeBases().clear()).isInstanceOf(UnsupportedOperationException.class);

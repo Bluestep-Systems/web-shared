@@ -44,7 +44,7 @@ class HarnessKnowledgeBaseValidationTest {
 	@Test
 	void whatWebWritesIsValid() {
 		assertThat(violations(HarnessKnowledgeBaseWireTest.FOUND)).isEmpty();
-		assertThat(violations(HarnessTenantKnowledgeBaseRows.absent("U142133"))).isEmpty();
+		assertThat(violations(HarnessTenantKnowledgeBaseRows.absent("U9000000000002"))).isEmpty();
 		assertThat(violations(row("a", "A", "main"))).isEmpty();
 		assertThat(violations(row("a".repeat(64), "t".repeat(200), "b".repeat(200)))).isEmpty();
 		assertThat(violations(HarnessTenantKnowledgeBaseRows.found("U9223372036854775807", List.of()))).isEmpty();
