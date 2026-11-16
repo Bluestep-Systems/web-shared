@@ -674,7 +674,28 @@ bluestepLibrary {
 // propagate) and could resolve 6.5.0 beside a group, 129 classes twice. See README.md.
 // ADDITIVE: tenantknowledgebase (web-global's tenant knowledge-base rows, GET /api/contract/tenant-knowledge-base-rows)
 // is the only new package; no existing type changes. `checkClassSet` (part of `check`) proves nothing else moved.
-version = '6.6.0'
+//
+// 7.0.0 puts a tenant-access grant's provenance on the wire (CU-1k5g91bq58m, umbrella CU-1k5g91bq51k): a vouch now makes
+// its global user an Organization Administrator of the tenant, but only when a super or ops wrote it, never a tenant's
+// own administrators. In dto.tenantaccess:
+//   * TenantAccessGrantSource {SUPER, TENANT, OPS}, new: who wrote the grant. OPS (SQL, backfill) is treated like SUPER;
+//     TENANT is catalog-only. Bound by exact constant name only (a @JsonCreator), so an ordinal 0 is never read as
+//     SUPER, and no UNKNOWN default: a source a reader does not know fails to bind rather than provisioning or not.
+//     Declared in config/class-set/new-in-6.6.0.txt, the one list checkClassSet reads for classes beyond 6.5.0's.
+//   * TenantAccessGrantRequest gains a REQUIRED @NotNull source, appended after expiresAt.
+//   * TenantAccessGrantResponse gains source and a nullable adminProvisionedAt (optAdminProvisionedAt()): when the
+//     monolith provisioned admin membership for the grant, the marker that lets removal touch only memberships a grant
+//     added. Both appended at the end, so the older bytes stay where they were (NullableComponentWireTest holds the
+//     5.5.0 capture plus exactly the appended components). of(...) takes the two as its last parameters.
+// A MAJOR, on the 3.0.0 precedent (a required discriminator on a request) and the 6.0.0 one (source-breaking): every
+// Java caller of either record's constructor or of(...) must change, and no compatibility constructor is possible
+// without inventing a default source, which is exactly what the field exists to stop. WIRE-BREAKING on every live
+// tag: the shared records are bound by every tag's controllers, so once web-global binds 7.0.0 a 6.x monolith posting
+// {} or {expiresAt} gets a 400 naming `source`. Responses are additive for an older reader (FAIL_ON_UNKNOWN_PROPERTIES
+// is off in the monolith's WebGlobalClient.mapper()). RELEASE ORDER: this artifact, then web-global declaring and
+// serving the 7.0.0 contract (and deciding what pre-7.0.0 tags do with a grant that names no source), deployed, then
+// the monolith bumping its dependency and sending `source`.
+version = '7.0.0'
 
 repositories {
     mavenLocal()
