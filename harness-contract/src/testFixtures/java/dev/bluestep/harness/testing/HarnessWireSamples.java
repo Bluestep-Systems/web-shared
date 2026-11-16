@@ -12,13 +12,13 @@ import java.util.Objects;
  */
 public enum HarnessWireSamples {
 
-	/** U900001 found, two rows in name order. */
+	/** U9000000000001 found, two rows in name order. */
 	TENANT_KNOWLEDGE_BASE_ROWS_FOUND("tenant-knowledge-base-rows-found.json"),
 
-	/** U900001 found, no rows (the schema has no knowledge_base table yet, or no knowledge bases). */
+	/** U9000000000001 found, no rows (the schema has no knowledge_base table yet, or no knowledge bases). */
 	TENANT_KNOWLEDGE_BASE_ROWS_FOUND_EMPTY("tenant-knowledge-base-rows-found-empty.json"),
 
-	/** U900002 absent from this namespace. */
+	/** U9000000000002 absent from this namespace. */
 	TENANT_KNOWLEDGE_BASE_ROWS_ABSENT("tenant-knowledge-base-rows-absent.json"),
 
 	/** What a newer web might answer: a state and a field 1.0.0 does not know. Binds as UNKNOWN. */
