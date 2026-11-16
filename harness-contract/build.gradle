@@ -17,7 +17,10 @@ plugins {
 // FOUND/ABSENT/UNKNOWN, rows), HarnessKnowledgeBaseRow (web's KB uuid, name, title, live branch), HarnessPaths.
 // Test fixtures: HarnessWireSamples, JSON both sides' tests read (web's controller answers them, web-global's client
 // is served them by a stub).
-version = '1.0.0'
+//
+// 1.0.1 (CU-86bd2g5jc): the test fixtures' tenant ids are fictional (U900001, U900002), where 1.0.0 shipped two real
+// tenant schemas in the published jar. Same wire, same shapes; only the sample ids differ.
+version = '1.0.1'
 
 dependencies {
     // `api`, as the root DTO library: the annotations are part of the published contract.
