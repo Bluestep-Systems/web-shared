@@ -2,5 +2,5 @@ dev/bluestep/global/dto/tenantknowledgebase/TenantKnowledgeBaseRow.class
 dev/bluestep/global/dto/tenantknowledgebase/TenantKnowledgeBaseRowsResponse.class
 dev/bluestep/global/dto/tenantknowledgebase/TenantKnowledgeBaseRowsState.class
 dev/bluestep/global/dto/tenantknowledgebase/package-info.class
-# 7.0.0 (CU-1k5g91bq58m): who wrote a tenant-access grant
+# 6.7.0 (CU-1k5g91bq58m): who wrote a tenant-access grant
 dev/bluestep/global/dto/tenantaccess/TenantAccessGrantSource.class

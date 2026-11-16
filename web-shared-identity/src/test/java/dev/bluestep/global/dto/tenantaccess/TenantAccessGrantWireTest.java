@@ -25,8 +25,8 @@ import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import jakarta.validation.ValidatorFactory;
 
-/** The 7.0.0 grant provenance: who wrote a tenant-access grant, and whether it provisioned admin membership. */
-@DisplayName("7.0.0 tenant-access grant source")
+/** The 6.7.0 grant provenance: who wrote a tenant-access grant, and whether it provisioned admin membership. */
+@DisplayName("6.7.0 tenant-access grant source")
 class TenantAccessGrantWireTest {
 
 	private static final ObjectMapper JACKSON3 = JsonMapper.builder()
@@ -72,13 +72,31 @@ class TenantAccessGrantWireTest {
 	}
 
 	@Test
-	@DisplayName("a request that does not name its source is a violation: the 6.x bodies {} and {expiresAt} are refused")
-	void sourceIsRequired() {
-		assertEquals(Set.of("source"), violatedPaths(JACKSON3.readValue("{}", TenantAccessGrantRequest.class)));
-		assertEquals(Set.of("source"), violatedPaths(JACKSON3.readValue(
-				"{\"expiresAt\":\"2026-12-01T00:00:00Z\"}", TenantAccessGrantRequest.class)));
-		assertEquals(Set.of("source"), violatedPaths(JACKSON3.readValue(
-				"{\"source\":null}", TenantAccessGrantRequest.class)));
+	@DisplayName("a request that names no source binds it absent and reads as TENANT: the 6.6.0 bodies still bind")
+	void absentSourceIsTenant() {
+		for (String body : List.of("{}", "{\"expiresAt\":\"2026-12-01T00:00:00Z\"}", "{\"source\":null}")) {
+			TenantAccessGrantRequest request = JACKSON3.readValue(body, TenantAccessGrantRequest.class);
+			assertEquals(Optional.empty(), request.optSource(), body);
+			assertEquals(TenantAccessGrantSource.TENANT, request.effectiveSource(), body);
+			assertEquals(Set.of(), violatedPaths(request), body);
+		}
+		assertEquals(Optional.of(LATER), JACKSON3.readValue("{\"expiresAt\":\"2026-12-01T00:00:00Z\"}",
+				TenantAccessGrantRequest.class).optExpiresAt());
+		assertEquals(new TenantAccessGrantRequest(LATER, null), new TenantAccessGrantRequest(LATER));
+		assertEquals(TenantAccessGrantSource.SUPER,
+				new TenantAccessGrantRequest(null, TenantAccessGrantSource.SUPER).effectiveSource());
+	}
+
+	@Test
+	@DisplayName("the 6.6.0 response constructor and of(...) build a TENANT grant that was never provisioned")
+	void legacyResponseBuildersAreTenant() {
+		TenantAccessGrantResponse built = new TenantAccessGrantResponse(USER, GRANTED, null, true);
+		assertEquals(TenantAccessGrantSource.TENANT, built.source());
+		assertEquals(Optional.empty(), built.optAdminProvisionedAt());
+		assertEquals(built, TenantAccessGrantResponse.of(USER, GRANTED, Optional.empty(), GRANTED));
+		assertEquals(TenantAccessGrantSource.TENANT, JACKSON3.readValue("{\"user\":{\"classid\":222222,\"seqnum\":-51001},"
+				+ "\"grantedAt\":\"2026-11-16T10:00:00Z\",\"expiresAt\":null,\"live\":true,\"source\":null}",
+				TenantAccessGrantResponse.class).source());
 	}
 
 	@Test

@@ -3,9 +3,9 @@ package dev.bluestep.global.dto.tenantaccess;
 import com.fasterxml.jackson.annotation.JsonCreator;
 
 /**
- * Who wrote a tenant-access grant (7.0.0). The monolith decides from it whether a grant makes its global user one of
+ * Who wrote a tenant-access grant (6.7.0). The monolith decides from it whether a grant makes its global user one of
  * the tenant's Organization Administrators: a grant from {@link #SUPER} or {@link #OPS} does, one from {@link #TENANT}
- * never does.
+ * never does. A grant that names no source is read as {@link #TENANT}.
  *
  * <p>No {@code UNKNOWN} default, on purpose: a source a reader does not know must fail to bind rather than be read
  * as one that provisions, or as one that does not. A later source arrives under a later tag.</p>

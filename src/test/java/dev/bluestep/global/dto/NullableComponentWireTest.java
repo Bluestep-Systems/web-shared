@@ -74,13 +74,14 @@ class NullableComponentWireTest {
 	private static final ResellerKey RESELLER = new ResellerKey(111_222L, 1L);
 
 	/**
-	 * The components a case's record gained after 5.5.0, as the JSON its 5.5.0 bytes are extended by. 7.0.0
-	 * added a tenant-access grant's required {@code source} and, on the response, the nullable
-	 * {@code adminProvisionedAt}, held here to the same absent-or-present rule as every other nullable component.
+	 * The components a case's record gained after 5.5.0, as the JSON its 5.5.0 bytes are extended by. 6.7.0
+	 * added a tenant-access grant's {@code source} (nullable on the request; on the response an absent one binds as
+	 * TENANT) and the response's nullable {@code adminProvisionedAt}, each held here to the same absent-or-present
+	 * rule as every other nullable component.
 	 */
 	private static final Map<String, String> ADDED_SINCE_5_5_0 = Map.of(
-			"tenantaccess.TenantAccessGrantRequest.absent", "\"source\":\"SUPER\"",
-			"tenantaccess.TenantAccessGrantRequest.present", "\"source\":\"TENANT\"",
+			"tenantaccess.TenantAccessGrantRequest.absent", "\"source\":null",
+			"tenantaccess.TenantAccessGrantRequest.present", "\"source\":\"SUPER\"",
 			"tenantaccess.TenantAccessGrantResponse.absent", "\"source\":\"OPS\",\"adminProvisionedAt\":null",
 			"tenantaccess.TenantAccessGrantResponse.present",
 			"\"source\":\"SUPER\",\"adminProvisionedAt\":\"2026-02-03T11:05:06Z\"");
@@ -124,10 +125,9 @@ class NullableComponentWireTest {
 				null, null, null));
 		c.put("lookup.Icd10Option.present", new Icd10Option("Label", "A00", "short", "long", "Y", "cat",
 				"ns", "no", "or", "mj"));
-		c.put("tenantaccess.TenantAccessGrantRequest.absent", new TenantAccessGrantRequest(null,
-				TenantAccessGrantSource.SUPER));
+		c.put("tenantaccess.TenantAccessGrantRequest.absent", new TenantAccessGrantRequest(null, null));
 		c.put("tenantaccess.TenantAccessGrantRequest.present", new TenantAccessGrantRequest(T1,
-				TenantAccessGrantSource.TENANT));
+				TenantAccessGrantSource.SUPER));
 		c.put("tenantaccess.TenantAccessGrantResponse.absent", new TenantAccessGrantResponse(USER, T1, null, true,
 				TenantAccessGrantSource.OPS, null));
 		c.put("tenantaccess.TenantAccessGrantResponse.present", new TenantAccessGrantResponse(USER, T1, T2, false,
@@ -192,6 +192,12 @@ class NullableComponentWireTest {
 		TenantAccessGrantResponse bound = MAPPER.readValue(sourceOnly, TenantAccessGrantResponse.class);
 		assertEquals(cases().get("tenantaccess.TenantAccessGrantResponse.absent"), bound);
 		assertTrue(bound.optAdminProvisionedAt().isEmpty());
+
+		assertEquals(cases().get("tenantaccess.TenantAccessGrantRequest.absent"), MAPPER.readValue(
+				golden().get("tenantaccess.TenantAccessGrantRequest.absent"), TenantAccessGrantRequest.class));
+		TenantAccessGrantResponse preProvenance = MAPPER.readValue(unextended, TenantAccessGrantResponse.class);
+		assertEquals(TenantAccessGrantSource.TENANT, preProvenance.source());
+		assertTrue(preProvenance.optAdminProvisionedAt().isEmpty());
 	}
 
 	/** A case's 5.5.0 bytes, extended by the components its record gained since ({@link #ADDED_SINCE_5_5_0}). */
