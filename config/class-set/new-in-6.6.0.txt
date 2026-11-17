@@ -4,3 +4,5 @@ dev/bluestep/global/dto/tenantknowledgebase/TenantKnowledgeBaseRowsState.class
 dev/bluestep/global/dto/tenantknowledgebase/package-info.class
 # 6.7.0 (CU-1k5g91bq58m): who wrote a tenant-access grant
 dev/bluestep/global/dto/tenantaccess/TenantAccessGrantSource.class
+# 6.8.0 (CU-86bcz7ruc): who deletes a global knowledge base or disconnects a tenant
+dev/bluestep/global/dto/knowledgebase/KnowledgeBaseActorRequest.class

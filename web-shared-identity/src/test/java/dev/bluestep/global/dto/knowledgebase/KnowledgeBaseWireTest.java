@@ -123,6 +123,30 @@ class KnowledgeBaseWireTest {
 	}
 
 	@Test
+	void anActorBody_bindsItsActor() throws Exception {
+		KnowledgeBaseActorRequest read = JSON.readValue(
+				"{\"actor\":{\"kind\":\"global-user\",\"user\":{\"classid\":222222,\"seqnum\":-180}}}",
+				KnowledgeBaseActorRequest.class);
+
+		assertEquals(GLOBAL_USER, read.optActor().orElseThrow());
+	}
+
+	@Test
+	void anActorBody_withNoActorOrANullOne_bindsAsAbsent() throws Exception {
+		assertTrue(JSON.readValue("{}", KnowledgeBaseActorRequest.class).optActor().isEmpty());
+		assertTrue(JSON.readValue("{\"actor\":null}", KnowledgeBaseActorRequest.class).optActor().isEmpty());
+	}
+
+	@Test
+	void anActorBody_writesItsActorUnderItsOwnKey() throws Exception {
+		String json = JSON.writeValueAsString(new KnowledgeBaseActorRequest(GLOBAL_USER));
+
+		assertEquals(GLOBAL_USER,
+				JSON.readValue(json, KnowledgeBaseActorRequest.class).optActor().orElseThrow());
+		assertTrue(json.startsWith("{\"actor\":{"), json);
+	}
+
+	@Test
 	void aRefusal_writesItsReasonsByName() throws Exception {
 		String json = JSON.writeValueAsString(
 				new GlobalKnowledgeBaseWriteRefusal(Set.of(GlobalKnowledgeBaseWriteRefusal.Reason.NAME_TAKEN)));

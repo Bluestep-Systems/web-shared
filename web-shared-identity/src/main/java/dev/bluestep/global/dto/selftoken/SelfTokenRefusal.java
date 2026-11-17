@@ -59,7 +59,8 @@ public record SelfTokenRefusal(Reason reason, @Nullable String scope, @Nullable 
 		SCOPE_ESCALATION,
 		/** 409: the owner already has a token with this alias (expired ones included, until revoked). */
 		ALIAS_TAKEN,
-		/** 403: {@code kb:rewrite} for an owner who is not a history manager now. */
+		/** 403: {@code kb:rewrite}, or from 6.8.0 {@code kb:purge}, for an owner who is not a history manager now;
+		 *  {@code scope} names which. Reused rather than a new reason so that an older gateway still binds it. */
 		REWRITE_NOT_PERMITTED,
 		/** 403: a token lacking {@code mcp} while web-global's restricted-mint switch is off. */
 		RESTRICTED_MINT_DISABLED,

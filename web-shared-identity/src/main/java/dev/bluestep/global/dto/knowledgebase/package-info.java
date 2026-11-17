@@ -8,7 +8,8 @@
  *       {@link GlobalKnowledgeBaseCreateRequest} creates one and {@link GlobalKnowledgeBasePatchRequest}
  *       changes its title or live branch.</li>
  *   <li>{@link KnowledgeBaseTenantConnection} is one tenant connected to one knowledge base;
- *       {@link KnowledgeBaseConnectRequest} makes one.</li>
+ *       {@link KnowledgeBaseConnectRequest} makes one. {@link KnowledgeBaseActorRequest} names who
+ *       deletes a knowledge base or disconnects a tenant (from 6.8.0).</li>
  *   <li>A write that something stands in the way of answers {@code 409} with a
  *       {@link GlobalKnowledgeBaseWriteRefusal}.</li>
  * </ul>
@@ -19,8 +20,9 @@
  * which knowledge bases exist and which tenants may read each one. The monolith reads the repo from
  * the forge and serves it. A global knowledge base's repo is {@value KnowledgeBaseName#GLOBAL_REPO_OWNER}
  * {@code /kb-<name>} in the fleet's forge ({@link KnowledgeBaseName#globalRepoPath()}). It is derived
- * from the name and never stored. web-global does not create, check or delete it: for now ops makes
- * it by hand.</p>
+ * from the name and never stored. web-global's registry does not create, check or delete it. From 6.8.0
+ * web-global's gateway does: it creates the repo and protects its live branch before it registers the
+ * knowledge base, and archives the repo before it deletes the registration.</p>
  *
  * <h2>One rule for names and branches</h2>
  *
