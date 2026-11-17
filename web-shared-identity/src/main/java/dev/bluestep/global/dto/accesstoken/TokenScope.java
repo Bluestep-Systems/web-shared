@@ -34,7 +34,16 @@ public enum TokenScope {
 	/** Reserved: marketplace push is refused at the proxy in release 1 whatever the scope. */
 	REGISTRY_PUSH("registry:push"),
 	/** Self-service token management, /api/v1/tokens (TK1). */
-	TOKENS_SELF("tokens:self");
+	TOKENS_SELF("tokens:self"),
+	/** Manage global knowledge bases through the gateway (from 6.8.0): register, retitle, move the live branch,
+	 *  delete (rename and archive the repo), connect and disconnect tenants. The token's owner must also be a
+	 *  super; the scope alone permits nothing. */
+	KB_MANAGE("kb:manage"),
+	/** Purge a deleted global knowledge base's archived repo from the forge, irreversibly (from 6.8.0). Like
+	 *  {@link #KB_REWRITE}, one of three conditions, all required: the token's owner is a super, holds an unrevoked
+	 *  history-manager grant from another super, and the token carries this scope. {@code kb:rewrite} does not imply
+	 *  it, nor it {@code kb:rewrite}. Never granted by a migration or by the legacy rule. */
+	KB_PURGE("kb:purge");
 
 	private final String wire;
 

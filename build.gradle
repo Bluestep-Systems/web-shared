@@ -696,7 +696,17 @@ bluestepLibrary {
 // WebGlobalClient.mapper() having FAIL_ON_UNKNOWN_PROPERTIES off) and source-compatible. RELEASE ORDER: this artifact,
 // then web-global storing and serving source/adminProvisionedAt, deployed, then the monolith sending SUPER from the super
 // panel.
-version = '6.7.0'
+// 6.8.0 adds global knowledge-base management through the gateway (CU-86bcz7ruc, G3). ADDITIVE, source-compatible:
+//   * dto.knowledgebase.KnowledgeBaseActorRequest(@Nullable TenantActor actor), new: the optional body of the two
+//     registry DELETEs (a knowledge base; a tenant's connection), so the gateway's key can name the global user who
+//     deletes, as it already does for create/patch/connect. web-global accepts it on every tag (it only widens what a
+//     DELETE accepts). Declared in config/class-set/new-in-6.6.0.txt.
+//   * TokenScope gains KB_MANAGE ("kb:manage": the gateway's KB management routes, owner must be a super) and
+//     KB_PURGE ("kb:purge": irreversibly purging a deleted KB's archived repo; owner must be a super AND a history
+//     manager, as for kb:rewrite). Both namespaced, so an older reader grants a token naming them nothing, never mcp.
+//     SelfTokenRefusal's REWRITE_NOT_PERMITTED now also covers kb:purge (its scope says which), so no new reason.
+// A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_8_0), deployed, then the gateway asking 6.8.0.
+version = '6.8.0'
 
 repositories {
     mavenLocal()

@@ -88,6 +88,18 @@ class GatewayContractWireTest {
 		assertEquals("kb:read", TokenScope.KB_READ.wire());
 		assertEquals("tokens:self", TokenScope.TOKENS_SELF.wire());
 		assertEquals("kb:rewrite", TokenScope.KB_REWRITE.wire());
+		assertEquals("kb:manage", TokenScope.KB_MANAGE.wire());
+		assertEquals("kb:purge", TokenScope.KB_PURGE.wire());
+	}
+
+	/** 6.8.0: the two management scopes parse exactly, and neither is the other or kb:rewrite. */
+	@Test
+	void theManagementScopesParseExactly() {
+		assertEquals(Optional.of(TokenScope.KB_MANAGE), TokenScope.fromWire("kb:manage"));
+		assertEquals(Optional.of(TokenScope.KB_PURGE), TokenScope.fromWire("kb:purge"));
+		assertEquals(Optional.empty(), TokenScope.fromWire("KB:MANAGE"));
+		assertEquals(Optional.empty(), TokenScope.fromWire("kb:purge "));
+		assertEquals(Optional.empty(), TokenScope.fromWire("kb:delete"));
 	}
 
 	@Test
@@ -97,7 +109,8 @@ class GatewayContractWireTest {
 		assertEquals(Optional.empty(), TokenScope.fromWire("kb:rewrite "));
 		assertEquals(Optional.empty(), TokenScope.fromWire("kb:force"));
 		assertEquals(Optional.empty(), TokenScope.fromWire("kb:*"));
-		assertEquals(Set.of("mcp", "kb:read", "kb:push", "kb:rewrite", "registry:read", "registry:push", "tokens:self"),
+		assertEquals(Set.of("mcp", "kb:read", "kb:push", "kb:rewrite", "registry:read", "registry:push", "tokens:self",
+				"kb:manage", "kb:purge"),
 				Arrays.stream(TokenScope.values()).map(TokenScope::wire).collect(Collectors.toSet()));
 	}
 
