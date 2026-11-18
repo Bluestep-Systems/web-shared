@@ -706,7 +706,21 @@ bluestepLibrary {
 //     manager, as for kb:rewrite). Both namespaced, so an older reader grants a token naming them nothing, never mcp.
 //     SelfTokenRefusal's REWRITE_NOT_PERMITTED now also covers kb:purge (its scope says which), so no new reason.
 // A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_8_0), deployed, then the gateway asking 6.8.0.
-version = '6.8.0'
+// 6.9.0 lets a caller list the global knowledge bases in one call (CU-1k5g91bqaj7, W4: the gateway's Console GraphQL).
+// ADDITIVE, source-compatible:
+//   * dto.knowledgebase.GlobalKnowledgeBaseListEntry, new: a row of GET /global-knowledge-bases from 6.9.0, which is
+//     GlobalKnowledgeBase's eight members (same names, same order) plus the row's version (the ETag's value) and its
+//     connections (KnowledgeBaseTenantConnection, as /{id}/tenants lists them). A reader binding a row as a
+//     GlobalKnowledgeBase, unknown members ignored, still reads it. Tags before 6.9.0 keep their plain rows. Declared in
+//     config/class-set/new-in-6.6.0.txt.
+//   * dto.globaluserrecord.UntenantedLinkedAccountLookupRequest, new (CU-1k5g91bqbk7, SSO1: the gateway's sign-in with
+//     Microsoft): POST /global-user-records/lookups/untenanted/by-linked-account from 6.9.0, the (issuer, sub) of an
+//     ID token in, the GlobalUserRecordResponse out (its reseller is the account's restriction, as data) or a 404. At
+//     no tenant, as the 6.4.0 untenanted username lookup: every account carrying the identity resolves. Declared in
+//     config/class-set/new-in-6.6.0.txt.
+// A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_9_0), deployed, then the gateway asking 6.9.0
+// (which negotiates, so a gateway ahead of web-global lists the per-row way meanwhile, and refuses single sign-on).
+version = '6.9.0'
 
 repositories {
     mavenLocal()

@@ -10,6 +10,8 @@
  *   <li>{@link KnowledgeBaseTenantConnection} is one tenant connected to one knowledge base;
  *       {@link KnowledgeBaseConnectRequest} makes one. {@link KnowledgeBaseActorRequest} names who
  *       deletes a knowledge base or disconnects a tenant (from 6.8.0).</li>
+ *   <li>{@link GlobalKnowledgeBaseListEntry} is one row of the list from 6.9.0: a knowledge base with its version
+ *       and its connections.</li>
  *   <li>A write that something stands in the way of answers {@code 409} with a
  *       {@link GlobalKnowledgeBaseWriteRefusal}.</li>
  * </ul>

@@ -6,3 +6,7 @@ dev/bluestep/global/dto/tenantknowledgebase/package-info.class
 dev/bluestep/global/dto/tenantaccess/TenantAccessGrantSource.class
 # 6.8.0 (CU-86bcz7ruc): who deletes a global knowledge base or disconnects a tenant
 dev/bluestep/global/dto/knowledgebase/KnowledgeBaseActorRequest.class
+# 6.9.0 (CU-1k5g91bqaj7): the global knowledge-base list row, with its version and connections
+dev/bluestep/global/dto/knowledgebase/GlobalKnowledgeBaseListEntry.class
+# 6.9.0 (CU-1k5g91bqbk7): the gateway's single sign-on, resolved at no tenant
+dev/bluestep/global/dto/globaluserrecord/UntenantedLinkedAccountLookupRequest.class
