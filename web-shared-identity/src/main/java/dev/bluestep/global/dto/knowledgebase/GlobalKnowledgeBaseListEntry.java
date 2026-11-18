@@ -1,0 +1,86 @@
+package dev.bluestep.global.dto.knowledgebase;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+
+import org.jspecify.annotations.Nullable;
+
+import dev.bluestep.global.dto.tenant.TenantActor;
+
+/**
+ * One row of {@code GET /global-knowledge-bases} from 6.9.0: a {@link GlobalKnowledgeBase}'s members as that record
+ * writes them, plus the row's {@link #version} and its {@link #connections}, so a caller that lists the registry need
+ * not read each knowledge base and its tenants one by one.
+ *
+ * <p><b>Additive on the wire.</b> The first eight members are {@link GlobalKnowledgeBase}'s, named and written as it
+ * writes them, so a reader that binds a row as a {@code GlobalKnowledgeBase} (with unknown members ignored) still
+ * reads it. Tags before 6.9.0 keep answering plain {@code GlobalKnowledgeBase} rows.</p>
+ *
+ * @param id          the id
+ * @param name        the name
+ * @param title       the title, held to {@link GlobalKnowledgeBase}'s rule
+ * @param liveBranch  the live branch
+ * @param created     when it was created
+ * @param modified    when it was last patched, or created
+ * @param creator     who created it, absent for no actor
+ * @param modifier    who last patched it, absent for no actor or when nobody has
+ * @param version     the row's version: the value {@code GET /global-knowledge-bases/{id}} sends as its {@code ETag}
+ *                    (written there as {@code "<version>"}), which a patch or a delete is pinned to
+ * @param connections every tenant connected to it, as {@code GET /global-knowledge-bases/{id}/tenants} lists them
+ *                    (by tenant key); each names this knowledge base
+ */
+public record GlobalKnowledgeBaseListEntry(
+		GlobalKnowledgeBaseId id,
+		KnowledgeBaseName name,
+		String title,
+		LiveBranch liveBranch,
+		Instant created,
+		Instant modified,
+		@Nullable TenantActor creator,
+		@Nullable TenantActor modifier,
+		long version,
+		List<KnowledgeBaseTenantConnection> connections) {
+
+	/**
+	 * Holds the parts to {@link GlobalKnowledgeBase}'s rules, a version to being non-negative, and every connection to
+	 * naming this knowledge base; so a row that breaks any of them fails binding.
+	 */
+	public GlobalKnowledgeBaseListEntry {
+		new GlobalKnowledgeBase(id, name, title, liveBranch, created, modified, creator, modifier);
+		if (version < 0) {
+			throw new IllegalArgumentException("A knowledge base's version is not negative: " + version);
+		}
+		connections = List.copyOf(Objects.requireNonNull(connections, "connections"));
+		for (KnowledgeBaseTenantConnection connection : connections) {
+			if (!id.equals(connection.knowledgeBase())) {
+				throw new IllegalArgumentException("A listed connection names another knowledge base: "
+						+ connection.knowledgeBase());
+			}
+		}
+	}
+
+	/** The row from its knowledge base, version and connections. */
+	public static GlobalKnowledgeBaseListEntry of(GlobalKnowledgeBase knowledgeBase, long version,
+			List<KnowledgeBaseTenantConnection> connections) {
+		return new GlobalKnowledgeBaseListEntry(knowledgeBase.id(), knowledgeBase.name(), knowledgeBase.title(),
+				knowledgeBase.liveBranch(), knowledgeBase.created(), knowledgeBase.modified(), knowledgeBase.creator(),
+				knowledgeBase.modifier(), version, connections);
+	}
+
+	/** The knowledge base itself, as every other read of it answers. */
+	public GlobalKnowledgeBase knowledgeBase() {
+		return new GlobalKnowledgeBase(id, name, title, liveBranch, created, modified, creator, modifier);
+	}
+
+	/** {@link #creator}, as an {@code Optional}. */
+	public Optional<TenantActor> optCreator() {
+		return Optional.ofNullable(creator);
+	}
+
+	/** {@link #modifier}, as an {@code Optional}. */
+	public Optional<TenantActor> optModifier() {
+		return Optional.ofNullable(modifier);
+	}
+}
