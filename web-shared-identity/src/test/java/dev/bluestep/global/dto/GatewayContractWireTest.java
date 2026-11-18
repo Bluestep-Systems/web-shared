@@ -30,6 +30,8 @@ import dev.bluestep.global.dto.globaluserrecord.GlobalUserRecordResponse;
 import dev.bluestep.global.dto.globaluserrecord.UntenantedAuthenticationOutcome;
 import dev.bluestep.global.dto.globaluserrecord.UntenantedAuthenticationRequest;
 import dev.bluestep.global.dto.globaluserrecord.UntenantedAuthenticationResponse;
+import dev.bluestep.global.dto.globaluserrecord.LinkedAccount;
+import dev.bluestep.global.dto.globaluserrecord.UntenantedLinkedAccountLookupRequest;
 import dev.bluestep.global.dto.globaluserrecord.UntenantedUsernameLookupRequest;
 import dev.bluestep.global.dto.historymanager.HistoryManagerGrantRefusal;
 import dev.bluestep.global.dto.historymanager.HistoryManagerGrantRequest;
@@ -165,6 +167,21 @@ class GatewayContractWireTest {
 		assertTrue(request.toString().contains("ada"));
 		assertEquals(Set.of("username", "candidate"),
 				Set.copyOf(JACKSON3.valueToTree(request).propertyNames()));
+	}
+
+	@Test
+	void theUntenantedLinkedAccountLookupIsTheIdentityAlone() {
+		UntenantedLinkedAccountLookupRequest request = new UntenantedLinkedAccountLookupRequest(
+				new LinkedAccount("https://login.microsoftonline.com/72f988bf-86f1-41af-91ab-2d7cd011db47/v2.0", "pairwise"));
+		assertEquals(Set.of(), violatedPaths(request));
+		assertEquals(Set.of("linkedAccount"), Set.copyOf(JACKSON3.valueToTree(request).propertyNames()));
+		assertEquals(Set.of("issuer", "sub"),
+				Set.copyOf(JACKSON3.valueToTree(request).get("linkedAccount").propertyNames()));
+		assertEquals(request, JACKSON3.readValue(JACKSON3.writeValueAsString(request),
+				UntenantedLinkedAccountLookupRequest.class));
+		assertEquals(Set.of("linkedAccount"), violatedPaths(new UntenantedLinkedAccountLookupRequest(null)));
+		assertEquals(Set.of("linkedAccount.issuer", "linkedAccount.sub"),
+				violatedPaths(new UntenantedLinkedAccountLookupRequest(new LinkedAccount(" ", ""))));
 	}
 
 	@Test
