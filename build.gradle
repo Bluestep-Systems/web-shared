@@ -720,7 +720,15 @@ bluestepLibrary {
 //     config/class-set/new-in-6.6.0.txt.
 // A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_9_0), deployed, then the gateway asking 6.9.0
 // (which negotiates, so a gateway ahead of web-global lists the per-row way meanwhile, and refuses single sign-on).
-version = '6.9.0'
+// 6.10.0 lets the gateway's Console list organizations with what a tenant record lacks (CU-1k5g91bqguc, S1: the
+// organizations directory). ADDITIVE, source-compatible:
+//   * dto.consoledirectory (ConsoleDirectoryResponse, ConsoleDirectoryTenant, ConsoleDirectoryReseller), new: the
+//     answer of GET /console-directory from 6.10.0, every reseller by name plus, per tenant, its host names, the newest
+//     levels of the db and file_logical storage meters, and the start of its newest usage window with traffic. A level
+//     or a last activity nothing is held for is absent, never zero. Declared in config/class-set/new-in-6.6.0.txt.
+// A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_10_0), deployed, then the gateway asking 6.10.0
+// (which negotiates, so a gateway ahead of web-global lists organizations without those fields meanwhile).
+version = '6.10.0'
 
 repositories {
     mavenLocal()
