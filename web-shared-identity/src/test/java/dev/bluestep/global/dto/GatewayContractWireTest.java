@@ -31,6 +31,7 @@ import dev.bluestep.global.dto.globaluserrecord.UntenantedAuthenticationOutcome;
 import dev.bluestep.global.dto.globaluserrecord.UntenantedAuthenticationRequest;
 import dev.bluestep.global.dto.globaluserrecord.UntenantedAuthenticationResponse;
 import dev.bluestep.global.dto.globaluserrecord.LinkedAccount;
+import dev.bluestep.global.dto.globaluserrecord.LinkedAccountLookupRequest;
 import dev.bluestep.global.dto.globaluserrecord.UntenantedLinkedAccountLookupRequest;
 import dev.bluestep.global.dto.globaluserrecord.UntenantedUsernameLookupRequest;
 import dev.bluestep.global.dto.historymanager.HistoryManagerGrantRefusal;
@@ -182,6 +183,40 @@ class GatewayContractWireTest {
 		assertEquals(Set.of("linkedAccount"), violatedPaths(new UntenantedLinkedAccountLookupRequest(null)));
 		assertEquals(Set.of("linkedAccount.issuer", "linkedAccount.sub"),
 				violatedPaths(new UntenantedLinkedAccountLookupRequest(new LinkedAccount(" ", ""))));
+	}
+
+	/**
+	 * R690 Codex: the identity's members bind only from JSON strings, so a number or a boolean never becomes a lookup
+	 * key; the legacy tenanted request keeps its binding.
+	 */
+	@Test
+	void theUntenantedLinkedAccountLookupTakesOnlyStrings() {
+		String issuer = "https://login.microsoftonline.com/72f988bf-86f1-41af-91ab-2d7cd011db47/v2.0";
+		UntenantedLinkedAccountLookupRequest read = JACKSON3.readValue(
+				"{\"linkedAccount\":{\"issuer\":\"" + issuer + "\",\"sub\":\"123\"}}",
+				UntenantedLinkedAccountLookupRequest.class);
+		assertEquals(new LinkedAccount(issuer, "123"), read.linkedAccount());
+		for (String bad : List.of(
+				"{\"linkedAccount\":{\"issuer\":\"" + issuer + "\",\"sub\":123}}",
+				"{\"linkedAccount\":{\"issuer\":\"" + issuer + "\",\"sub\":true}}",
+				"{\"linkedAccount\":{\"issuer\":\"" + issuer + "\",\"sub\":12.5}}",
+				"{\"linkedAccount\":{\"issuer\":\"" + issuer + "\",\"sub\":[\"x\"]}}",
+				"{\"linkedAccount\":{\"issuer\":\"" + issuer + "\",\"sub\":{\"v\":\"x\"}}}",
+				"{\"linkedAccount\":{\"issuer\":\"" + issuer + "\",\"sub\":null}}",
+				"{\"linkedAccount\":{\"issuer\":\"" + issuer + "\"}}",
+				"{\"linkedAccount\":{\"issuer\":42,\"sub\":\"x\"}}",
+				"{\"linkedAccount\":{\"issuer\":false,\"sub\":\"x\"}}",
+				"{\"linkedAccount\":\"" + issuer + "#x\"}",
+				"{\"linkedAccount\":null}",
+				"{}")) {
+			assertThrows(DatabindException.class,
+					() -> JACKSON3.readValue(bad, UntenantedLinkedAccountLookupRequest.class), bad);
+		}
+		// The legacy request binds as it always has (the mapper's coercion applies there, unchanged).
+		LinkedAccountLookupRequest legacy = JACKSON3.readValue(
+				"{\"associationSeqnum\":5,\"linkedAccount\":{\"issuer\":\"" + issuer + "\",\"sub\":123}}",
+				LinkedAccountLookupRequest.class);
+		assertEquals("123", legacy.linkedAccount().sub());
 	}
 
 	@Test

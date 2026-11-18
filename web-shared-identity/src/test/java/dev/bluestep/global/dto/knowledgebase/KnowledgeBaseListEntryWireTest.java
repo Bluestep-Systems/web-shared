@@ -78,4 +78,25 @@ class KnowledgeBaseListEntryWireTest {
 				 "liveBranch":"main","created":"2026-10-30T12:00:00Z","modified":"2026-10-30T12:00:00Z",
 				 "version":1,"connections":[]}""", GlobalKnowledgeBaseListEntry.class));
 	}
+
+	private static String row(String version) {
+		return """
+				{"id":"0f8fad5b-d9cb-469f-a165-70867728950e","name":"handbook","title":"Handbook",
+				 "liveBranch":"main","created":"2026-10-30T12:00:00Z","modified":"2026-10-30T12:00:00Z",
+				 "version":%s,"connections":[]}""".formatted(version);
+	}
+
+	/** R690 Codex: a fraction is not truncated into a valid-looking version, and only an integral number binds. */
+	@Test
+	void aVersionIsAnIntegralJsonNumberOnly() throws Exception {
+		assertEquals(7L, JSON.readValue(row("7"), GlobalKnowledgeBaseListEntry.class).version());
+		assertEquals(0L, JSON.readValue(row("0"), GlobalKnowledgeBaseListEntry.class).version());
+		assertEquals(Long.MAX_VALUE, JSON.readValue(row(Long.toString(Long.MAX_VALUE)),
+				GlobalKnowledgeBaseListEntry.class).version());
+		for (String bad : new String[] {"7.9", "-0.5", "7.0", "1e2", "\"7\"", "true", "null", "-1",
+				"9223372036854775808", "{}", "[7]"}) {
+			assertThrows(JacksonException.class, () -> JSON.readValue(row(bad), GlobalKnowledgeBaseListEntry.class),
+					bad);
+		}
+	}
 }

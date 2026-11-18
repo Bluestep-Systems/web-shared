@@ -1,5 +1,6 @@
 package dev.bluestep.global.dto.knowledgebase;
 
+import java.math.BigInteger;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -7,12 +8,20 @@ import java.util.Optional;
 
 import org.jspecify.annotations.Nullable;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import dev.bluestep.global.dto.tenant.TenantActor;
 
 /**
  * One row of {@code GET /global-knowledge-bases} from 6.9.0: a {@link GlobalKnowledgeBase}'s members as that record
  * writes them, plus the row's {@link #version} and its {@link #connections}, so a caller that lists the registry need
  * not read each knowledge base and its tenants one by one.
+ *
+ * <p><b>An integral version, on the wire.</b> Bound through {@link #fromJson}, which takes {@code version} only as an
+ * integral JSON number: a mapper would otherwise truncate {@code 7.9} to {@code 7} and {@code -0.5} to {@code 0}, and
+ * a malformed row would hand its reader a valid-looking {@code If-Match}. A fraction (even {@code 7.0}), a string, or
+ * a number outside {@code long} fails binding.</p>
  *
  * <p><b>Additive on the wire.</b> The first eight members are {@link GlobalKnowledgeBase}'s, named and written as it
  * writes them, so a reader that binds a row as a {@code GlobalKnowledgeBase} (with unknown members ignored) still
@@ -59,6 +68,28 @@ public record GlobalKnowledgeBaseListEntry(
 						+ connection.knowledgeBase());
 			}
 		}
+	}
+
+	/** The wire's binding: every member as the record declares it, but {@code version} an integral JSON number. */
+	@JsonCreator
+	static GlobalKnowledgeBaseListEntry fromJson(@JsonProperty("id") GlobalKnowledgeBaseId id,
+			@JsonProperty("name") KnowledgeBaseName name, @JsonProperty("title") String title,
+			@JsonProperty("liveBranch") LiveBranch liveBranch, @JsonProperty("created") Instant created,
+			@JsonProperty("modified") Instant modified, @JsonProperty("creator") @Nullable TenantActor creator,
+			@JsonProperty("modifier") @Nullable TenantActor modifier, @JsonProperty("version") @Nullable Object version,
+			@JsonProperty("connections") List<KnowledgeBaseTenantConnection> connections) {
+		return new GlobalKnowledgeBaseListEntry(id, name, title, liveBranch, created, modified, creator, modifier,
+				integral(version), connections);
+	}
+
+	private static long integral(@Nullable Object version) {
+		if (version instanceof Integer || version instanceof Long) {
+			return ((Number) version).longValue();
+		}
+		if (version instanceof BigInteger big && big.bitLength() < Long.SIZE) {
+			return big.longValue();
+		}
+		throw new IllegalArgumentException("A knowledge base's version is an integral JSON number, not " + version);
 	}
 
 	/** The row from its knowledge base, version and connections. */
