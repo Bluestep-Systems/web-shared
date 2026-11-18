@@ -10,3 +10,8 @@ dev/bluestep/global/dto/knowledgebase/KnowledgeBaseActorRequest.class
 dev/bluestep/global/dto/knowledgebase/GlobalKnowledgeBaseListEntry.class
 # 6.9.0 (CU-1k5g91bqbk7): the gateway's single sign-on, resolved at no tenant
 dev/bluestep/global/dto/globaluserrecord/UntenantedLinkedAccountLookupRequest.class
+# 6.10.0 (CU-1k5g91bqguc): the Console's organization directory, in one fetch
+dev/bluestep/global/dto/consoledirectory/ConsoleDirectoryReseller.class
+dev/bluestep/global/dto/consoledirectory/ConsoleDirectoryResponse.class
+dev/bluestep/global/dto/consoledirectory/ConsoleDirectoryTenant.class
+dev/bluestep/global/dto/consoledirectory/package-info.class
