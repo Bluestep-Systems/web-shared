@@ -52,8 +52,10 @@ class ConsoleGlobalUserWireTest {
 		ConsoleGlobalUserDetail detail = new ConsoleGlobalUserDetail(alice(),
 				List.of(new ConsoleAccessToken(TOKEN, "laptop", List.of("mcp", "kb:read"),
 						Instant.parse("2026-02-01T00:00:00Z"), null, Instant.parse("2026-02-02T00:00:00Z"), true)),
+				true,
 				List.of(new ConsoleTenantAccess("U137803", Instant.parse("2026-03-01T00:00:00Z"), null,
 						TenantAccessGrantSource.SUPER)),
+				false,
 				new ConsoleHistoryManagerGrant(Instant.parse("2026-04-01T00:00:00Z"), new ConsoleActor(BOB, null)),
 				new ConsoleCatalogScope(CatalogScopeKind.RESELLER, new ConsoleReseller(RESELLER, null), "seeded",
 						Instant.parse("2026-05-01T00:00:00Z")));
@@ -72,9 +74,9 @@ class ConsoleGlobalUserWireTest {
 				+ "\"provider\":\"MICROSOFT\",\"subjectHint\":\"wxyz\"}]},"
 				+ "\"accessTokens\":[{\"id\":\"00000000-0000-4000-8000-000000000001\",\"alias\":\"laptop\","
 				+ "\"scopes\":[\"mcp\",\"kb:read\"],\"createdAt\":\"2026-02-01T00:00:00Z\",\"expiresAt\":null,"
-				+ "\"lastUsedAt\":\"2026-02-02T00:00:00Z\",\"live\":true}],"
+				+ "\"lastUsedAt\":\"2026-02-02T00:00:00Z\",\"live\":true}],\"accessTokensTruncated\":true,"
 				+ "\"tenantAccess\":[{\"tenantId\":\"U137803\",\"grantedAt\":\"2026-03-01T00:00:00Z\","
-				+ "\"expiresAt\":null,\"source\":\"SUPER\"}],"
+				+ "\"expiresAt\":null,\"source\":\"SUPER\"}],\"tenantAccessTruncated\":false,"
 				+ "\"historyManager\":{\"grantedAt\":\"2026-04-01T00:00:00Z\","
 				+ "\"grantedBy\":{\"user\":{\"classid\":222222,\"seqnum\":9002},\"name\":null}},"
 				+ "\"catalogScope\":{\"kind\":\"RESELLER\",\"reseller\":{\"reseller\":{\"classid\":333333,"
