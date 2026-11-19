@@ -83,13 +83,22 @@ class ConsoleEndorsementsWireTest {
 	}
 
 	@Test
-	@DisplayName("a repeated or blank token is refused, and the lists are copies")
+	@DisplayName("a repeated, empty or ASCII-whitespace token is refused, other whitespace kept, the lists copies")
 	void refusals() {
 		assertThrows(IllegalArgumentException.class, () -> ConsoleEndorsements.available(List.of(),
 				List.of("x", "x")));
 		assertThrows(IllegalArgumentException.class, () -> ConsoleEndorsements.available(
 				List.of(PlatformEndorsement.TECH, PlatformEndorsement.TECH), List.of()));
 		assertThrows(IllegalArgumentException.class, () -> ConsoleEndorsements.available(List.of(), List.of(" ")));
+		assertThrows(IllegalArgumentException.class, () -> ConsoleEndorsements.available(List.of(), List.of("")));
+		assertThrows(IllegalArgumentException.class, () -> ConsoleEndorsements.available(List.of(),
+				List.of("ENGINEER\tTECH")));
+		// The monolith splits on ASCII whitespace only: an em space or NBSP alone is a stored token, and is kept.
+		assertEquals(List.of("\u2003", "\u00A0", "\u3000"), ConsoleEndorsements.available(
+				List.of(PlatformEndorsement.TECH), List.of("\u2003", "\u00A0", "\u3000")).unrecognized());
+		assertEquals(List.of("\u2003"), JSON.readValue(
+				"{\"state\":\"AVAILABLE\",\"held\":[\"TECH\"],\"unrecognized\":[\"\u2003\"]}",
+				ConsoleEndorsements.class).unrecognized());
 		assertThrows(UnsupportedOperationException.class,
 				() -> ConsoleEndorsements.available(List.of(), List.of("x")).unrecognized().add("y"));
 	}

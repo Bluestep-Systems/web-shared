@@ -53,7 +53,9 @@ public record ConsoleEndorsements(State state, List<String> held, List<String> u
 	}
 
 	/**
-	 * Holds the lists to their rules: no blank or repeated entry, nothing in them unless available. An omitted state
+	 * Holds the lists to their rules: no empty or repeated entry, none with ASCII whitespace in it (the monolith splits
+	 * on {@code \s+}, so no stored token can hold one), nothing in them unless available. A token of other whitespace
+	 * alone (an em space, NBSP) is a token the monolith keeps, and is kept. An omitted state
 	 * binds to null whatever the null-marking says; read as {@link State#UNKNOWN}.
 	 */
 	public ConsoleEndorsements {
@@ -67,10 +69,15 @@ public record ConsoleEndorsements(State state, List<String> held, List<String> u
 			if (new LinkedHashSet<>(tokens).size() != tokens.size()) {
 				throw new IllegalArgumentException("An endorsement is listed once");
 			}
-			if (tokens.stream().anyMatch(String::isBlank)) {
-				throw new IllegalArgumentException("An endorsement token is never blank");
+			if (tokens.stream().anyMatch(ConsoleEndorsements::notAToken)) {
+				throw new IllegalArgumentException("An endorsement token is never empty and holds no ASCII whitespace");
 			}
 		}
+	}
+
+	/** Empty, or holding one of the six characters of {@code \s}: what a split on {@code \s+} never yields. */
+	private static boolean notAToken(String token) {
+		return token.isEmpty() || token.chars().anyMatch(c -> " \t\n\u000B\f\r".indexOf(c) >= 0);
 	}
 
 	/** Read: these catalog endorsements, in catalog order, and these other tokens, in stored order. */
