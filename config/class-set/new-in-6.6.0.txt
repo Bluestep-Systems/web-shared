@@ -21,3 +21,6 @@ dev/bluestep/global/dto/knowledgebase/Access$Private.class
 dev/bluestep/global/dto/knowledgebase/Access$Public.class
 dev/bluestep/global/dto/knowledgebase/Access$Unknown.class
 dev/bluestep/global/dto/knowledgebase/Access$Wire.class
+# 6.12.0 (CU-1k5g91bqj8j): the Console's per-organization usage and storage read
+dev/bluestep/global/dto/consoleusage/ConsoleUsageResponse.class
+dev/bluestep/global/dto/consoleusage/package-info.class

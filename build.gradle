@@ -744,7 +744,15 @@ bluestepLibrary {
 //     source-compatible; on the wire a response member is added to a shipped shape, which web-global's snapshot rule
 //     governs (it writes `access` only from 6.11.0).
 // A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_11_0), deployed, then the gateway.
-version = '6.11.0'
+// 6.12.0 lets the gateway's Console show an organization's usage and storage tabs (CU-1k5g91bqj8j, S2). ADDITIVE,
+// source-compatible:
+//   * dto.consoleusage.ConsoleUsageResponse(UsageSeriesResponse usage, StorageUsageResponse storage), new: the answer
+//     of GET /console-usage/{tenantId}?days=N from 6.12.0, one tenant's day-grain request series (http, file) and its
+//     tenant-visible storage levels and dailies over the same N complete UTC days ending yesterday. Both halves are
+//     existing shapes, unchanged. Declared in config/class-set/new-in-6.6.0.txt.
+// A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_12_0), deployed, then the gateway asking 6.12.0
+// (which negotiates, so a gateway ahead of web-global answers the usage and storage tabs null meanwhile).
+version = '6.12.0'
 
 repositories {
     mavenLocal()
