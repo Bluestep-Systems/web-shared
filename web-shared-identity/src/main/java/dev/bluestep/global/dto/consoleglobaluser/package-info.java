@@ -11,6 +11,8 @@
  *       ({@link ConsoleCatalogScope}).</li>
  *   <li>{@link ConsoleActor} and {@link ConsoleReseller} name a global user and a reseller by key, with the name
  *       web-global holds for them.</li>
+ *   <li>{@link GlobalUserFilter} and {@link GlobalUserKind} (from 6.17.0) narrow the page on the server: the query
+ *       parameters, and the one rule that says what kind of account a record is.</li>
  * </ul>
  *
  * <h2>What never travels here</h2>

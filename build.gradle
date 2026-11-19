@@ -801,7 +801,14 @@ bluestepLibrary {
 //     that shipped it. The 7-member constructor stays, so this is source-compatible.
 // A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_16_0), deployed, then the gateway asking 6.16.0
 // (which negotiates, so a gateway ahead of web-global answers GlobalUser.endorsements null meanwhile).
-version = '6.16.0'
+// 6.17.0 lets the Console narrow the global-user directory on the server (CU-1k5g91bqn07, U1b). ADDITIVE,
+// source-compatible: dto.consoleglobaluser gains GlobalUserKind (FLEET_SUPER / RESELLER_SUPER / USER, the one rule that
+// the filter and the gateway's resellerRestricted both use) and GlobalUserFilter (kind, reseller, noReseller,
+// linkedProvider, noLinkedAccount, catalogScope, noCatalogScope: the query parameters of GET /console-global-users,
+// refusing "X and no X" at construction). Declared in config/class-set/new-in-6.6.0.txt. No wire body changes.
+// A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_17_0), deployed, then the gateway sending the
+// filter (which negotiates: a gateway ahead of web-global answers a filtered globalUsers null with filter-unsupported).
+version = '6.17.0'
 
 repositories {
     mavenLocal()
