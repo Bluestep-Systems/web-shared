@@ -59,3 +59,6 @@ dev/bluestep/global/dto/consoleglobaluser/ConsoleEndorsements$State.class
 dev/bluestep/global/dto/endorsement/EndorsementGroup.class
 dev/bluestep/global/dto/endorsement/PlatformEndorsement.class
 dev/bluestep/global/dto/endorsement/package-info.class
+# 6.17.0 (CU-1k5g91bqn07): the global-user directory's filters
+dev/bluestep/global/dto/consoleglobaluser/GlobalUserFilter.class
+dev/bluestep/global/dto/consoleglobaluser/GlobalUserKind.class
