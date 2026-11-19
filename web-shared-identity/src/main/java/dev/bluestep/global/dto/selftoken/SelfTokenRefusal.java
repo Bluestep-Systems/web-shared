@@ -70,6 +70,17 @@ public record SelfTokenRefusal(Reason reason, @Nullable String scope, @Nullable 
 		 *  {@code presentingExpiresAt} says what that is. */
 		EXPIRY_EXCEEDS_PRESENTING,
 		/**
+		 * 403, from 6.15.0, on a browser mint ({@code POST /my-account/access-tokens}) only: no step-up ticket, or one
+		 * that is unknown, expired, used up, issued for another account, or issued before the account's password
+		 * changed. The person re-proves a factor and the mint is retried. An older reader binds it as {@link #UNKNOWN}.
+		 */
+		STEP_UP_REQUIRED,
+		/**
+		 * 403, from 6.15.0, on a browser mint only: "never", or an expiry more than 365 days away (ruling 2026-11-19
+		 * "ME-PLAN Q2"). An older reader binds it as {@link #UNKNOWN}.
+		 */
+		EXPIRY_TOO_FAR,
+		/**
 		 * A reason this consumer's contract does not know: what a reason added after 6.5.0 binds as. Never sent by
 		 * the app.
 		 */

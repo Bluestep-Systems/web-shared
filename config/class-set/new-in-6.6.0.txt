@@ -45,3 +45,11 @@ dev/bluestep/global/dto/myaccount/MyAccountResponse.class
 dev/bluestep/global/dto/myaccount/MyCatalogScope.class
 dev/bluestep/global/dto/myaccount/MyTenantAccess.class
 dev/bluestep/global/dto/myaccount/package-info.class
+# 6.15.0 (CU-1k5g91bqje9): step-up tickets for the browser token mint
+dev/bluestep/global/dto/stepup/SsoStepUpRequest.class
+dev/bluestep/global/dto/stepup/StepUpAuthenticationResponse.class
+dev/bluestep/global/dto/stepup/StepUpHeaders.class
+dev/bluestep/global/dto/stepup/StepUpRefusal.class
+dev/bluestep/global/dto/stepup/StepUpRefusal$Reason.class
+dev/bluestep/global/dto/stepup/StepUpTicketResponse.class
+dev/bluestep/global/dto/stepup/package-info.class
