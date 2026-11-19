@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.junit.jupiter.api.DisplayName;
@@ -140,6 +141,16 @@ class ConsoleGlobalUserWireTest {
 		assertEquals(LinkedAccountProvider.OTHER, LinkedAccountProvider.of("https://idp.example.test"));
 		assertEquals(LinkedAccountProvider.OTHER, LinkedAccountProvider.of("not a uri at all"));
 		assertEquals(LinkedAccountProvider.OTHER, LinkedAccountProvider.of(""));
+		// The rule as data (6.17.0): ports, user-info, query and white space belong; a look-alike or a stray host does not.
+		assertEquals(LinkedAccountProvider.MICROSOFT, LinkedAccountProvider.of("  https://login.microsoftonline.com:443/x \n"));
+		assertEquals(LinkedAccountProvider.MICROSOFT, LinkedAccountProvider.of("https://user@sts.windows.net?x=1"));
+		assertEquals(LinkedAccountProvider.OTHER, LinkedAccountProvider.of("https://login.microsoftonline.com.evil.example/x"));
+		assertEquals(LinkedAccountProvider.OTHER, LinkedAccountProvider.of("https://evil.example/login.microsoftonline.com"));
+		assertEquals(LinkedAccountProvider.OTHER, LinkedAccountProvider.of("https://x.accounts.google.com"));
+		assertEquals(LinkedAccountProvider.OTHER, LinkedAccountProvider.of("https://accounts.google.com.:443"));
+		assertEquals(Optional.empty(), LinkedAccountProvider.OTHER.issuerPattern());
+		assertEquals(List.of("accounts.google.com"), LinkedAccountProvider.GOOGLE.hosts());
+		assertTrue(LinkedAccountProvider.MICROSOFT.issuerPattern().orElseThrow().contains("login\\.microsoftonline\\.com"));
 	}
 
 	@Test
