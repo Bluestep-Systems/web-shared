@@ -786,7 +786,22 @@ bluestepLibrary {
 //     (POST /my-account/access-tokens, SelfTokenMintRequest -> SelfTokenMinted); an older reader binds both as UNKNOWN.
 // A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_15_0), deployed, then the gateway asking 6.15.0
 // (which negotiates, so a gateway ahead of web-global keeps the 6.4.0 password check and answers the mint 503 meanwhile).
-version = '6.15.0'
+// 6.16.0 lets the gateway's Console read a global user's platform endorsements (CU-1k5g91bqmtw, U2), which web-global
+// decrypts itself (ruling 2026-11-18 U-PLAN Q1 "(A) web-global holds the seed"). ADDITIVE, source-compatible:
+//   * dto.endorsement, new: PlatformEndorsement, one constant per constant of web's myassn.security.Endorsement (23
+//     ids; the constant name is the stored id, matched exactly), each with a label, an EndorsementGroup (STAFF_TIER,
+//     ADMINISTRATION, CAPABILITIES, MARKERS), a description and the endorsements that also open its gate (a hint).
+//     Declaration order is the catalog order and is stable. Declared in config/class-set/new-in-6.6.0.txt.
+//   * dto.consoleglobaluser.ConsoleEndorsements(State state, List<String> held, List<String> unrecognized), new: held
+//     catalog ids in catalog order, every other stored token in stored order, each once; State UNAVAILABLE (nothing
+//     listed) when web-global could not read them, never read as "none"; a state a newer app adds binds UNKNOWN.
+//     Declared in config/class-set/new-in-6.6.0.txt.
+//   * `endorsements` on ConsoleGlobalUserDetail (last member, @Nullable, @JsonInclude(NON_NULL)): absent, and so not on
+//     the wire, from a web-global answering a tag before 6.16.0, which keeps the 6.13.0 shape byte for byte for the tags
+//     that shipped it. The 7-member constructor stays, so this is source-compatible.
+// A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_16_0), deployed, then the gateway asking 6.16.0
+// (which negotiates, so a gateway ahead of web-global answers GlobalUser.endorsements null meanwhile).
+version = '6.16.0'
 
 repositories {
     mavenLocal()
