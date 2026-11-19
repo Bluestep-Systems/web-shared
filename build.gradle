@@ -775,7 +775,18 @@ bluestepLibrary {
 //     of them. Declared in config/class-set/new-in-6.6.0.txt.
 // A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_14_0), deployed, then the gateway asking 6.14.0
 // (which negotiates, so a gateway ahead of web-global answers Query.me UNAVAILABLE not-served meanwhile).
-version = '6.14.0'
+// 6.15.0 lets a signed-in global user mint their own token from the browser, behind a fresh factor web-global verified
+// itself (CU-1k5g91bqje9, ME2). ADDITIVE, source-compatible:
+//   * dto.stepup, new: StepUpAuthenticationResponse (POST /step-up-tickets/password: the 6.4.0 password check's answer,
+//     unchanged, plus a StepUpTicketResponse on a MATCH), SsoStepUpRequest (POST /step-up-tickets/sso: a provider's ID
+//     token, which web-global verifies itself) and StepUpTicketResponse (its 201), StepUpRefusal (forward-binding
+//     reason), StepUpHeaders.STEP_UP_TICKET_HEADER ("B6P-Step-Up-Ticket", 43 base64url characters). The ticket is
+//     never in a toString. Declared in config/class-set/new-in-6.6.0.txt.
+//   * SelfTokenRefusal.Reason gains STEP_UP_REQUIRED and EXPIRY_TOO_FAR, sent only on the new browser mint
+//     (POST /my-account/access-tokens, SelfTokenMintRequest -> SelfTokenMinted); an older reader binds both as UNKNOWN.
+// A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_15_0), deployed, then the gateway asking 6.15.0
+// (which negotiates, so a gateway ahead of web-global keeps the 6.4.0 password check and answers the mint 503 meanwhile).
+version = '6.15.0'
 
 repositories {
     mavenLocal()
