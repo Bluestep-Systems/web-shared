@@ -24,3 +24,16 @@ dev/bluestep/global/dto/knowledgebase/Access$Wire.class
 # 6.12.0 (CU-1k5g91bqj8j): the Console's per-organization usage and storage read
 dev/bluestep/global/dto/consoleusage/ConsoleUsageResponse.class
 dev/bluestep/global/dto/consoleusage/package-info.class
+# 6.13.0 (CU-1k5g91bqjda): the Console's global-user directory, read only
+dev/bluestep/global/dto/consoleglobaluser/ConsoleAccessToken.class
+dev/bluestep/global/dto/consoleglobaluser/ConsoleActor.class
+dev/bluestep/global/dto/consoleglobaluser/ConsoleCatalogScope.class
+dev/bluestep/global/dto/consoleglobaluser/ConsoleGlobalUser.class
+dev/bluestep/global/dto/consoleglobaluser/ConsoleGlobalUserDetail.class
+dev/bluestep/global/dto/consoleglobaluser/ConsoleGlobalUserPage.class
+dev/bluestep/global/dto/consoleglobaluser/ConsoleHistoryManagerGrant.class
+dev/bluestep/global/dto/consoleglobaluser/ConsoleLinkedAccount.class
+dev/bluestep/global/dto/consoleglobaluser/ConsoleReseller.class
+dev/bluestep/global/dto/consoleglobaluser/ConsoleTenantAccess.class
+dev/bluestep/global/dto/consoleglobaluser/LinkedAccountProvider.class
+dev/bluestep/global/dto/consoleglobaluser/package-info.class
