@@ -15,3 +15,9 @@ dev/bluestep/global/dto/consoledirectory/ConsoleDirectoryReseller.class
 dev/bluestep/global/dto/consoledirectory/ConsoleDirectoryResponse.class
 dev/bluestep/global/dto/consoledirectory/ConsoleDirectoryTenant.class
 dev/bluestep/global/dto/consoledirectory/package-info.class
+# 6.11.0 (CU-1k5g91bqhxa): who may read a global knowledge base
+dev/bluestep/global/dto/knowledgebase/Access.class
+dev/bluestep/global/dto/knowledgebase/Access$Private.class
+dev/bluestep/global/dto/knowledgebase/Access$Public.class
+dev/bluestep/global/dto/knowledgebase/Access$Unknown.class
+dev/bluestep/global/dto/knowledgebase/Access$Wire.class
