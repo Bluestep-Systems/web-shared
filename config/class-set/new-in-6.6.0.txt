@@ -37,3 +37,11 @@ dev/bluestep/global/dto/consoleglobaluser/ConsoleReseller.class
 dev/bluestep/global/dto/consoleglobaluser/ConsoleTenantAccess.class
 dev/bluestep/global/dto/consoleglobaluser/LinkedAccountProvider.class
 dev/bluestep/global/dto/consoleglobaluser/package-info.class
+# 6.14.0 (CU-1k5g91bqje9): the signed-in account's own view, and the revoke of its own tokens
+dev/bluestep/global/dto/myaccount/MyAccountHeaders.class
+dev/bluestep/global/dto/myaccount/MyAccountRefusal.class
+dev/bluestep/global/dto/myaccount/MyAccountRefusal$Reason.class
+dev/bluestep/global/dto/myaccount/MyAccountResponse.class
+dev/bluestep/global/dto/myaccount/MyCatalogScope.class
+dev/bluestep/global/dto/myaccount/MyTenantAccess.class
+dev/bluestep/global/dto/myaccount/package-info.class
