@@ -763,7 +763,19 @@ bluestepLibrary {
 //     config/class-set/new-in-6.6.0.txt.
 // A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_13_0), deployed, then the gateway asking 6.13.0
 // (which negotiates, so a gateway ahead of web-global answers the global-user roots null meanwhile).
-version = '6.13.0'
+// 6.14.0 lets every signed-in global user read their own account and revoke their own tokens through the gateway's
+// Console (CU-1k5g91bqje9, ME1). ADDITIVE, source-compatible:
+//   * dto.myaccount, new: MyAccountResponse (GET /my-account): the acting account's names, e-mail, password-expiry
+//     start, linked accounts (ConsoleLinkedAccount, a hint of the subject), ConsoleAccessToken metadata (by row id),
+//     MyTenantAccess grants with the tenant's name, its history-manager grant's date, its MyCatalogScope (no reason)
+//     and the scopes a mint for it could hold; MyAccountRefusal (403 ACCOUNT_DISABLED, forward-binding reason);
+//     MyAccountHeaders.ACTING_GLOBAL_USER_HEADER ("B6P-Acting-Global-User", classid:seqnum), which the gateway sets
+//     from the browser session alone and which is the only thing that names the account. No credential, token secret
+//     or hash, attribs ciphertext, full subject, other person's key or name, version or super/disabled flag is in any
+//     of them. Declared in config/class-set/new-in-6.6.0.txt.
+// A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_14_0), deployed, then the gateway asking 6.14.0
+// (which negotiates, so a gateway ahead of web-global answers Query.me UNAVAILABLE not-served meanwhile).
+version = '6.14.0'
 
 repositories {
     mavenLocal()
