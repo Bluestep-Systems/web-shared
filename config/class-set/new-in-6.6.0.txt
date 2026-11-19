@@ -53,3 +53,9 @@ dev/bluestep/global/dto/stepup/StepUpRefusal.class
 dev/bluestep/global/dto/stepup/StepUpRefusal$Reason.class
 dev/bluestep/global/dto/stepup/StepUpTicketResponse.class
 dev/bluestep/global/dto/stepup/package-info.class
+# 6.16.0 (CU-1k5g91bqmtw): the platform endorsement catalog and a global user's endorsements as read
+dev/bluestep/global/dto/consoleglobaluser/ConsoleEndorsements.class
+dev/bluestep/global/dto/consoleglobaluser/ConsoleEndorsements$State.class
+dev/bluestep/global/dto/endorsement/EndorsementGroup.class
+dev/bluestep/global/dto/endorsement/PlatformEndorsement.class
+dev/bluestep/global/dto/endorsement/package-info.class
