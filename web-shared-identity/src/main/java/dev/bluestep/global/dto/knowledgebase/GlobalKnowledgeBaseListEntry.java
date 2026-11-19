@@ -23,9 +23,10 @@ import dev.bluestep.global.dto.tenant.TenantActor;
  * a malformed row would hand its reader a valid-looking {@code If-Match}. A fraction (even {@code 7.0}), a string, or
  * a number outside {@code long} fails binding.</p>
  *
- * <p><b>Additive on the wire.</b> The first eight members are {@link GlobalKnowledgeBase}'s, named and written as it
- * writes them, so a reader that binds a row as a {@code GlobalKnowledgeBase} (with unknown members ignored) still
- * reads it. Tags before 6.9.0 keep answering plain {@code GlobalKnowledgeBase} rows.</p>
+ * <p><b>Additive on the wire.</b> The first members are {@link GlobalKnowledgeBase}'s (eight; nine from 6.11.0,
+ * with {@code access}), named and written as it writes them, so a reader that binds a row as a
+ * {@code GlobalKnowledgeBase} (with unknown members ignored) still reads it. Tags before 6.9.0 keep answering plain
+ * {@code GlobalKnowledgeBase} rows.</p>
  *
  * @param id          the id
  * @param name        the name
@@ -35,6 +36,8 @@ import dev.bluestep.global.dto.tenant.TenantActor;
  * @param modified    when it was last patched, or created
  * @param creator     who created it, absent for no actor
  * @param modifier    who last patched it, absent for no actor or when nobody has
+ * @param access      who may read it (from 6.11.0), as {@link GlobalKnowledgeBase#access}; absent reads as
+ *                    {@link Access#PRIVATE}
  * @param version     the row's version: the value {@code GET /global-knowledge-bases/{id}} sends as its {@code ETag}
  *                    (written there as {@code "<version>"}), which a patch or a delete is pinned to
  * @param connections every tenant connected to it, as {@code GET /global-knowledge-bases/{id}/tenants} lists them
@@ -49,6 +52,7 @@ public record GlobalKnowledgeBaseListEntry(
 		Instant modified,
 		@Nullable TenantActor creator,
 		@Nullable TenantActor modifier,
+		Access access,
 		long version,
 		List<KnowledgeBaseTenantConnection> connections) {
 
@@ -57,7 +61,8 @@ public record GlobalKnowledgeBaseListEntry(
 	 * naming this knowledge base; so a row that breaks any of them fails binding.
 	 */
 	public GlobalKnowledgeBaseListEntry {
-		new GlobalKnowledgeBase(id, name, title, liveBranch, created, modified, creator, modifier);
+		access = access == null ? Access.PRIVATE : access;
+		new GlobalKnowledgeBase(id, name, title, liveBranch, created, modified, creator, modifier, access);
 		if (version < 0) {
 			throw new IllegalArgumentException("A knowledge base's version is not negative: " + version);
 		}
@@ -76,10 +81,18 @@ public record GlobalKnowledgeBaseListEntry(
 			@JsonProperty("name") KnowledgeBaseName name, @JsonProperty("title") String title,
 			@JsonProperty("liveBranch") LiveBranch liveBranch, @JsonProperty("created") Instant created,
 			@JsonProperty("modified") Instant modified, @JsonProperty("creator") @Nullable TenantActor creator,
-			@JsonProperty("modifier") @Nullable TenantActor modifier, @JsonProperty("version") @Nullable Object version,
+			@JsonProperty("modifier") @Nullable TenantActor modifier, @JsonProperty("access") @Nullable Access access,
+			@JsonProperty("version") @Nullable Object version,
 			@JsonProperty("connections") List<KnowledgeBaseTenantConnection> connections) {
 		return new GlobalKnowledgeBaseListEntry(id, name, title, liveBranch, created, modified, creator, modifier,
-				integral(version), connections);
+				access == null ? Access.PRIVATE : access, integral(version), connections);
+	}
+
+	/** A private knowledge base's row: the shape before 6.11.0, source-compatible. */
+	public GlobalKnowledgeBaseListEntry(GlobalKnowledgeBaseId id, KnowledgeBaseName name, String title,
+			LiveBranch liveBranch, Instant created, Instant modified, @Nullable TenantActor creator,
+			@Nullable TenantActor modifier, long version, List<KnowledgeBaseTenantConnection> connections) {
+		this(id, name, title, liveBranch, created, modified, creator, modifier, Access.PRIVATE, version, connections);
 	}
 
 	private static long integral(@Nullable Object version) {
@@ -97,12 +110,12 @@ public record GlobalKnowledgeBaseListEntry(
 			List<KnowledgeBaseTenantConnection> connections) {
 		return new GlobalKnowledgeBaseListEntry(knowledgeBase.id(), knowledgeBase.name(), knowledgeBase.title(),
 				knowledgeBase.liveBranch(), knowledgeBase.created(), knowledgeBase.modified(), knowledgeBase.creator(),
-				knowledgeBase.modifier(), version, connections);
+				knowledgeBase.modifier(), knowledgeBase.access(), version, connections);
 	}
 
 	/** The knowledge base itself, as every other read of it answers. */
 	public GlobalKnowledgeBase knowledgeBase() {
-		return new GlobalKnowledgeBase(id, name, title, liveBranch, created, modified, creator, modifier);
+		return new GlobalKnowledgeBase(id, name, title, liveBranch, created, modified, creator, modifier, access);
 	}
 
 	/** {@link #creator}, as an {@code Optional}. */

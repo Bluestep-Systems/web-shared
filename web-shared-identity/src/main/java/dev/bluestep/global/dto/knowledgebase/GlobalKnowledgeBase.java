@@ -25,6 +25,8 @@ import dev.bluestep.global.dto.tenant.TenantActor;
  * @param modified   when it was last patched, or when it was created if it never has been
  * @param creator    who created it, absent for no actor
  * @param modifier   who last patched it, absent for no actor or when nobody has
+ * @param access     who may read it (from 6.11.0); absent on the wire (an older peer's) reads as
+ *                   {@link Access#PRIVATE}
  */
 public record GlobalKnowledgeBase(
 		GlobalKnowledgeBaseId id,
@@ -34,19 +36,32 @@ public record GlobalKnowledgeBase(
 		Instant created,
 		Instant modified,
 		@Nullable TenantActor creator,
-		@Nullable TenantActor modifier) {
+		@Nullable TenantActor modifier,
+		Access access) {
 
 	/**
-	 * Holds the parts to their rules: the title must be
+	 * Holds the parts to their rules, an absent access read as {@link Access#PRIVATE}: the title must be
 	 * one {@link #title} would return unchanged, so a title that is padded, blank, too long or holds a
 	 * control character fails here and, when read from JSON, fails binding.
 	 */
 	public GlobalKnowledgeBase {
+		access = access == null ? Access.PRIVATE : access;
 		Objects.requireNonNull(title, "title");
 		if (!title(title).equals(Optional.of(title))) {
 			throw new IllegalArgumentException("Not a valid knowledge base title (trimmed, not blank, at most "
 					+ MAX_TITLE_LENGTH + " characters, no control character): " + title);
 		}
+	}
+
+	/** A private knowledge base: the shape before 6.11.0, source-compatible. */
+	public GlobalKnowledgeBase(GlobalKnowledgeBaseId id, KnowledgeBaseName name, String title, LiveBranch liveBranch,
+			Instant created, Instant modified, @Nullable TenantActor creator, @Nullable TenantActor modifier) {
+		this(id, name, title, liveBranch, created, modified, creator, modifier, Access.PRIVATE);
+	}
+
+	/** This knowledge base with {@code access}. */
+	public GlobalKnowledgeBase withAccess(Access access) {
+		return new GlobalKnowledgeBase(id, name, title, liveBranch, created, modified, creator, modifier, access);
 	}
 
 	/** The longest title, in UTF-16 units, which is what the monolith's tenant rule counts. */

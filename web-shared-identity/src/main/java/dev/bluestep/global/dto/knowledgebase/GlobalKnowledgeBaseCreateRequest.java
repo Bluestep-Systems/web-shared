@@ -26,12 +26,32 @@ import jakarta.validation.constraints.NotNull;
  *                   once trimmed is a {@code 400}.
  * @param liveBranch the branch to serve, or absent for {@link LiveBranch#DEFAULT}
  * @param creator    who is registering it, or absent for no actor
+ * @param access     who may read it (from 6.11.0), or absent for {@link Access#PRIVATE}
  */
 public record GlobalKnowledgeBaseCreateRequest(
 		@NotNull KnowledgeBaseName name,
 		@KnowledgeBaseTitle @Nullable String title,
 		@Nullable LiveBranch liveBranch,
-		@Nullable TenantActor creator) {
+		@Nullable TenantActor creator,
+		@Nullable Access access) {
+
+	/** A request never writes a kind it does not know: an {@link Access.Unknown} is refused here (see {@link Access}). */
+	public GlobalKnowledgeBaseCreateRequest {
+		if (access instanceof Access.Unknown unknown) {
+			throw new IllegalArgumentException("access kind " + unknown.kind() + " is not one this release can set");
+		}
+	}
+
+	/** A create with no access (private): the shape before 6.11.0, source-compatible. */
+	public GlobalKnowledgeBaseCreateRequest(KnowledgeBaseName name, @Nullable String title,
+			@Nullable LiveBranch liveBranch, @Nullable TenantActor creator) {
+		this(name, title, liveBranch, creator, null);
+	}
+
+	/** {@link #access}, as an {@code Optional}. */
+	public Optional<Access> optAccess() {
+		return Optional.ofNullable(access);
+	}
 
 	/** {@link #title}, as an {@code Optional}. */
 	public Optional<String> optTitle() {

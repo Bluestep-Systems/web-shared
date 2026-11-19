@@ -8,7 +8,7 @@ import dev.bluestep.global.dto.tenant.TenantActor;
 
 
 /**
- * Changing a global knowledge base's title or live branch (from 6.1.0):
+ * Changing a global knowledge base's title or live branch (from 6.1.0), or its access (from 6.11.0):
  * {@code PATCH /global-knowledge-bases/{id}} with a required {@code If-Match}. It answers with the
  * {@link GlobalKnowledgeBase} and its new version as the {@code ETag}. A stale {@code If-Match} is a
  * {@code 412}.
@@ -30,12 +30,32 @@ import dev.bluestep.global.dto.tenant.TenantActor;
  *                   trimmed is a {@code 400}.
  * @param liveBranch the new live branch, or absent to keep it
  * @param actor      who is making the edit, or absent for no actor
+ * @param access     the new access (from 6.11.0), or absent to keep it
  */
 public record GlobalKnowledgeBasePatchRequest(
 		@Nullable KnowledgeBaseName name,
 		@KnowledgeBaseTitle @Nullable String title,
 		@Nullable LiveBranch liveBranch,
-		@Nullable TenantActor actor) {
+		@Nullable TenantActor actor,
+		@Nullable Access access) {
+
+	/** A request never writes a kind it does not know: an {@link Access.Unknown} is refused here (see {@link Access}). */
+	public GlobalKnowledgeBasePatchRequest {
+		if (access instanceof Access.Unknown unknown) {
+			throw new IllegalArgumentException("access kind " + unknown.kind() + " is not one this release can set");
+		}
+	}
+
+	/** A patch that keeps the access: the shape before 6.11.0, source-compatible. */
+	public GlobalKnowledgeBasePatchRequest(@Nullable KnowledgeBaseName name, @Nullable String title,
+			@Nullable LiveBranch liveBranch, @Nullable TenantActor actor) {
+		this(name, title, liveBranch, actor, null);
+	}
+
+	/** {@link #access}, as an {@code Optional}. */
+	public Optional<Access> optAccess() {
+		return Optional.ofNullable(access);
+	}
 
 	/** {@link #name}, as an {@code Optional}. */
 	public Optional<KnowledgeBaseName> optName() {
