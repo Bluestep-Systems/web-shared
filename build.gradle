@@ -752,7 +752,18 @@ bluestepLibrary {
 //     existing shapes, unchanged. Declared in config/class-set/new-in-6.6.0.txt.
 // A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_12_0), deployed, then the gateway asking 6.12.0
 // (which negotiates, so a gateway ahead of web-global answers the usage and storage tabs null meanwhile).
-version = '6.12.0'
+// 6.13.0 lets the gateway's Console list and read global users, read only, for fleet supers (CU-1k5g91bqjda, U1).
+// ADDITIVE, source-compatible:
+//   * dto.consoleglobaluser, new: ConsoleGlobalUserPage (GET /console-global-users?first&after&search&includeDisabled)
+//     of ConsoleGlobalUser accounts, and ConsoleGlobalUserDetail (GET /console-global-users/{classid}/{seqnum}): the
+//     account plus ConsoleAccessToken metadata (by row id, never a secret or hash), ConsoleTenantAccess grants, its
+//     standing ConsoleHistoryManagerGrant and its ConsoleCatalogScope; ConsoleActor and ConsoleReseller name a key;
+//     ConsoleLinkedAccount is an issuer, a LinkedAccountProvider and the subject's last four characters, never the
+//     subject. No credential, stored form or attribs ciphertext is in any of them. Declared in
+//     config/class-set/new-in-6.6.0.txt.
+// A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_13_0), deployed, then the gateway asking 6.13.0
+// (which negotiates, so a gateway ahead of web-global answers the global-user roots null meanwhile).
+version = '6.13.0'
 
 repositories {
     mavenLocal()

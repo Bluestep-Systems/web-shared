@@ -1,0 +1,31 @@
+/**
+ * Wire shapes for the Console's global-user directory (from 6.13.0): what the gateway's Console reads about global
+ * users, read only, for fleet supers.
+ *
+ * <ul>
+ *   <li>{@link ConsoleGlobalUserPage} is one page of the directory: {@link ConsoleGlobalUser} accounts in surname then
+ *       forename order, with an opaque cursor for the next page.</li>
+ *   <li>{@link ConsoleGlobalUserDetail} is one account with what the directory leaves out: its access tokens'
+ *       metadata ({@link ConsoleAccessToken}), its tenant grants ({@link ConsoleTenantAccess}), its standing
+ *       history-manager grant ({@link ConsoleHistoryManagerGrant}) and its catalog scope
+ *       ({@link ConsoleCatalogScope}).</li>
+ *   <li>{@link ConsoleActor} and {@link ConsoleReseller} name a global user and a reseller by key, with the name
+ *       web-global holds for them.</li>
+ * </ul>
+ *
+ * <h2>What never travels here</h2>
+ *
+ * <p>No credential or anything derived from one, no token secret and no token hash (a token is its row's
+ * {@code id}), no stored form, no {@code attribs} ciphertext, and no linked account's full subject: a linked account
+ * is its issuer, a provider class and the subject's last four characters ({@link ConsoleLinkedAccount}), so the
+ * pair that signs a person in is never on this wire.</p>
+ *
+ * <h2>Null-marked</h2>
+ *
+ * <p>Every type in this package is non-null except the members marked {@code @Nullable}: a value web-global holds
+ * nothing for is absent.</p>
+ */
+@NullMarked
+package dev.bluestep.global.dto.consoleglobaluser;
+
+import org.jspecify.annotations.NullMarked;
