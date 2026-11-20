@@ -30,8 +30,8 @@ public record ConsoleGlobalUserWriteRefusal(Reason reason, String message) {
 		/** 403: the acting account named itself; a second fleet super must enable or disable it. */
 		SELF_MODIFICATION,
 		/**
-		 * 409: turning this account off would leave no enabled fleet super; or (6.20.0) removing its ENDORSE would leave
-		 * no enabled fleet super holding ENDORSE.
+		 * 409: turning this account off would leave no enabled fleet super; or (6.20.0) removing its ENDORSE, or turning
+		 * off an enabled fleet super who holds it, would leave no enabled fleet super holding ENDORSE.
 		 */
 		LAST_HOLDER,
 		/**
@@ -66,7 +66,8 @@ public record ConsoleGlobalUserWriteRefusal(Reason reason, String message) {
 		/**
 		 * 503 (6.20.0): web-global cannot read or write endorsements safely now: it holds no key, the account's or the
 		 * acting account's stored endorsements do not decrypt to text, or the new value did not read back as written.
-		 * Nothing was written.
+		 * Also a disable of an enabled fleet super whose endorsements cannot be read when no other enabled fleet super
+		 * provably holds ENDORSE: it might be the last holder. Nothing was written.
 		 */
 		ENDORSEMENTS_UNAVAILABLE,
 		/** A reason this consumer's contract does not know. Never sent by the app. */
