@@ -16,6 +16,8 @@
  *   <li>{@link ConsoleGlobalUserDisabledRequest} and {@link ConsoleGlobalUserWriteRefusal} (from 6.18.0) are the
  *       Console's first writes: a fleet super turns one account off or on (behind a step-up), or revokes one of its
  *       tokens by id. The acting account rides in a header, never the body.</li>
+ *   <li>{@link ConsoleGlobalUserEndorsementsRequest} (from 6.20.0) changes one account's platform endorsements: the
+ *       catalog ids to hold and which of its unrecognized tokens to keep. Never free text, never the ciphertext.</li>
  * </ul>
  *
  * <h2>What never travels here</h2>

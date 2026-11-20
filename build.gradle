@@ -818,7 +818,21 @@ bluestepLibrary {
 // Declared in config/class-set/new-in-6.6.0.txt. No existing wire body changes.
 // A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_18_0), deployed, then the gateway sending the
 // writes (which negotiates: a gateway ahead of web-global answers both mutations null with write-unsupported).
-version = '6.18.0'
+// 6.19.0 IS SKIPPED ON PURPOSE: web-global's #123 (CU-1k5g91bqumn) took contract tag 6.19.0 for a web-global-only
+// change with no web-shared 6.19.0 (its DTO change is tracked by CU-1k5g91bqxnr), so the library's number moves past it
+// to stay equal to the contract tag web-global serves.
+// 6.20.0 lets a fleet super who holds ENDORSE change another global user's platform endorsements from the Console
+// (CU-1k5g91bqy12, U4). ADDITIVE, source-compatible: dto.consoleglobaluser gains ConsoleGlobalUserEndorsementsRequest
+// (PUT /console-global-users/{classid}/{seqnum}/endorsements: expectedVersion, the detail's opaque version; endorsements,
+// the complete set of catalog ids to hold; keepUnrecognized, absent or null for "keep every unrecognized token now
+// stored", else the subset of them to keep; the acting fleet super in B6P-Acting-Global-User and their step-up ticket
+// in B6P-Step-Up-Ticket; answers the ConsoleGlobalUserDetail as it now stands). ConsoleGlobalUserWriteRefusal.Reason
+// gains ENDORSE_REQUIRED (403), UNKNOWN_ENDORSEMENT, KEEP_NOT_STORED and TOO_LONG (422) and ENDORSEMENTS_UNAVAILABLE
+// (503), sent only on the new route; an older reader binds them UNKNOWN. LAST_HOLDER (409) also answers removing ENDORSE
+// from its last enabled fleet-super holder. Declared in config/class-set/new-in-6.6.0.txt. No existing wire body changes.
+// A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_20_0), deployed, then the gateway sending the
+// write (which negotiates: a gateway ahead of web-global answers it null with write-unsupported).
+version = '6.20.0'
 
 repositories {
     mavenLocal()
