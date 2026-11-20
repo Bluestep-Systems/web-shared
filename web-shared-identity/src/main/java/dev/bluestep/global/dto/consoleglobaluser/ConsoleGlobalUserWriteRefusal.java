@@ -66,8 +66,9 @@ public record ConsoleGlobalUserWriteRefusal(Reason reason, String message) {
 		/**
 		 * 503 (6.20.0): web-global cannot read or write endorsements safely now: it holds no key, the account's or the
 		 * acting account's stored endorsements do not decrypt to text, or the new value did not read back as written.
-		 * Also a disable of an enabled fleet super whose endorsements cannot be read when no other enabled fleet super
-		 * provably holds ENDORSE: it might be the last holder. Nothing was written.
+		 * Also a disable of an enabled fleet super with stored endorsements when no other enabled fleet super's
+		 * endorsements read as holding ENDORSE: without that proof of a remaining holder (and of the key), it might be
+		 * the last holder, whatever its own value reads as. Nothing was written.
 		 */
 		ENDORSEMENTS_UNAVAILABLE,
 		/** A reason this consumer's contract does not know. Never sent by the app. */
