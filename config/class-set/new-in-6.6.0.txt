@@ -62,3 +62,7 @@ dev/bluestep/global/dto/endorsement/package-info.class
 # 6.17.0 (CU-1k5g91bqn07): the global-user directory's filters
 dev/bluestep/global/dto/consoleglobaluser/GlobalUserFilter.class
 dev/bluestep/global/dto/consoleglobaluser/GlobalUserKind.class
+# 6.18.0 (CU-1k5g91bqx44): the Console's global-user disable/enable and token revoke
+dev/bluestep/global/dto/consoleglobaluser/ConsoleGlobalUserDisabledRequest.class
+dev/bluestep/global/dto/consoleglobaluser/ConsoleGlobalUserWriteRefusal.class
+dev/bluestep/global/dto/consoleglobaluser/ConsoleGlobalUserWriteRefusal$Reason.class
