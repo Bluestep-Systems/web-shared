@@ -66,3 +66,5 @@ dev/bluestep/global/dto/consoleglobaluser/GlobalUserKind.class
 dev/bluestep/global/dto/consoleglobaluser/ConsoleGlobalUserDisabledRequest.class
 dev/bluestep/global/dto/consoleglobaluser/ConsoleGlobalUserWriteRefusal.class
 dev/bluestep/global/dto/consoleglobaluser/ConsoleGlobalUserWriteRefusal$Reason.class
+# 6.20.0 (CU-1k5g91bqy12): the Console's endorsement write
+dev/bluestep/global/dto/consoleglobaluser/ConsoleGlobalUserEndorsementsRequest.class
