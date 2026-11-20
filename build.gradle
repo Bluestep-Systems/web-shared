@@ -808,7 +808,17 @@ bluestepLibrary {
 // refusing "X and no X" at construction). Declared in config/class-set/new-in-6.6.0.txt. No wire body changes.
 // A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_17_0), deployed, then the gateway sending the
 // filter (which negotiates: a gateway ahead of web-global answers a filtered globalUsers null with filter-unsupported).
-version = '6.17.0'
+// 6.18.0 gives the Console its first global-user writes, for fleet supers (CU-1k5g91bqx44, U3). ADDITIVE,
+// source-compatible: dto.consoleglobaluser gains ConsoleGlobalUserDisabledRequest (PUT
+// /console-global-users/{classid}/{seqnum}/disabled: expectedVersion, the detail's opaque version, and disabled; the
+// acting fleet super in B6P-Acting-Global-User and their step-up ticket in B6P-Step-Up-Ticket; answers the
+// ConsoleGlobalUserDetail as it now stands) and ConsoleGlobalUserWriteRefusal (forward-binding reason: NOT_PERMITTED,
+// SELF_MODIFICATION, LAST_HOLDER, STEP_UP_REQUIRED, VERSION_MISMATCH, WRITES_DISABLED), also the refusal of DELETE
+// /console-global-users/{classid}/{seqnum}/access-tokens/{id} (no body; 204 whether it deleted or found nothing).
+// Declared in config/class-set/new-in-6.6.0.txt. No existing wire body changes.
+// A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_18_0), deployed, then the gateway sending the
+// writes (which negotiates: a gateway ahead of web-global answers both mutations null with write-unsupported).
+version = '6.18.0'
 
 repositories {
     mavenLocal()
