@@ -832,7 +832,17 @@ bluestepLibrary {
 // from its last enabled fleet-super holder. Declared in config/class-set/new-in-6.6.0.txt. No existing wire body changes.
 // A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_20_0), deployed, then the gateway sending the
 // write (which negotiates: a gateway ahead of web-global answers it null with write-unsupported).
-version = '6.20.0'
+// 6.21.0 gives the Console a fleet status read, for fleet supers (CU-1k5g91bqzfz, FL). ADDITIVE, source-compatible:
+//   * dto.consolefleet, new: ConsoleFleetResponse (GET /console-fleet: checkedAt, when the round of checks started, and
+//     one ConsoleFleetNamespace per global.fleet_namespace row, by name) and ConsoleFleetNamespace (the row's name,
+//     label, legacy, isPrivate and modified, then what the namespace's own web answered: build from /appinfo/version,
+//     only a short version string matching BUILD_PATTERN, else absent; readiness from /readyz; failedCheck from /healthz
+//     when /readyz was not 200; checkedAt). FleetReadiness (READY, NOT_READY, UNREACHABLE) and FleetCheck (APP,
+//     DATABASE) are forward-binding: a value a newer web-global adds binds UNKNOWN. Declared in
+//     config/class-set/new-in-6.6.0.txt. No existing wire body changes.
+// A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_21_0), deployed, then the gateway asking 6.21.0
+// (which negotiates: a gateway ahead of web-global answers Query.fleet null meanwhile).
+version = '6.21.0'
 
 repositories {
     mavenLocal()

@@ -68,3 +68,9 @@ dev/bluestep/global/dto/consoleglobaluser/ConsoleGlobalUserWriteRefusal.class
 dev/bluestep/global/dto/consoleglobaluser/ConsoleGlobalUserWriteRefusal$Reason.class
 # 6.20.0 (CU-1k5g91bqy12): the Console's endorsement write
 dev/bluestep/global/dto/consoleglobaluser/ConsoleGlobalUserEndorsementsRequest.class
+# 6.21.0 (CU-1k5g91bqzfz): the Console's fleet status
+dev/bluestep/global/dto/consolefleet/ConsoleFleetNamespace.class
+dev/bluestep/global/dto/consolefleet/ConsoleFleetResponse.class
+dev/bluestep/global/dto/consolefleet/FleetCheck.class
+dev/bluestep/global/dto/consolefleet/FleetReadiness.class
+dev/bluestep/global/dto/consolefleet/package-info.class
