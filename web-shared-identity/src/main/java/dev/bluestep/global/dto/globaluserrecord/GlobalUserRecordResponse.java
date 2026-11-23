@@ -1,0 +1,152 @@
+package dev.bluestep.global.dto.globaluserrecord;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+import java.util.OptionalLong;
+
+import org.jspecify.annotations.Nullable;
+
+import dev.bluestep.global.dto.tenantaccess.GlobalUserKey;
+import dev.bluestep.global.dto.tenantaccess.ResellerKey;
+
+/**
+ * One {@code global.globaluser} row — the account, minus its credential.
+ *
+ * <h2>Every column the monolith reads except one</h2>
+ *
+ * <p>The monolith's own select over this table names sixteen columns. Fifteen of them are here.
+ * {@code password} is not, and its absence is a decision rather than an oversight — see
+ * {@link GlobalUserRecordCreateRequest} for why a response carrying it would be publishing
+ * recoverable passwords rather than digests. Nothing on this surface returns a credential, which is
+ * what makes a list of every account a safe thing to ask for.</p>
+ *
+ * <p><b>Nor a fingerprint of it.</b> One was built here and withdrawn before release, and the reason
+ * generalises to anything derived from that column. The monolith enciphers rather than digests the
+ * credential, with AES in ECB mode under one process-wide key — so the stored value is a deterministic
+ * function of the password alone, and any digest of it is too. Two accounts with the same password
+ * would carry the same fingerprint, and on a surface that lists every account that is a bulk
+ * password-equality oracle: set a known password, read the list, and every match shares it. Holding
+ * the crypt seed turns it into offline confirmation of any dictionary guess. Truncation and
+ * one-wayness do not help, because the input space is passwords rather than keys.</p>
+ *
+ * <p>The monolith binds its 90-day device-trust cookie to the credential, and that check does need
+ * <em>something</em> here to bind to. It needs a value that moves when the credential moves and is not
+ * derived from it — a change counter, not a digest. That is {@link #credentialVersion()}.</p>
+ *
+ * @param user      the account's key
+ * @param firstName as stored; the column is nullable and plenty of rows leave it so
+ * @param lastName  as stored; the listing's primary sort key, upper-cased
+ * @param username  the login name. Nullable in the table, and a row without one simply cannot be
+ *                  resolved by {@link UsernameLookupRequest}.
+ * @param userEmail the address the monolith writes to
+ * @param reseller  the reseller this account is restricted to, or empty for one that is not
+ *                  reseller-scoped. Both halves of the key or neither — half a key identifies
+ *                  nothing, which is why this is one component rather than two.
+ * @param superUser the monolith's {@code super} column, read as it reads it: any non-zero value is
+ *                  {@code true}. <b>Not the answer to "does this person see every tenant"</b> — the
+ *                  column defaults to 1, so an unconsidered row reads as unrestricted, and it is
+ *                  legitimately set for a reseller super whose reach is one reseller. That question
+ *                  is answered by {@link dev.bluestep.global.dto.globaluser.GlobalUserScopeResponse}
+ *                  and by nothing here.
+ * @param disabled  whether the monolith has turned the account off: {@code disabled <> 0}. The
+ *                  column is a {@code smallint} with no CHECK, and an unfamiliar value is read as
+ *                  disabled rather than as live, which is the safe direction for an account somebody
+ *                  deliberately touched.
+ * @param attribs   the account's platform endorsements, <b>as stored</b>. The monolith holds this
+ *                  column under its own cipher, so the value here is that ciphertext: opaque to
+ *                  everything between the two systems, and decrypted only by the monolith at its own
+ *                  edge. Not a credential — it is an entitlement string — but it is not readable
+ *                  either, and nothing should try.
+ * @param passwordExpireStart when the current password's life began, or empty for an account with no
+ *                  expiry clock running. {@code LocalDateTime} because the column is
+ *                  {@code timestamp without time zone}: it carries a wall-clock reading and no zone,
+ *                  and dressing it up as an instant would invent an offset nobody stored.
+ * @param emailValidated whether the address above has been confirmed
+ * @param emailValidatedExpireStart when that confirmation's life began, on the same terms as
+ *                  {@code passwordExpireStart}
+ * @param linkedAccounts every external identity linked to this account, in the order stored. Empty
+ *                  for an account that signs in with a password only.
+ * @param credentialVersion how many times this account's password has been changed: zero for a new
+ *                  account, advanced by every credential write that sets a different password and
+ *                  by none that re-encodes the same one. Its only use is equality — a value captured
+ *                  earlier that no longer matches means the password changed since — so it says
+ *                  nothing about the password itself, and two accounts sharing a value share
+ *                  nothing but a count. The column is {@code NOT NULL DEFAULT 0}, so this service
+ *                  always fills it; it is a nullable {@code Long} for the reader instead. A consumer on
+ *                  this jar talking to a service that predates the column receives no such
+ *                  property, and Jackson 3 refuses to bind a missing property onto a primitive — so a
+ *                  {@code long} here would fail every account read during that window rather than
+ *                  report the one thing it does not know. Absent means "not known", never zero.
+ */
+public record GlobalUserRecordResponse(
+		GlobalUserKey user,
+		@Nullable String firstName,
+		@Nullable String lastName,
+		@Nullable String username,
+		@Nullable String userEmail,
+		@Nullable ResellerKey reseller,
+		boolean superUser,
+		boolean disabled,
+		@Nullable String attribs,
+		@Nullable LocalDateTime passwordExpireStart,
+		boolean emailValidated,
+		@Nullable LocalDateTime emailValidatedExpireStart,
+		List<LinkedAccount> linkedAccounts,
+		@Nullable Long credentialVersion
+) {
+
+	/**
+	 * Jackson binds an omitted array to {@code null} whatever this package's null-marking says, and a
+	 * caller that built the list itself keeps a handle on it — so the list is both defaulted and
+	 * copied.
+	 */
+	public GlobalUserRecordResponse {
+		linkedAccounts = linkedAccounts == null ? List.of() : List.copyOf(linkedAccounts);
+	}
+
+	/** {@link #firstName}, as an {@code Optional}. */
+	public Optional<String> optFirstName() {
+		return Optional.ofNullable(firstName);
+	}
+
+	/** {@link #lastName}, as an {@code Optional}. */
+	public Optional<String> optLastName() {
+		return Optional.ofNullable(lastName);
+	}
+
+	/** {@link #username}, as an {@code Optional}. */
+	public Optional<String> optUsername() {
+		return Optional.ofNullable(username);
+	}
+
+	/** {@link #userEmail}, as an {@code Optional}. */
+	public Optional<String> optUserEmail() {
+		return Optional.ofNullable(userEmail);
+	}
+
+	/** {@link #reseller}, as an {@code Optional}. */
+	public Optional<ResellerKey> optReseller() {
+		return Optional.ofNullable(reseller);
+	}
+
+	/** {@link #attribs}, as an {@code Optional}. */
+	public Optional<String> optAttribs() {
+		return Optional.ofNullable(attribs);
+	}
+
+	/** {@link #passwordExpireStart}, as an {@code Optional}. */
+	public Optional<LocalDateTime> optPasswordExpireStart() {
+		return Optional.ofNullable(passwordExpireStart);
+	}
+
+	/** {@link #emailValidatedExpireStart}, as an {@code Optional}. */
+	public Optional<LocalDateTime> optEmailValidatedExpireStart() {
+		return Optional.ofNullable(emailValidatedExpireStart);
+	}
+
+	/** {@link #credentialVersion}, as an {@code OptionalLong}. */
+	public OptionalLong optCredentialVersion() {
+		return credentialVersion == null ? OptionalLong.empty() : OptionalLong.of(credentialVersion);
+	}
+}

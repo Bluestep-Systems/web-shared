@@ -1,0 +1,239 @@
+package dev.bluestep.global.dto;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.List;
+import java.util.Set;
+
+import org.hibernate.validator.messageinterpolation.ParameterMessageInterpolator;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+import dev.bluestep.global.dto.globaluserrecord.GlobalUserCredentialUpdateRequest;
+import dev.bluestep.global.dto.globaluserrecord.GlobalUserRecordCreateRequest;
+import dev.bluestep.global.dto.globaluserrecord.GlobalUserRecordUpdateRequest;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validation;
+import jakarta.validation.Validator;
+import jakarta.validation.ValidatorFactory;
+
+/**
+ * The constraints on the global-user record shapes, run through a real Bean Validation provider.
+ *
+ * <h2>Why a provider and not just the methods</h2>
+ *
+ * <p>{@link GlobalUserRecordConstraintsTest} calls the {@code @AssertTrue} methods directly, which
+ * proves their logic and nothing about whether anything ever invokes them. The annotations are part
+ * of this module's published contract — the {@code @Size} bounds in particular are the column widths,
+ * and a consumer relies on them to answer 400 at its edge — so "the annotation is in the source" has
+ * to be distinguishable from "the annotation fires". Swap two {@code @Size} values, or drop one, and every
+ * assertion in the sibling suite still passes.</p>
+ *
+ * <p>{@link ParameterMessageInterpolator} rather than the default: the default wants an Expression
+ * Language implementation on the classpath, and these assertions are about which constraints fired
+ * rather than about how their messages render.</p>
+ */
+@DisplayName("global user record validation")
+class GlobalUserRecordValidationTest {
+
+	private static final long CLASSID = 222_222L;
+	private static final String STORED_CREDENTIAL = "\n1Q0lQSEVSVEVYVA==";
+
+	private static final Validator VALIDATOR = validator();
+
+	private static Validator validator() {
+		try (ValidatorFactory factory = Validation.byDefaultProvider().configure()
+				.messageInterpolator(new ParameterMessageInterpolator())
+				.buildValidatorFactory()) {
+			return factory.getValidator();
+		}
+	}
+
+	private static Set<String> violatedPaths(Object bean) {
+		return VALIDATOR.validate(bean).stream()
+				.map(ConstraintViolation::getPropertyPath)
+				.map(Object::toString)
+				.collect(java.util.stream.Collectors.toUnmodifiableSet());
+	}
+
+	// ---------------------------------------------------------------- @Size actually fires
+
+	/**
+	 * Each bound is asserted at its own width, so a suite that still passes after two of them are
+	 * swapped is not possible: 31 characters is legal in {@code username} and illegal in
+	 * {@code firstName}, and 51 is the other way round.
+	 */
+	@Test
+	@DisplayName("each string bound is the width of its own column")
+	void size_boundsMatchTheirColumns() {
+		assertEquals(Set.of("firstName"), violatedPaths(create(name(31), name(20), name(20))),
+				"firstname is varchar(30), and 31 must fail there and nowhere else");
+		assertEquals(Set.of("username"), violatedPaths(create(name(20), name(20), name(51))),
+				"username is varchar(50), so 51 fails while 31 would not");
+		assertEquals(Set.of(), violatedPaths(create(name(30), name(30), name(50))),
+				"exactly at the bound is legal — an off-by-one here rejects real values");
+	}
+
+	@Test
+	@DisplayName("the email bound is 255 and the attribs bound is 4000")
+	void size_boundsOnTheWiderColumns() {
+		GlobalUserRecordCreateRequest longEmail = new GlobalUserRecordCreateRequest(CLASSID,
+				null, "Del", "Novak", "del.novak",
+				name(256), null, false, false, null,
+				null, false, null, List.of(), STORED_CREDENTIAL);
+		assertEquals(Set.of("userEmail"), violatedPaths(longEmail));
+
+		// Base64 so the shape guard is satisfied and only the length can be at fault.
+		String longAttribs = "Q".repeat(4004);
+		GlobalUserRecordCreateRequest bigAttribs = new GlobalUserRecordCreateRequest(CLASSID,
+				null, "Del", "Novak", "del.novak",
+				"del@example.test", null, false, false,
+				longAttribs, null, false, null, List.of(),
+				STORED_CREDENTIAL);
+		assertEquals(Set.of("attribs"), violatedPaths(bigAttribs));
+	}
+
+	/**
+	 * The bound counts <b>code points</b>, because {@code varchar(n)} counts characters and
+	 * {@code @Size} would have counted UTF-16 code units.
+	 *
+	 * <p>Sixteen supplementary-plane ideographs are sixteen characters to PostgreSQL and thirty-two to
+	 * {@code String.length()}. Under {@code @Size(max = 30)} that name was refused while the column
+	 * stored it happily — and because the update is a whole-record replace fed by a read that returns
+	 * the stored value verbatim, a row already holding one could not be edited through the API at all.
+	 * The 400 arrived on a {@code PUT} the caller had no way to make succeed.</p>
+	 *
+	 * <p>The over-long case is asserted alongside it so this pins a bound and not merely the absence of
+	 * one: thirty-one of the same characters must still be refused.</p>
+	 */
+	@Test
+	@DisplayName("the bound counts code points, as the column does — not UTF-16 code units")
+	void codePointSize_countsCharactersNotCodeUnits() {
+		// U+20000, a supplementary-plane CJK ideograph: one character, two Java chars.
+		String wide = "𠀀";
+
+		String sixteen = wide.repeat(16);
+		assertEquals(32, sixteen.length(), "fixture must actually be supplementary-plane");
+		assertEquals(Set.of(), violatedPaths(create(sixteen, "Novak", "del.novak")),
+				"varchar(30) stores 16 characters, so the constraint must accept them");
+
+		assertEquals(Set.of(), violatedPaths(create(wide.repeat(30), "Novak", "del.novak")),
+				"exactly at the bound, in characters");
+		assertEquals(Set.of("firstName"), violatedPaths(create(wide.repeat(31), "Novak", "del.novak")),
+				"and one character past it is still refused — the bound is a bound, not a suggestion");
+	}
+
+	@Test
+	@DisplayName("the update shape carries the same bounds as the create shape")
+	void size_updateMatchesCreate() {
+		GlobalUserRecordUpdateRequest tooLong = new GlobalUserRecordUpdateRequest(
+				name(31), "Novak", name(51),
+				"del@example.test", null, false, false, null,
+				null, false, null, List.of());
+
+		assertEquals(Set.of("firstName", "username"), violatedPaths(tooLong),
+				"a bound on create but not update lets a row be edited into a state it could not be "
+						+ "created in");
+	}
+
+	// ---------------------------------------------------------------- @Positive actually fires
+
+	@Test
+	@DisplayName("a non-positive classid is refused")
+	void positive_classidMustBePositive() {
+		for (long classid : new long[] {0L, -1L}) {
+			GlobalUserRecordCreateRequest request = new GlobalUserRecordCreateRequest(classid,
+					null, "Del", "Novak",
+					"del.novak", "del@example.test", null,
+					false, false, null, null, false, null,
+					List.of(), STORED_CREDENTIAL);
+
+			assertEquals(Set.of("classid"), violatedPaths(request),
+					"classid " + classid + " would create a row under a class nothing can find");
+		}
+	}
+
+	// ---------------------------------------------------------------- the guards fire too
+
+	/**
+	 * The guards are {@code @AssertTrue} on derived booleans, so their violation path is the derived
+	 * property name rather than the component. That is not cosmetic: a consumer's error handler that
+	 * reports a failed constraint's rejected value would publish a live password if the constraint sat
+	 * on {@code storedCredential} itself, and reports {@code false} because it does not.
+	 */
+	/**
+	 * The credential is required, and every shape of "nothing" is a violation rather than an
+	 * instruction. This is the constraint that stops {@code {}} — the most likely malformed body this
+	 * endpoint receives, and the one its intended caller produces by accident when an admin leaves the
+	 * password box blank — from deleting an account's password.
+	 */
+	@Test
+	@DisplayName("a missing, null, empty or blank credential is refused")
+	void notBlank_credentialIsRequired() {
+		for (String nothing : new String[] {null, "", "   ", "\t\n"}) {
+			assertEquals(Set.of("storedCredential"),
+					violatedPaths(new GlobalUserCredentialUpdateRequest(nothing)),
+					"a credential update that names nothing to write is incoherent, not a request to "
+							+ "clear; and exactly one violation should say so");
+		}
+	}
+
+	@Test
+	@DisplayName("the credential guard fires, and reports the derived property rather than the value")
+	void assertTrue_credentialGuardFires() {
+		Set<ConstraintViolation<GlobalUserCredentialUpdateRequest>> violations =
+				VALIDATOR.validate(new GlobalUserCredentialUpdateRequest("hunter2"));
+
+		assertEquals(1, violations.size());
+		ConstraintViolation<GlobalUserCredentialUpdateRequest> violation =
+				violations.iterator().next();
+		assertEquals("storedCredentialInStoredForm", violation.getPropertyPath().toString());
+		assertEquals(Boolean.FALSE, violation.getInvalidValue(),
+				"the rejected value must be the derived boolean, never the credential — this is what "
+						+ "keeps a consumer's error body free of it");
+	}
+
+	/**
+	 * The counterpart to the guard firing: {@code attribs} is deliberately held to no shape at all, so
+	 * plain text in it is accepted here and stored. Asserted rather than merely absent, because a
+	 * constraint added there would silently change what an already-released contract tag accepts and
+	 * could make an existing row un-editable through a whole-record update.
+	 */
+	@Test
+	@DisplayName("attribs carries no shape constraint, on either write shape")
+	void attribsIsNotShapeConstrained() {
+		assertEquals(Set.of(), violatedPaths(new GlobalUserRecordUpdateRequest("Del",
+				"Novak", "del.novak", "del@example.test",
+				null, false, false, "PLATFORM_A,PLATFORM_B",
+				null, false, null, List.of())));
+
+		assertTrue(violatedPaths(new GlobalUserRecordCreateRequest(CLASSID, null,
+				"Del", "Novak", "del.novak",
+				"del@example.test", null, false, false,
+				"PLATFORM_A,PLATFORM_B", null, false, null,
+				List.of(), STORED_CREDENTIAL)).isEmpty());
+	}
+
+	/** A fully-populated, well-formed request must produce no violations at all. */
+	@Test
+	@DisplayName("a well-formed request is clean")
+	void wellFormedRequestHasNoViolations() {
+		assertEquals(Set.of(), violatedPaths(create(name(20), name(20), name(20))));
+	}
+
+	// ---------------------------------------------------------------- fixtures
+
+	/** Base64-alphabet characters, so length is the only thing a fixture can be at fault for. */
+	private static String name(int length) {
+		return "N".repeat(length);
+	}
+
+	private static GlobalUserRecordCreateRequest create(String firstName, String lastName,
+			String username) {
+		return new GlobalUserRecordCreateRequest(CLASSID, null, firstName,
+				lastName, username, "del@example.test",
+				null, false, false, null, null, false,
+				null, List.of(), STORED_CREDENTIAL);
+	}
+}

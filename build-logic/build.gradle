@@ -1,0 +1,10 @@
+plugins {
+    // Precompiled script plugins: src/main/groovy/bluestep.library.gradle becomes plugin id `bluestep.library`.
+    id 'groovy-gradle-plugin'
+}
+
+dependencies {
+    // The Error Prone Gradle plugin, as a library, so the convention plugin can apply `net.ltgt.errorprone` by id. Its
+    // version moved here from the root build's plugins block; a project applying bluestep.library names no version.
+    implementation 'net.ltgt.gradle:gradle-errorprone-plugin:5.1.0'
+}

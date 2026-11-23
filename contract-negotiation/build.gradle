@@ -1,0 +1,46 @@
+plugins {
+    // The repository's library conventions (build-logic/src/main/groovy/bluestep.library.gradle). Released by a
+    // `contract-negotiation-<version>` tag.
+    id 'bluestep.library'
+}
+
+// This artifact's own version line (see settings.gradle).
+//
+// 1.0.0 (CU-86bd2g5jc, H2 design §1): the contract-negotiation protocol, version 1. A client asks a peer's handshake
+// (GET <handshake path>) for the contract tags it serves, picks the highest one both sides speak, and sends the stable
+// path with `B6P-Contract: <tag>` instead of a tag in the path.
+//   * dev.bluestep.contract: ContractHeaders (B6P-Contract, X-Contract-Refusal), ContractRefusalToken, ContractTag
+//     (strict semver triple, ordering), ContractHandshake (the handshake's JSON shape).
+//   * dev.bluestep.contract.server: ContractRegistry (what a service serves) and NegotiatedContractFilter, a servlet
+//     filter that answers the handshake and refuses a bad header, an unknown tag or an unserved segment BEFORE handler
+//     matching, then either rewrites the request onto the tagged path (web-global) or marks it (web's harness). It
+//     runs after the consumer's authentication filter, so a 401 comes before any tag is evaluated.
+//   * dev.bluestep.contract.client: ContractNeed, ContractNegotiator / CachingContractNegotiator (per peer: answered
+//     handshake cached 5 min, failed 30 s, single-flight; a mismatch refusal excludes the tag for that peer 5 min,
+//     re-handshakes once and retries once; a peer that predates negotiation falls back to the path style at the
+//     call's floor tag and is asked again after 30 s), over HandshakeSource, the consumer's transport.
+// No runtime dependencies: no HTTP client and no JSON library (the filter writes the handshake's few fixed fields
+// itself; a client binds it with its own mapper, the record's component names being the JSON keys).
+version = '1.0.0'
+
+dependencies {
+    compileOnly 'org.jspecify:jspecify:1.0.1'
+    // The filter is a jakarta.servlet Filter; the consumer's container provides the API (Tomcat 11 = Servlet 6.1).
+    compileOnly 'jakarta.servlet:jakarta.servlet-api:6.1.0'
+
+    testImplementation platform('org.springframework.boot:spring-boot-dependencies:4.1.1')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.assertj:assertj-core'
+    // MockHttpServletRequest / MockHttpServletResponse / MockFilterChain for the filter tests.
+    testImplementation 'org.springframework:spring-test'
+    testImplementation 'org.springframework:spring-core'
+    testImplementation 'org.springframework:spring-web'
+    testImplementation 'jakarta.servlet:jakarta.servlet-api'
+    // Jackson 3, the mapper every consumer runs: the handshake the filter writes must bind into ContractHandshake.
+    testImplementation 'tools.jackson.core:jackson-databind'
+    // The negotiator holds no thread of its own and must never touch the common pool; checked with deadline-http's
+    // rules, as every consumer checks its own code.
+    testImplementation testFixtures(project(':deadline-http'))
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.5.0'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}

@@ -1,0 +1,100 @@
+// checkClassSet: the proof that splitting web-shared moved no class. Applied by the root build (the umbrella), part of
+// `check`.
+//
+// The classes of the five jars this repository builds from the web-shared line (the umbrella and the four groups) must be
+//   * the umbrella's own: none (it is an umbrella);
+//   * in exactly one jar each (a class in two jars is the duplicate the split exists to avoid);
+//   * together exactly the classes of the published web-shared BASELINE (6.5.0, the last class-carrying one), plus
+//     the classes listed in config/class-set/new-in-6.6.0.txt, one `dev/bluestep/...Name.class` per line.
+// The baseline is the COMMITTED manifest config/class-set/web-shared-6.5.0.classes.txt (the released jar's sorted class
+// list) and its sha256 (web-shared-6.5.0.sha256). The released jar is still resolved, and the build fails unless its
+// sha256 is the committed one, so a stale or locally republished mavenLocal copy can neither hide a missing class nor
+// stand in for the release.
+// Anything gained or lost outside that list fails the build and names the classes. The jar is resolved from
+// mavenLocal or GitHub Packages (credentials as publish uses them: gpr.user / gpr.key, or USERNAME / TOKEN); a build that
+// can reach neither fails rather than skipping the proof. Bump baselineVersion only with a release that re-declares what
+// is new.
+import java.util.zip.ZipFile
+
+def groupProjects = ['web-shared-identity', 'web-shared-ai', 'web-shared-usage', 'web-shared-lookup']
+def baselineVersion = '6.5.0'
+
+def baseline = configurations.detachedConfiguration(
+        dependencies.create("dev.bluestep:web-shared:${baselineVersion}") { transitive = false })
+repositories {
+    maven {
+        name = 'GitHubPackagesBaseline'
+        url = uri('https://maven.pkg.github.com/bluestep-systems/web-shared')
+        credentials {
+            username = project.findProperty('gpr.user') ?: System.getenv('USERNAME')
+            password = project.findProperty('gpr.key') ?: System.getenv('TOKEN')
+        }
+        content { includeModule('dev.bluestep', 'web-shared') }
+    }
+}
+
+def classesOf = { File jar ->
+    def names = new TreeSet<String>()
+    new ZipFile(jar).withCloseable { zip ->
+        zip.entries().each { if (it.name.endsWith('.class')) names << it.name }
+    }
+    names
+}
+
+tasks.register('checkClassSet') {
+    group = 'verification'
+    description = "Fails unless the four groups' classes are web-shared ${baselineVersion}'s plus the declared new ones, each in one jar."
+    def jars = groupProjects.collectEntries { [(it): project(":${it}").tasks.named('jar').flatMap { it.archiveFile }] }
+    def umbrellaJar = tasks.named('jar').flatMap { it.archiveFile }
+    def declared = layout.projectDirectory.file('config/class-set/new-in-6.6.0.txt')
+    def manifest = layout.projectDirectory.file("config/class-set/web-shared-${baselineVersion}.classes.txt")
+    def manifestSha = layout.projectDirectory.file("config/class-set/web-shared-${baselineVersion}.sha256")
+    inputs.file(manifest)
+    inputs.file(manifestSha)
+    inputs.files(jars.values().collect { it })
+    inputs.file(umbrellaJar)
+    inputs.file(declared)
+    inputs.files(baseline)
+    doLast {
+        def problems = []
+        def owner = [:]
+        jars.each { name, jar ->
+            classesOf(jar.get().asFile).each { cls ->
+                if (owner.containsKey(cls)) {
+                    problems << "${cls} is in both ${owner[cls]} and ${name}"
+                }
+                owner[cls] = name
+            }
+        }
+        def own = classesOf(umbrellaJar.get().asFile)
+        if (!own.isEmpty()) {
+            problems << "the umbrella jar must hold no classes, but holds ${own.size()}: ${own.take(5)}"
+        }
+        def jarFile = baseline.singleFile
+        def actualSha = java.security.MessageDigest.getInstance('SHA-256').digest(jarFile.bytes).encodeHex().toString()
+        def committedSha = manifestSha.asFile.text.trim()
+        if (actualSha != committedSha) {
+            problems << "the resolved web-shared ${baselineVersion} jar (${jarFile}) has sha256 ${actualSha}, not the released ${committedSha}: a stale or locally republished copy? Delete it from mavenLocal and resolve the release again"
+        }
+        def expected = new TreeSet<String>(manifest.asFile.readLines().collect { it.trim() }.findAll { it })
+        def baselineCount = expected.size()
+        def added = declared.asFile.readLines().collect { it.trim() }.findAll { it && !it.startsWith('#') }
+        added.each {
+            if (!expected.add(it)) {
+                problems << "${it} is declared new but already in web-shared ${baselineVersion}"
+            }
+        }
+        def actual = owner.keySet()
+        (expected - actual).each { problems << "${it} is missing from the four groups" }
+        (actual - expected).each { problems << "${it} is in ${owner[it]} but neither in web-shared ${baselineVersion} nor declared new" }
+        if (!problems.isEmpty()) {
+            throw new GradleException("The class set differs from web-shared ${baselineVersion} + the declared new classes:\n  "
+                    + problems.join('\n  '))
+        }
+        logger.lifecycle("checkClassSet: ${actual.size()} classes in the four groups = ${baselineVersion}'s ${baselineCount} + ${added.size()} declared new, none shared, umbrella empty")
+    }
+}
+
+tasks.named('check') {
+    dependsOn 'checkClassSet'
+}

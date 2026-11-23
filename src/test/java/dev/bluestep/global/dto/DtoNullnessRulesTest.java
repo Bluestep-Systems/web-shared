@@ -7,10 +7,15 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.AnnotatedArrayType;
 import java.lang.reflect.AnnotatedParameterizedType;
 import java.lang.reflect.AnnotatedType;
+import java.lang.reflect.Method;
+import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.RecordComponent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalDouble;
+import java.util.OptionalInt;
+import java.util.OptionalLong;
 import java.util.TreeSet;
 
 import org.jspecify.annotations.NullMarked;
@@ -28,9 +33,13 @@ import com.tngtech.archunit.core.importer.ImportOption;
  *   <li>every DTO package opts into JSpecify via a {@code @NullMarked} package-info —
  *       NullAway runs with {@code OnlyNullMarked=true}, so a package that forgets the
  *       annotation is silently <em>unanalysed</em> rather than loudly broken; and</li>
- *   <li>no record component is declared {@code @Nullable}. Under {@code @NullMarked},
- *       components are non-null by default but {@code @Nullable} remains legal — this is
- *       the rule that forces {@code Optional<T>} instead.</li>
+ *   <li>a record component that may be absent is a top-level {@code @Nullable T}, named for the
+ *       value, with a public {@code optX()} accessor returning the matching {@code Optional}
+ *       ({@code OptionalInt}, {@code OptionalLong} or {@code OptionalDouble} for a boxed
+ *       {@code Integer}, {@code Long} or {@code Double}), and never an {@code Optional} component.
+ *       Under {@code @NullMarked}, components are non-null by default but an {@code Optional}
+ *       component stays legal to the compiler, so this class is what holds every DTO package to
+ *       the rule (6.0.0 moved the last packages off the older {@code Optional<T>} spelling).</li>
  * </ol>
  *
  * <p>Both are declaration-level rules, which is the level the rule actually lives at:
@@ -71,49 +80,58 @@ class DtoNullnessRulesTest {
 	}
 
 	/**
-	 * The decree: a record component that may be absent is {@code Optional<T>}, never a
-	 * {@code @Nullable} reference. Checks the annotated <em>type</em> (JSpecify's
-	 * {@code @Nullable} is {@code TYPE_USE}) and recurses through type arguments and
-	 * array components, so {@code List<@Nullable String>} is caught too.
+	 * The rule, for every DTO record: no component is
+	 * {@code Optional}, a {@code @Nullable} is on the component's own type and never inside a type
+	 * argument or an array, and each {@code @Nullable} component {@code x} has a public
+	 * {@code optX()} taking nothing and returning {@code Optional} (or {@code OptionalInt},
+	 * {@code OptionalLong}, {@code OptionalDouble} for a boxed primitive, and only those), the accessor callers
+	 * outside the record read.
 	 */
 	@Test
-	void noRecordComponentIsDeclaredNullable() {
+	void absenceIsSpelledAsNullablePlusOptAccessor() {
 		List<String> offenders = new ArrayList<>();
+		int nullableComponents = 0;
 		for (Class<?> record : records()) {
 			for (RecordComponent component : record.getRecordComponents()) {
-				if (mentionsNullable(component.getAnnotatedType())) {
-					offenders.add(record.getSimpleName() + "." + component.getName());
+				String name = record.getSimpleName() + "." + component.getName();
+				AnnotatedType type = component.getAnnotatedType();
+				if (component.getType() == Optional.class) {
+					offenders.add(name + " is Optional");
+				}
+				if (mentionsNullableInside(type)) {
+					offenders.add(name + " has @Nullable inside its type");
+				}
+				if (isNullable(type)) {
+					nullableComponents++;
+					if (!hasOptAccessor(record, component)) {
+						offenders.add(name + " is @Nullable without a public opt"
+								+ capitalized(component.getName()) + "() returning an Optional of its type");
+					}
 				}
 			}
 		}
-		assertTrue(offenders.isEmpty(),
-				"record components may not be @Nullable — wrap them in Optional<T> instead: " + offenders);
+		assertTrue(offenders.isEmpty(), "nullable-component rule broken: " + offenders);
+		assertTrue(nullableComponents > 0,
+				"no @Nullable component found under " + DTO_ROOT + " — the scan is broken");
 	}
 
-	/**
-	 * A raw {@code Optional} component would defeat the point: its contents would be
-	 * unanalysable and callers would get {@code Object}.
-	 */
-	@Test
-	void everyOptionalComponentIsParameterized() {
-		List<String> offenders = new ArrayList<>();
-		for (Class<?> record : records()) {
-			for (RecordComponent component : record.getRecordComponents()) {
-				if (component.getType() == Optional.class
-						&& !(component.getAnnotatedType() instanceof AnnotatedParameterizedType)) {
-					offenders.add(record.getSimpleName() + "." + component.getName());
-				}
-			}
-		}
-		assertTrue(offenders.isEmpty(), "raw Optional record components: " + offenders);
-	}
-
+	/** Whether the type or anything inside it is annotated {@code @Nullable}. */
 	private static boolean mentionsNullable(AnnotatedType type) {
+		return isNullable(type) || mentionsNullableInside(type);
+	}
+
+	/** Whether the type itself, not anything inside it, is annotated {@code @Nullable}. */
+	private static boolean isNullable(AnnotatedType type) {
 		for (Annotation annotation : type.getAnnotations()) {
 			if ("Nullable".equals(annotation.annotationType().getSimpleName())) {
 				return true;
 			}
 		}
+		return false;
+	}
+
+	/** Whether a type argument or array component of the type mentions {@code @Nullable}. */
+	private static boolean mentionsNullableInside(AnnotatedType type) {
 		if (type instanceof AnnotatedParameterizedType parameterized) {
 			for (AnnotatedType argument : parameterized.getAnnotatedActualTypeArguments()) {
 				if (mentionsNullable(argument)) {
@@ -125,6 +143,38 @@ class DtoNullnessRulesTest {
 			return mentionsNullable(array.getAnnotatedGenericComponentType());
 		}
 		return false;
+	}
+
+	/**
+	 * Whether the record has a public {@code optX()} returning the component wrapped: the primitive
+	 * optional for a boxed {@code Integer}, {@code Long} or {@code Double} (never
+	 * {@code Optional<Integer>}), and otherwise an {@code Optional} of exactly the component's type. An {@code Optional<String>} accessor for a
+	 * {@code UsageCategory} component does not count.
+	 */
+	private static boolean hasOptAccessor(Class<?> record, RecordComponent component) {
+		try {
+			Method accessor = record.getMethod("opt" + capitalized(component.getName()));
+			Class<?> returned = accessor.getReturnType();
+			Class<?> type = component.getType();
+			if (type == Integer.class) {
+				return returned == OptionalInt.class;
+			}
+			if (type == Long.class) {
+				return returned == OptionalLong.class;
+			}
+			if (type == Double.class) {
+				return returned == OptionalDouble.class;
+			}
+			return returned == Optional.class
+					&& accessor.getGenericReturnType() instanceof ParameterizedType parameterized
+					&& parameterized.getActualTypeArguments()[0].equals(component.getGenericType());
+		} catch (NoSuchMethodException absent) {
+			return false;
+		}
+	}
+
+	private static String capitalized(String name) {
+		return Character.toUpperCase(name.charAt(0)) + name.substring(1);
 	}
 
 	private static List<Class<?>> records() {

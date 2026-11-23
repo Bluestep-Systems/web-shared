@@ -1,0 +1,2 @@
+dev.bluestep.secretfiles.spring.SecretFilesAutoConfiguration
+dev.bluestep.secretfiles.spring.hikari.HikariSecretsAutoConfiguration

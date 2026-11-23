@@ -1,0 +1,56 @@
+// The dependencies every DTO artifact of this repository declares: the five projects that make up web-shared (the
+// umbrella and the four groups identity, ai, usage and lookup) apply this file, so the annotations the DTOs carry,
+// and the stack their wire-contract tests run on, are one declaration. Applied after `bluestep.library`.
+dependencies {
+    // `api`, not `compileOnly`: the annotations are part of this module's published
+    // contract, so consumers compiling against these DTOs see the same nullness.
+    api 'org.jspecify:jspecify:1.0.1'
+
+    // The ONLY Jackson artifact this module publishes, and the only one its source touches: the DTOs
+    // carry @JsonProperty / @JsonIgnore, and Jackson 3 kept com.fasterxml.jackson.annotation as its
+    // annotation package, so one jar serves both families. No mapper, no datatype module and no BOM
+    // ride along — a consumer brings its own Jackson 3 (Spring Boot 4 does), and Jackson 3 binds
+    // Optional<T> components in core, with nothing registered (OptionalWireContractTest pins that).
+    //
+    // Versioned explicitly because there is no platform to manage it any more. 2.21 is the
+    // jackson-annotations line the Jackson 3.1 BOM declares (jackson.version.annotations in
+    // tools.jackson:jackson-bom:3.1.6), so this asks for exactly what a 3.1 consumer already resolves
+    // rather than raising it. A consumer's own BOM still wins where it manages the artifact.
+    //
+    // 5.0.0 removed the two Jackson 2 declarations that used to sit here: the
+    // com.fasterxml.jackson:jackson-bom platform (which RAISED every consumer's whole Jackson 2
+    // family, highest-wins) and jackson-datatype-jdk8 (which existed so a Jackson 2 mapper could bind
+    // the Optional components). Their last consumer, web-global's msgpack converter, is retired.
+    api 'com.fasterxml.jackson.core:jackson-annotations:2.21'
+    api 'jakarta.validation:jakarta.validation-api:3.1.1'
+    // NOT declared here, and since 5.0.0 not declared anywhere: msgpack is retired fleet-wide.
+    // This module's source never referenced it — it was once a pass-through `api` dependency,
+    // which meant a DTO library forced a wire format onto every consumer.
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    // The constraint annotations ARE part of this module's published contract now — @Size derived
+    // from column widths, and two @AssertTrue guards over opaque columns — so "the annotation is
+    // present in the source" is not evidence that it fires. Without a provider on the test
+    // classpath, swapping two @Size values or moving one somewhere Bean Validation never reads it
+    // leaves the whole suite green. This is the provider the consumers run (Boot's starter-validation
+    // pulls the same family), so what fires here is what fires there.
+    testImplementation 'org.hibernate.validator:hibernate-validator:9.0.1.Final'
+    // 1.5.0+: earlier ArchUnit bundles an ASM that cannot read Java 25 class files (major
+    // 69). It fails silently — the import yields zero classes and every rule passes
+    // vacuously — which is what scanFoundTheDtoRecords() exists to catch.
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.5.0'
+    // Jackson 3 (tools.jackson.*), the family every consumer runs: web-global's and the monolith's
+    // Boot 4 mappers are Jackson 3, for JSON and for CBOR. The wire-contract tests are only worth
+    // anything if they exercise the Jackson the consumers actually run, so this tracks web-global's
+    // jackson-bom pin. 3.1.6 rather than 3.1.5: GHSA-q4xh-88c3-wmh7 (CVE-2026-68497) and
+    // GHSA-wjgm-6hv5-3cvf.
+    //
+    // No Jackson 2 and no msgpack on the test classpath either, since 5.0.0. The tests that compared
+    // a Jackson 2 or msgpack wire against the Jackson 3 one were retired with the last consumer that
+    // spoke either; their Jackson 3 assertions were kept and now pin the wire on their own.
+    testImplementation 'tools.jackson.core:jackson-databind:3.1.6'
+    // Test-only: UsageWireContractTest and LegacyWireCompatTest round-trip the DTOs through CBOR,
+    // the binary format producers and the AI gate client push them in.
+    testImplementation 'tools.jackson.dataformat:jackson-dataformat-cbor:3.1.6'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}

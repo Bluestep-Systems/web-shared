@@ -1,46 +1,17 @@
 plugins {
-    id 'java-library'
-    id 'maven-publish'
-    id 'net.ltgt.errorprone' version '5.1.0'
-    id 'checkstyle'
+    // The repository's library conventions (build-logic/src/main/groovy/bluestep.library.gradle): java-library,
+    // java-test-fixtures (src/testFixtures is a second variant of this coordinate, 6.0.0: the pinned Argon2id
+    // vectors), toolchain 25, NullAway in JSpecify mode, Checkstyle (unused imports fail the build), JUnit Platform,
+    // and maven-publish to mavenLocal + GitHub Packages as dev.bluestep:web-shared.
+    id 'bluestep.library'
 }
 
-// Unused imports fail the build. See config/checkstyle/checkstyle.xml for why this is Checkstyle
-// rather than Error Prone (no such bug pattern) or Spotless (rewrites hand-formatted files).
-//
-// The plugin wires checkstyleMain and checkstyleTest into `check` on its own, so `./gradlew build`
-// catches this and both source sets are covered without naming them here.
-checkstyle {
-    toolVersion = '10.21.4'
-    configFile = file('config/checkstyle/checkstyle.xml')
-    // What actually fails this build is maxErrors, which defaults to 0 — the ruleset declares
-    // severity=error, so a violation is an error and the default is already the strict one.
-    // maxWarnings is set for the case that ruleset ever gains a warning-severity rule: its default is
-    // Integer.MAX_VALUE, so such a rule would otherwise report and pass. Inert today, on purpose.
-    maxWarnings = 0
+// This library's tags are bare (6.5.0): the number is also the contract tag web-global serves, and every release of
+// it has been tagged that way. The other libraries here release under `<artifact>-<version>`.
+bluestepLibrary {
+    tagPrefix = ''
 }
 
-publishing {
-    publications {
-        mavenJava(MavenPublication) {
-            from components.java
-        }
-    }
-    repositories {
-        mavenLocal()
-
-        maven {
-            name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/bluestep-systems/web-shared")
-            credentials {
-                username = project.findProperty("gpr.user") ?: System.getenv("USERNAME")
-                password = project.findProperty("gpr.key") ?: System.getenv("TOKEN")
-            }
-        }
-    }
-}
-
-group = 'dev.bluestep'
 // 2.0.0: nullable record components became Optional<T>.
 // 3.0.0: PricedUnit deleted — the metered-unit vocabulary is an open unit_key string plus the
 // descriptive UnitCategory/UnitMeasure axes and a RateVariant, and AiCompletionRequest carries an
@@ -293,114 +264,603 @@ group = 'dev.bluestep'
 // WebGlobalClient.mapper() disables FAIL_ON_UNKNOWN_PROPERTIES, so a replica holding an older jar
 // ignores the new field rather than failing the read. Recorded here, like the 4.1.3 @JsonIgnore note,
 // so that a shipped tag emitting one more property is not later found as unexplained drift.
-version = '4.1.5'
+//
+// 4.1.6 adds UsageSummaryResponse / UsageSummaryRow: per-tenant totals of the usage batch metrics
+// over a time range, the read the monolith's Page Statistics report and ServerBalancer cut over to
+// (usage metering phase 5, CU-86bbugbjn). Purely additive. Served under /api/v1/usage/summary, which
+// is not tag-routed, so again NO ContractVersion entry.
+// 4.1.7 adds DbUsageBatchRequest / DbUsageRow: a namespace's pg_stat_statements diff, per-tenant
+// server-side DB time and buffer blocks plus the eviction/reset signals that say how far to trust it
+// (usage metering phase 4b, CU-86bc6fw3m). Purely additive. Served under /api/v1/usage/db, which is
+// not tag-routed, so again NO ContractVersion entry.
+//
+// 5.0.0: the published POM no longer carries Jackson 2. Dependency-breaking, wire-neutral.
+//   * REMOVED from the POM: the com.fasterxml.jackson:jackson-bom:2.22.1 platform (an `api` import
+//     that raised every consumer's whole Jackson 2 family, highest-wins) and
+//     com.fasterxml.jackson.datatype:jackson-datatype-jdk8 (there so a Jackson 2 mapper could bind
+//     the Optional<T> components). Their last consumer was web-global's Jackson 2 msgpack converter,
+//     deleted in phase 3 of the msgpack retirement; nothing in the fleet sends application/x-msgpack
+//     any more (the monolith moved to CBOR in release 26.08.24.00), so nothing needs a Jackson 2
+//     mapper to bind these records.
+//   * KEPT: com.fasterxml.jackson.core:jackson-annotations, now versioned on its own (2.21, the line
+//     Jackson 3.1 declares) because no platform manages it. The DTOs carry @JsonProperty/@JsonIgnore,
+//     and Jackson 3 reads that same package.
+//   * CONSUMERS MUST BRING THEIR OWN JACKSON 3. Spring Boot 4 does, and Jackson 3 binds Optional<T>
+//     in core with no module. A consumer still binding these DTOs with a Jackson 2 mapper must now
+//     declare jackson-datatype-jdk8 itself and register it, or every Optional component binds null.
+//     The monolith already excluded the jdk8 module from this dependency, so it is unaffected.
+//   * DTOs UNCHANGED, source, binary and wire: no record, component, key or constraint moved. The
+//     Jackson 3 wire-contract tests were kept and pin the same bytes; only the tests comparing a
+//     Jackson 2 or msgpack wire against the Jackson 3 one were retired, with the last consumer that
+//     spoke either. The msgpack and Jackson 2 test dependencies went with them, and the Jackson 3
+//     test dependencies moved to 3.1.6 (GHSA-q4xh-88c3-wmh7 / CVE-2026-68497, GHSA-wjgm-6hv5-3cvf).
+//   A MAJOR because removing transitive dependencies a consumer may have been compiling against is a
+//   breaking change to the artifact even though not one byte on the wire moves.
+//
+//   No unreleased root changes ride along: 4.1.6 and 4.1.7 are both released (4.1.7 is the tag this
+//   branch starts from), so 5.0.0 is 4.1.7 plus exactly the dependency change above. The secret-files
+//   subproject in this repo is a separate coordinate on its own version line and is not part of
+//   this number.
+//
+//   ContractVersion: unlike 4.1.4-4.1.7, this one IS a served tag. The artifact version and the path
+//   are one string, so a consumer resolving 5.0.0 will spell /api/v5.0.0/; web-global declares V5_0_0
+//   serving the same surfaces as 4.1.3, byte-identically, beside every older tag rather than in place
+//   of any. Release order: this artifact first, then web-global (which serves the new tag), and only
+//   then any consumer that moves to 5.0.0 — a consumer on 5.0.0 talking to a web-global without
+//   V5_0_0 gets 404s, and the AI gate fails closed on a 404.
+//
+// 5.0.1 gives a global user a credential change counter (CU-86bbtyzh1): `credentialVersion`, a
+// bigint on global.globaluser, on GlobalUserRecordResponse, and `reencoding` on
+// GlobalUserCredentialUpdateRequest, which says whether a credential write is a different password
+// (advance the counter) or the same one re-encoded (leave it). The monolith binds its 90-day
+// device-trust cookie to the counter, which it could not bind to anything since the credential
+// stopped crossing this contract — so every global user has been asked for the email factor on
+// every sign-in. A change counter rather than any digest of the credential, for the reason
+// GlobalUserRecordResponse's javadoc records.
+//
+// Additive on both sides, so a patch with NO ContractVersion entry, on the 4.1.5 `flags` precedent:
+// the shared records are bound by every live tag's controllers, so the response component is served
+// under every tag at once, and a replica holding an older jar ignores it because the monolith's
+// WebGlobalClient.mapper() disables FAIL_ON_UNKNOWN_PROPERTIES. The request flag is a primitive, so
+// a caller that omits it — every caller built before this — binds `false` and advances the counter
+// on every write: one extra verification prompt is the worst it can cost, and never a device trusted
+// across a password change. The old single-argument constructor is kept and means exactly that.
+// Both new components are Optional rather than primitive for the same reason: Jackson 3 refuses to
+// bind a missing property onto a primitive (FAIL_ON_NULL_FOR_PRIMITIVES is on by default), so a
+// `long credentialVersion` would fail every account read by a consumer on this jar against a
+// web-global that predates the column — a sign-in outage for getting the deploy order wrong.
+//
+// Source-compatible as a patch should be: GlobalUserRecordResponse keeps its 13-component constructor
+// (credentialVersion not known) and GlobalUserCredentialUpdateRequest its one-component one (a change).
+//
+// RELEASE ORDER: this artifact, then web-global (changeset adding the column, the counter advanced
+// in its credential UPDATE, the jar resolved), and only then a monolith build that reads the field.
+// Out of order is safe, not merely discouraged: a monolith ahead of the column reads the count as not
+// known and mints and honours no device-trust cookie until it lands.
+//
+// DURING THE MONOLITH'S RING ROLLOUT the count over-advances. Rings still on an older build send their
+// sign-in re-encodes (the one-way upgrade, a breach-verdict refresh) without the flag, which reads as
+// a change, so a user who signs in on such a namespace after the breach corpus moves loses the devices
+// they trusted elsewhere — the cookie is scoped to the parent domain and the count is the account's.
+// The cost is one extra verification prompt per user per corpus move, until every ring carries the
+// flag; today every global user is prompted on every sign-in, so it is still strictly better.
+//
+// 5.1.0 lets a reseller be created and deleted (CU-86bckhf6k). Since the reseller record moved onto
+// this contract (CU-86bbrr2bc) the monolith's console could neither: its create failed on save and
+// its delete had never been reachable. Adds ResellerCreateRequest (the update's branding columns plus
+// the creator key basetable requires; no key, the service allocates it) and ResellerDeleteRefusal
+// (the 409 body naming which kinds of reference stand in the way — tenants, global users, catalog
+// scopes, or the default reseller itself). Additive: no existing record, component or constraint
+// moved.
+//
+// A MINOR, and unlike 5.0.1 a served tag: the new operations are verbs, and a verb needs a tag to be
+// gated behind. web-global declares V5_1_0 serving 5.0.0's surfaces plus POST /resellers and DELETE
+// /resellers/{classid}/{seqnum}. RELEASE ORDER: this artifact, then web-global serving V5_1_0, then the
+// monolith moving its contract tag to 5.1.0 — a monolith ahead of web-global gets 404s on every
+// gateway, not only the reseller one, because the tag is shared.
+//
+// 5.2.0 adds the usage series read and the vocabulary a tenant's usage is named in (CU-86bcqj6qc,
+// for the org usage chart, CU-86bcqj6mn). Purely additive: no existing record, component or
+// constraint moved.
+//   * UsageSeriesResponse / UsageCategorySeries / UsageSeriesPoint: one tenant's request metrics in
+//     uniform hour or day buckets, one series per category, for GET /api/v1/usage/series. Every
+//     series holds exactly one point per bucket of [from, to), zeros where there was no traffic, and
+//     the response's constructor refuses anything else, so a chart pairs the categories by index and
+//     never fills holes. asOf is the server's fold time: a bucket ending after it is partial, so a
+//     zero there is not "no traffic". Only the requested categories and grain come back, and an
+//     omitted category means exactly {http, file} forever, so a later category or grain can never
+//     reach a consumer that cannot bind it. Only the tenant-visible figures ride: cpu, alloc and the per-request byte
+//     maxima stay internal.
+//   * UsageGrain (HOUR, DAY), with each grain's width.
+//   * UsageCategory (HTTP, FILE), serialized as the stored keys `http` and `file` rather than the
+//     constant names, so a response, a query parameter and a tenant_usage row spell a category the
+//     same way. Closed where UsageWindow.category stays open: the background lanes are not shown to a
+//     tenant and get no constant.
+//   * UsageMetric: every figure a tenant is shown, request metrics and storage levels, each
+//     documented with its unit, with aggregation() (CUMULATIVE, AVERAGE, PEAK, LEVEL) and
+//     perCategory() stating how it behaves over a window and whether a category applies. The
+//     chart's metric picker uses it now, and the usage threshold DTOs planned for 5.3.0 key on it.
+// A MINOR rather than a patch because it adds a surface, but NO ContractVersion entry, on the 4.1.6
+// precedent: /api/v1/usage/ is not tag-routed, and the monolith's contract tag is its own constant
+// (WebGlobalClient.CONTRACT), not this number. RELEASE ORDER: this artifact, then web-global serving
+// the endpoint, then the monolith calling it.
+//
+// 5.3.0 adds the usage threshold shapes (CU-86bcqjrku, for usage alerts and circuit breakers,
+// CU-86bcqj6mn), in the new package dto.usage.threshold. Additive: no existing record component or
+// constraint moved. UsageMetric and UsageCategory gain a method, TenantUserKey and ContractRelease
+// are new beside them.
+//   * UsageThresholdRequest (write) / UsageThreshold (stored, with id, version and timestamps): one
+//     tenant's limit on one UsageMetric, narrowed to a UsageCategory or covering every category,
+//     over a UsageThresholdWindow, with 1-20 ordered stages. The constructors refuse an incoherent
+//     threshold: a category on a metric with none, a window that does not suit
+//     UsageMetric.aggregation(), limits out of ascending order, a second break, a break on a PEAK or
+//     AVERAGE metric (neither can fall while broken, so the break would only lock the tenant out
+//     until rollover), and any stage above the break (ties allowed). The request's schemaName
+//     carries @NotBlank/@CodePointSize(50) as the 5.2.0 write shapes do. Identity is (schemaName,
+//     metric, category, window); expectedVersion absent creates (POST), present replaces the
+//     threshold the path's {id} names (PUT), and a replace that changes an identity field is a 400.
+//   * UsageThresholdWindow (HOURLY, DAILY, WEEKLY, MONTHLY, LATEST), UTC-aligned for every tenant,
+//     with each window's span. Not BudgetSchedule on the wire (LIFETIME and a tenant offset are ruled
+//     out, and it has no LATEST), but the span arithmetic delegates to BudgetSchedule at UTC.
+//   * UsageThresholdAction: a positive limit plus a sealed Kind, Notify(channels, recipients) or
+//     Break, polymorphic on the wire under "type" ("notify", "break"). NotifyChannel is EMAIL,
+//     IN_APP or OPS; EMAIL and IN_APP name 1-50 distinct TenantUserKey recipients, a List that
+//     keeps its order on the wire (keys only, never addresses); OPS names none.
+//   * UsageTripState: a stage of one threshold version (thresholdVersion) that tripped, with its
+//     limit, observed value, whether it breaks and its span snapshotted, when it was notified, and
+//     whether it cleared. web-global closes a threshold's open trips when it is replaced, so
+//     actionIndex is only ever read against that version.
+//   * UsageBreakerList / UsageBreaker (every uncleared break, fleet-wide, for pods to poll; clearsAt
+//     is the window end).
+//   * UsageNotification: one queued EMAIL or IN_APP notice for exactly one recipient, with the trip
+//     id, trip time, limit, observed value, span and whether the circuit broke with it. The
+//     dispatcher (one per namespace, on the task pod) asks with a UsageNotificationRequest naming
+//     its namespace's schemas, is answered a UsageNotificationBatch(generatedAt, notifications), and
+//     acknowledges with a UsageNotificationAckRequest of per-id outcomes, DELIVERED or
+//     UNDELIVERABLE. Acks and retries are per notification, so per recipient.
+//   * TenantUserKey lives in dto.tenantaccess beside GlobalUserKey; ContractRelease (dto.usage) is a
+//     release as a contract tag names it, and every growable enum here (UsageMetric, UsageCategory,
+//     UsageThresholdWindow, NotifyChannel, UsageNotificationOutcome) and each action kind says
+//     introducedIn(), pinned in the tests.
+//   * Vocabulary and rules, with the guarantee on the server: web-global serves the threshold, trip,
+//     breaker and notification paths under the /api/v{tag}/ ContractVersion routing, where the tag
+//     is the caller's ContractVersion path tag, and answers a caller only rows that bind under that
+//     tag's vocabulary and rules (a per-tag predicate, reading introducedIn() for vocabulary). A
+//     caller on /api/v5.3.0/ gets only 5.3.0 vocabulary, shapes and rules.
+//   * Absence is a @Nullable component plus an optX() accessor, never Optional, in dto.usage and its
+//     subpackages; DtoNullnessRulesTest now holds those packages to that and the rest to Optional,
+//     which migrate when next touched.
+// A MINOR for the new surface, and unlike /api/v1/usage/ these paths ARE tag-routed. Moving to this
+// artifact does not move a caller's tag: the monolith's tag is its own constant
+// (WebGlobalClient.CONTRACT), and moving it moves every gateway at once. RELEASE ORDER: this
+// artifact, then web-global serving a 5.3.0 ContractVersion for these paths and for every surface
+// the earlier tags serve, then the monolith moving its contract tag to 5.3.0.
+//
+// 5.4.0 reserves the contract tag under which web-global serves the whole global user lifecycle
+// (CU-86bcuqu69): DELETE /api/v5.4.0/global-user-records/{classid}/{seqnum} with a required If-Match,
+// once web-global owns the account as an entity (its changeset 023). NO shape in this artifact changed:
+// the release exists so the tag and this artifact keep naming the same contract, as 5.1.0 did for the
+// reseller verbs. Behaviour every record tag now shares, ETags, the optional If-Match on PUT, the
+// narrowed key validation, credentialVersion absent for an account with no credential, is declared
+// in web-global's ContractVersion.V5_4_0. RELEASE ORDER: web-global serving 5.4.0, then this
+// artifact, then the monolith moving its contract tag to 5.4.0.
+//
+// 5.5.0 adds the tenant read contract (CU-86bcuwzun): dto.tenant, the monolith's Association,
+// root organization and sign-in type as one TenantRecordResponse, read from web-global's global.tenant
+// (its changeset 025). web-global serves GET /api/v5.5.0/tenants (paged, filterable by name, reseller
+// and namespace), /tenants/{classid}/{seqnum} (ETag = the row's version), /tenants/snapshot (what a
+// monolith pod keeps in memory: per-tenant switches, namespace, lock status) and
+// /tenants/{classid}/{seqnum}/lock. Read only; writes still go through the monolith's own rows, which
+// 025 keeps in step with global.tenant by trigger. TenantActor is the typed actor (global user | tenant
+// user, none = absent) on the wire. dto.tenant joins the @Nullable + optX() rule. Also: ResellerUpdateRequest
+// gains an optional actor (a TenantActor; absent = no actor), which web's ResellerGatewayDAO fills with the
+// acting global super and web-global's reseller-actor changeset consumes; a 7-argument constructor keeps
+// Java callers compiling. A MINOR: new shapes plus one optional component, absent meaning what it meant
+// before. RELEASE ORDER: this artifact, then web-global serving 5.5.0
+// for these paths and every surface 5.4.0 serves, then the monolith moving its contract tag to 5.5.0.
+//
+// 6.0.0 (CU-86bcv632n): every DTO package now spells an absent record component one way, the way
+// dto.usage (5.3.0) and dto.tenant (5.5.0) already did: a @Nullable component named for the value,
+// read from outside the record through an optX() accessor, never an Optional<T> component. A boxed
+// Integer, Long or Double gets an OptionalInt, OptionalLong or OptionalDouble accessor (dto.tenant's
+// Optional<Integer>/<Long>/<Double> accessors moved too, and DtoNullnessRulesTest now requires it).
+// Constructors take the value or null. This reverses 2.0.0's "nullable record components became
+// Optional<T>"; absence still reaches every Java caller as an Optional, but construction and JSON
+// binding stay plain and no compact constructor has to turn a bound null back into Optional.empty().
+//   * Converted: dto.accesstoken, ai, aitenantblock, aitenantconfig, aiunitrate, aiusage, globaluser,
+//     globaluserrecord, lookup, reseller and tenantaccess, including 5.5.0's ResellerUpdateRequest.actor.
+//   * Container-element constraints moved onto the component itself:
+//     Optional<@CodePointSize(max = 256) String> is now @CodePointSize(max = 256) @Nullable String,
+//     which Bean Validation checks the same way and passes when absent.
+//   * Dropped constructors that only existed to accept Optionals for an older shape: ResellerUpdateRequest's
+//     7-argument one (5.5.0) and GlobalUserRecordResponse's pre-credentialVersion one (5.0.1), plus
+//     TenantAccessGrantRequest's no-argument one (a bound empty body is now plainly null). Every Java
+//     caller recompiles against this release anyway. Static factories keep Optional parameters
+//     (AiCompletionRequest.of, TenantAccessGrantResponse.of).
+//   * DtoNullnessRulesTest applies the nullable rule to the whole DTO root; the old-rule branch and
+//     NULLABLE_COMPONENT_PACKAGES are gone.
+// A MAJOR because it is source-breaking for every Java caller of a converted record. The WIRE IS
+// UNCHANGED under the default inclusion: an absent value still binds from an absent key or an explicit
+// null and still writes as null. NullableComponentWireTest holds one record per converted package to
+// the bytes 5.5.0 wrote for the same values, absent and present. The one behavioural difference is a
+// mapper configured NON_NULL, which used to write an empty Optional as null and now omits it, as
+// NON_ABSENT always did; nothing in the fleet sets either (OptionalWireContractTest pins it).
+// No ContractVersion surface changes, but the tag is this number, so web-global declares a 6.0.0
+// ContractVersion serving every surface 5.5.0 serves. RELEASE ORDER: this artifact (after 5.5.0 is
+// released), then web-global declaring and serving the 6.0.0 contract, deployed, then the monolith
+// bumping its dependency and moving its contract tag to 6.0.0. A monolith sending the 6.0.0 tag before
+// web-global serves it gets 404s on every tag-routed gateway.
+//
+// 6.0.0 also carries (CU-86bcvducz): a global user's password can be checked by web-global. New in
+// dto.globaluserrecord: GlobalUserAuthenticationRequest {tenant, username, candidate} and
+// GlobalUserAuthenticationResponse {outcome, record, needsRewrite}, outcome one of
+// GlobalUserAuthenticationOutcome MATCH | NO_MATCH | LEGACY_CREDENTIAL. web-global answers it on
+// POST /global-user-records/lookups/authenticate under its own surface (GLOBAL_USER_AUTHENTICATION),
+// for one-way (\n2, Argon2id) credentials only; a reversible one is LEGACY_CREDENTIAL and the monolith
+// still checks it. No response carries a credential, and the request's toString leaves the candidate
+// out. The request names the tenant by its TenantKey, not by a bare association seqnum. Drafted as a
+// 6.1.0 and never released; it ships with the rest of 6.0.0.
+//   * Test fixtures, new: this coordinate now publishes a test-fixtures variant
+//     (testImplementation(testFixtures('dev.bluestep:web-shared:6.0.0'))) carrying one pinned set of
+//     Argon2id vectors (dev.bluestep.global.testing.Argon2idVectors), produced by the monolith's
+//     encoder. The monolith's verifier and web-global's each run them in their own build, so two
+//     implementations of one check cannot drift apart unnoticed. Data and a JDK-only reader, no
+//     verifier: this library stays free of BouncyCastle, Spring and JPA.
+// The monolith's use of the operation is behind a switch that defaults off.
+//
+// 6.0.0 also carries the rest of the org-identity contract (CU-86bcvktee), new shapes only:
+//   * dto.tenant writes: TenantSettings (the writable columns, named and typed as on
+//     TenantRecordResponse), TenantCreateRequest {tenant, associationId, settings, lock, creator},
+//     TenantUpdateRequest {settings, actor}, TenantLockUpdateRequest {lock, actor},
+//     TenantReservationResponse {tenant}, TenantWriteRefusal {KEY_TAKEN, TENANT_ID_TAKEN} and
+//     TenantDeleteRefusal {NAMED_AS_ACTOR, HAS_GRANTS}. TenantLock, TenantSignIn and TenantOrganization
+//     gain @CodePointSize bounds at the production column widths (and @NotNull on their two NOT NULL
+//     strings), checked only where a write marks them @Valid; their wire is unchanged.
+//   * dto.domain, new: DomainKey (120100), DomainRecordResponse, DomainCreateRequest,
+//     DomainUpdateRequest (host a DomainHost checked against DomainHost.HOST_PATTERN, the monolith's
+//     isValidDomain), LoginTypeSetting {type, data} with LoginTypeName, DomainWriteRefusal {HOST_TAKEN,
+//     RESERVED, TENANT_ABSENT} and DomainIngressRow.
+//   * dto.fleet, new: FleetNamespaceResponse, NamespaceModifiedRequest, FleetLockout,
+//     FleetLockoutUpdateRequest and ReservedDomainResponse.
+//   * dto.fleet.NamespaceName, new: a Kubernetes namespace name, refused unless a DNS label (1-63 of
+//     [a-z0-9-], alphanumeric at both ends; every production name is one). Its JSON is the bare string,
+//     so the components retyped to it keep their wire byte for byte: TenantSettings.namespace,
+//     TenantRecordResponse.namespace, TenantSnapshotEntry.namespace, FleetNamespaceResponse.name. It
+//     accepts any string when bound or built (a stored name reads as stored); a request is refused by
+//     bean validation (400) when it names one that is not a DNS label.
+//     The usage batch requests are retyped too (UsageBatchRequest.namespace, wire key "n";
+//     DbUsageBatchRequest.namespace; StorageSampleBatchRequest.namespace), @NotNull @Valid in place of
+//     @NotBlank and a 255 bound (UsageBatchRequest.MAX_NAMESPACE_LENGTH is gone). Same bytes; what changes
+//     is that a padded or upper-case namespace is a 400 rather than trimmed and lower-cased at ingest.
+//     Every producer sends its pod's metadata.namespace (or "unknown" off-cluster), and every production
+//     usage row's namespace is a DNS label (checked 2026-11-02), so no producer is affected.
+//   * dto.domain.DomainHost, new: a host name, typed the way NamespaceName is (bare string on the wire,
+//     any string when bound or built, DomainHost.HOST_PATTERN checked by bean validation on requests
+//     only) with one normalization for comparisons (normalized(): stripped, lower-cased; sameHostAs).
+//     It types DomainCreateRequest.host, DomainUpdateRequest.host, DomainRecordResponse.host,
+//     DomainIngressRow.host, RegistryHost.host and RegistryTenantResponse.defaultHost, wire unchanged.
+//     DomainIngressRow.wildcard (a zone) is not a host and stays a string.
+//   * dto.domain.DomainPrefix, new: a site's domain prefix (the foo of foo.<suffix>), typed the same way
+//     (bare string, any string when bound or built). Request rule DomainPrefix.PREFIX_PATTERN = the
+//     monolith's SiteDomainPrefix: 1-64 of [a-z0-9.-] in labels of at most 63 that never start or end
+//     with a hyphen. It types ReservedDomainResponse.domain and the domainPrefix of DomainCreateRequest,
+//     DomainUpdateRequest (both @Valid), DomainRecordResponse and DomainIngressRow, wire unchanged. The
+//     reserved list is still matched without regard to case, in the database.
+//   * dto.domain.DomainSuffix, new: the domain a site prefix is put under, typed the same way. Its one
+//     bean constraint is the column width (@CodePointSize 256, as before); its shape, isValid() = blank or
+//     DomainHost.HOST_PATTERN, is NOT a bean constraint: the reseller records are bound under every
+//     contract version and old monoliths pass admin text unchecked, so web-global applies it on 6.0.0
+//     writes only. It types defaultDomain on ResellerRecordResponse, ResellerResponse,
+//     ResellerCreateRequest and ResellerUpdateRequest (both @Valid); null stays null and "" stays "" on the wire
+//     (ResellerDefaultDomainWireTest pins 5.5.0's bytes). Source break for callers of the accessors.
+//   * TenantLock.status and FleetLockout.status are held to 0..TenantLock.MAX_STATUS (6) on requests:
+//     the monolith decodes them with LockStatus.values()[status], so one outside the enum would fail
+//     every association load. GlobalUserAuthenticationRequest bounds username (50, the column's CHECK)
+//     and candidate (1024 code points). toString redacts TenantSettings/TenantRecordResponse
+//     requiredEndorsement (enciphered with the monolith's key) and CreateTokenResponse.rawtoken.
+//   * dto.registry, new in this library: RegistryTenantResponse and RegistryHost, for web-global's
+//     versioned registry surface. web-global's own RegistryOrgResponse/RegistryHostResponse stay in
+//     the app, in the same package, for the unversioned /registry/orgs.
+// web-global's V6_0_0 adds the surfaces that serve them: TENANT write verbs, TENANT_RESERVATIONS,
+// NAMESPACES, FLEET_LOCKOUT, RESERVED_DOMAINS, DOMAINS and REGISTRY. RELEASE ORDER: this artifact only
+// after web-global's drafts serving all of them build green against it from mavenLocal (a shape bug
+// found after publishing costs a 6.0.1), then web-global released serving V6_0_0, then the monolith.
+//
+// 6.1.0 adds global knowledge bases (CU-86bcvmhck): dto.knowledgebase, new shapes only. web-global
+// holds the registry (which knowledge bases exist, and which tenants each is connected to). The
+// monolith reads each one's git repo and serves its content.
+//   * GlobalKnowledgeBase {id, name, title, liveBranch, created, modified, creator, modifier}, its
+//     version in the ETag. GlobalKnowledgeBaseId is a uuid. KnowledgeBaseName and LiveBranch use the
+//     monolith's tenant rules (myassn.knowledgebase): [a-z0-9-], at most 64, no leading or trailing '-';
+//     a subset of git check-ref-format, at most 200, not HEAD. Each is a bare string on the wire and
+//     refuses an invalid value when built, so a request carrying one fails binding (400).
+//     GlobalKnowledgeBase.title(String) is the title rule (trimmed, 1-200, no control character).
+//   * GlobalKnowledgeBaseCreateRequest {name, title?, liveBranch?, creator?}: title defaults to the
+//     name, branch to main. GlobalKnowledgeBasePatchRequest {name?, title?, liveBranch?, actor?}: no
+//     rename, so name must be absent or the current one.
+//   * KnowledgeBaseTenantConnection {knowledgeBase, tenant, created, creator} and
+//     KnowledgeBaseConnectRequest {actor?}. GlobalKnowledgeBaseWriteRefusal {NAME_TAKEN, TENANT_ABSENT}
+//     is the 409 body.
+//   * The repo is never stored. It is KnowledgeBaseName.globalRepoPath(), knowledge-base/kb-<name> in
+//     the fleet forge, made by ops for now, and web-global neither creates nor checks it.
+// web-global's V6_1_0 adds the KNOWLEDGE_BASES surface (/global-knowledge-bases: CRUD with no rename,
+// connect/disconnect, a knowledge base's tenants, and by-tenant/{classid}/{seqnum}, the read the
+// monolith makes) and declares every 6.0.0 surface. A MINOR: new shapes only. RELEASE ORDER: 6.0.0
+// first, then this artifact once web-global's draft serving V6_1_0 builds green against it, then
+// web-global released serving V6_1_0, then the monolith moving its contract tag to 6.1.0.
+//
+// 6.2.0 adds per-request unit amounts to AiCompletionRequest (CU-86bczpn19): one optional component,
+// requestUnitAmounts under "r", a list with one amount map per provider API request in the turn. A price
+// that depends on the size of one request (a threshold-spec model) cannot be computed from the turn's sum.
+// Same key vocabulary and per-entry validation as "u"; the list is capped at MAX_REQUESTS (256). The sum
+// invariant (per key, the elements add up to "u") is enforced by web-global, not here. Absent means an older
+// caller and is priced as a single request. ADDITIVE and wire-compatible: every existing key is unchanged,
+// the 8-argument of(...) keeps its signature, and the pre-6.2.0 12-argument constructor is kept. A MINOR.
+// RELEASE ORDER: this artifact before web-global and the monolith can consume it.
+//
+// 6.2.1 fixes the completion DTO rejecting a reserved marker key (CU-86bczqj4j): AiCompletionRequest's "u"
+// and "r" keys now accept UnitKeys.REPORTED_KEY_PATTERN (a KEY_PATTERN key, or "!" plus a body of that shape),
+// so web's "!invalid_token_breakdown" marker is no longer a 400 that leaves the turn unmetered. KEY_PATTERN is
+// unchanged for AiUnitRateRequest.unitKey and anything that seeds or selects a rate row. UnitKeys gains
+// MARKER_PREFIX, REPORTED_KEY_PATTERN and INVALID_BREAKDOWN_MARKER. Validation loosened, no shape change: a PATCH.
+//
+// 6.3.0 adds per-request metadata to AiCompletionRequest (CU-86bczr1e7): one optional component, requestMeta under
+// "rm", one AiRequestMeta {t startedAt, f finishedAt, m model, id providerRequestId?, p partial} per element of "r",
+// in the same order. Every component of an element is boxed, and a null element binds as AiRequestMeta.ABSENT, so a
+// missing or null value binds under Jackson 3 (which refuses a missing primitive) and is reported by @NotNull; an
+// element is read through a tolerant delegating creator (AiRequestMeta.fromWire), so a malformed field (out of range,
+// wrong type) is absent rather than thrown on and a non-object element is ABSENT. An "rm" that is not an array binds as a one-element list of it
+// (ACCEPT_SINGLE_VALUE_AS_ARRAY): present and, unless that value is a well-formed element, flagged by validation. An
+// exactly integral decimal (CBOR BigDecimal) is read as a timestamp by longValueExact. It is
+// what lets web-global place each request's usage in the hour the provider billed it and
+// reconcile against the provider's usage report. Every check on an element is a bean-validation constraint, never a
+// throw, so wrong metadata cannot cost a turn its amounts; alignment with "r" is web-global's check, not the DTO's
+// (a mismatch is recorded with the "!invalid_request_meta" marker). UnitKeys gains the reserved markers this work
+// records: INVALID_REQUEST_META_MARKER, PARTIAL_USAGE_MARKER, ABANDONED_MARKER, INVALID_COMPLETION_MARKER and
+// MEASURED_AUDIO_MARKER (a caller-measured audio duration when the provider gave no usage). ADDITIVE and wire-compatible both ways: a 6.2.x payload binds with "rm" absent, and a
+// 6.2.x reader ignores "rm" (Jackson 3 does not fail on unknown properties; AiCompletionRequestRequestMetaTest pins
+// it). The 12- and 13-argument constructors and both existing of(...) keep their signatures. A MINOR. No new
+// surface, so web-global takes no contract constant (the 6.2.x precedent). RELEASE ORDER: this artifact, then
+// web-global on it, deployed, then the monolith sending "rm".
+// 6.4.0 adds the shapes the gateway's release 1 needs (CU-86bcz7rtm token scopes, CU-86bcz7rtg gateway surfaces).
+// ADDITIVE: no existing type changes, so no frozen snapshots; a MINOR whose ContractVersion tag is 6.4.0.
+//   * dto.accesstoken: TokenScope (the one vocabulary: mcp, kb:read, kb:push, registry:read, registry:push,
+//     tokens:self) and TokenCheckResponse (owner + effective scopes), the 200 body of GET /registry/token-check
+//     from 6.4.0 (6.3.0 and the unversioned path keep answering 204). Scopes travel as strings so an older reader
+//     ignores a scope it does not know rather than failing to bind the answer.
+//   * dto.globaluserrecord: the gateway's tenant-less sign-in (UntenantedUsernameLookupRequest,
+//     UntenantedAuthenticationRequest/Outcome/Response; a new outcome enum with DISABLED rather than a fourth
+//     constant on the 6.0.0 one, which older consumers could not bind) and the access facts one global user
+//     carries (GlobalUserAccessResponse, with historyManager).
+//   * History-manager endorsement (Brendan's ruling 2026-11-09): a KB history rewrite (force push, ref deletion)
+//     needs a super, a token holding the new TokenScope KB_REWRITE ("kb:rewrite"), and a history-manager grant
+//     given by ANOTHER super. dto.historymanager: HistoryManagerGrantRequest/RevokeRequest (actor = the acting
+//     super), HistoryManagerGrantResponse, HistoryManagerGrantsResponse, HistoryManagerGrantRefusal (409).
+//   * Review rulings (2026-11-09, "WS review 1-4", before publish): every scope after mcp is namespaced (':'),
+//     so web-global's legacy {mcp} rule never covers a scope a newer release adds; the refusal reasons and the
+//     untenanted outcome bind an unknown constant as UNKNOWN (@JsonEnumDefaultValue, per property), an UNKNOWN
+//     outcome being a denial with no record; grant/revoke requests validate a global-user actor with a key.
+// RELEASE ORDER: this artifact, then web-global on it, deployed, then the gateway asking 6.4.0.
+// 6.5.0 adds self-service access tokens (CU-86bczx4de, TK1): the gateway's /api/v1/tokens, served by web-global
+// under /api/v6.5.0/self-tokens to the gateway's registry key only. ADDITIVE: one new package, no existing type
+// changes, so no frozen snapshots; a MINOR whose ContractVersion tag is 6.5.0.
+//   * dto.selftoken: SelfTokenView / SelfTokensResponse (list; createdAt and lastUsedAt nullable, expired tokens
+//     listed, effective scopes as strings), SelfTokenMintRequest + SelfTokenExpiry (DEFAULT / NEVER / AT: the
+//     gateway resolves JSON's absent vs null expiresAt, which a nullable component cannot carry), SelfTokenMinted
+//     (the secret, once; redacted from toString), SelfTokenRefusal (reason + optional scope + message; an unknown
+//     reason binds as UNKNOWN, WS review 2; presentingExpiresAt for EXPIRY_EXCEEDS_PRESENTING). Both enums bind by
+//     exact constant name only (a @JsonCreator): Jackson would otherwise bind 1 or "1" by ordinal (Codex review).
+//   * Subject: no shape names a user. web-global re-derives the owner from the presenting token's hash
+//     (X-Access-Token) on every call (ruling 2026-11-10 "TK1 Q1"); the gateway key alone mints nothing.
+// RELEASE ORDER: this artifact, then web-global on it (restricted-mint switch off), then the gateway on 6.5.0.
+//
+// 6.6.0 splits the artifact and adds one package (CU-86bd2g5jc, the web-global -> web harness). dev.bluestep:web-shared
+// becomes an UMBRELLA with no classes of its own: its jar is empty, and it carries `api` dependencies on four artifacts
+// that hold the DTOs, packages and class names exactly as they were (every package moved with `git mv`, no source edit):
+//   * web-shared-identity: constraints, basetable, tenantaccess, tenant, fleet, domain, registry, globaluser,
+//     globaluserrecord, reseller, accesstoken, selftoken, historymanager, knowledgebase and the NEW tenantknowledgebase;
+//     test fixtures (Argon2idVectors). The packages import each other in a cycle (tenant -> fleet, tenantaccess,
+//     basetable, constraints; fleet -> domain, tenant; domain -> tenant, basetable), so this is the smallest sound core.
+//   * web-shared-ai: ai, aitenantblock, aitenantconfig, aiunitrate, aiusage (depend on nothing outside ai).
+//   * web-shared-usage: usage (depends on ai and identity).
+//   * web-shared-lookup: lookup, icd10updater, dsm5updater (depend on nothing).
+// All five share THIS version, declared once here, and are released together by the bare tag (publish.yml). A consumer
+// that depends on dev.bluestep:web-shared:6.6.0 gets the same classes through the umbrella; one that needs only the
+// tenant side (the gateway) may depend on web-shared-identity alone. Every group declares a constraint
+// dev.bluestep:web-shared >= 6.6.0, so a dependency graph that still holds the class-carrying 6.5.0 jar beside a group
+// jar is raised to the umbrella rather than putting two copies of a class on the classpath. THE CONSTRAINT LIVES IN GRADLE
+// MODULE METADATA, so a consumer must be a Gradle build (all are: web-global, web and its backports, oauth2-integrator,
+// sql-parser, k8s-api-web). A POM-only resolver does not apply it (a POM puts it in dependencyManagement, which does not
+// propagate) and could resolve 6.5.0 beside a group, 129 classes twice. See README.md.
+// ADDITIVE: tenantknowledgebase (web-global's tenant knowledge-base rows, GET /api/contract/tenant-knowledge-base-rows)
+// is the only new package; no existing type changes. `checkClassSet` (part of `check`) proves nothing else moved.
+//
+// 6.7.0 puts a tenant-access grant's provenance on the wire (CU-1k5g91bq58m, umbrella CU-1k5g91bq51k): a vouch now makes
+// its global user an Organization Administrator of the tenant, but only when a super or ops wrote it, never a tenant's
+// own administrators. In dto.tenantaccess:
+//   * TenantAccessGrantSource {SUPER, TENANT, OPS}, new: who wrote the grant. OPS (SQL, backfill) is treated like SUPER;
+//     TENANT is catalog-only. Bound by exact constant name only (a @JsonCreator), so an ordinal 0 is never read as
+//     SUPER, and no UNKNOWN default: a source a reader does not know fails to bind rather than provisioning or not.
+//     Declared in config/class-set/new-in-6.6.0.txt, the one list checkClassSet reads for classes beyond 6.5.0's.
+//   * TenantAccessGrantRequest gains an OPTIONAL source (optSource(), effectiveSource()), appended after expiresAt.
+//     Absent or null is read as TENANT, the source that provisions nothing (Brendan's ruling 2026-11-16): a monolith
+//     built before 6.7.0 posts {} or {expiresAt} exactly as before and its grants stay catalog-only, which is what every
+//     grant was before provenance existed. That keeps pre-bump web builds working through the staggered ring rollout.
+//     The 6.6.0 one-argument constructor is kept, so Java callers still compile.
+//   * TenantAccessGrantResponse gains source and a nullable adminProvisionedAt (optAdminProvisionedAt()): when the
+//     monolith provisioned admin membership for the grant, the marker that lets removal touch only memberships a grant
+//     added. A response naming no source binds as TENANT. Both appended at the end, so the older bytes stay where they
+//     were (NullableComponentWireTest holds the 5.5.0 capture plus exactly the appended components). The 6.6.0
+//     four-argument constructor and of(...) are kept, building a TENANT grant that was never provisioned.
+// A MINOR: additive on the wire both ways (an older reader ignores the new response fields, the monolith's
+// WebGlobalClient.mapper() having FAIL_ON_UNKNOWN_PROPERTIES off) and source-compatible. RELEASE ORDER: this artifact,
+// then web-global storing and serving source/adminProvisionedAt, deployed, then the monolith sending SUPER from the super
+// panel.
+// 6.8.0 adds global knowledge-base management through the gateway (CU-86bcz7ruc, G3). ADDITIVE, source-compatible:
+//   * dto.knowledgebase.KnowledgeBaseActorRequest(@Nullable TenantActor actor), new: the optional body of the two
+//     registry DELETEs (a knowledge base; a tenant's connection), so the gateway's key can name the global user who
+//     deletes, as it already does for create/patch/connect. web-global accepts it on every tag (it only widens what a
+//     DELETE accepts). Declared in config/class-set/new-in-6.6.0.txt.
+//   * TokenScope gains KB_MANAGE ("kb:manage": the gateway's KB management routes, owner must be a super) and
+//     KB_PURGE ("kb:purge": irreversibly purging a deleted KB's archived repo; owner must be a super AND a history
+//     manager, as for kb:rewrite). Both namespaced, so an older reader grants a token naming them nothing, never mcp.
+//     SelfTokenRefusal's REWRITE_NOT_PERMITTED now also covers kb:purge (its scope says which), so no new reason.
+// A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_8_0), deployed, then the gateway asking 6.8.0.
+// 6.9.0 lets a caller list the global knowledge bases in one call (CU-1k5g91bqaj7, W4: the gateway's Console GraphQL).
+// ADDITIVE, source-compatible:
+//   * dto.knowledgebase.GlobalKnowledgeBaseListEntry, new: a row of GET /global-knowledge-bases from 6.9.0, which is
+//     GlobalKnowledgeBase's eight members (same names, same order) plus the row's version (the ETag's value) and its
+//     connections (KnowledgeBaseTenantConnection, as /{id}/tenants lists them). A reader binding a row as a
+//     GlobalKnowledgeBase, unknown members ignored, still reads it. Tags before 6.9.0 keep their plain rows. Declared in
+//     config/class-set/new-in-6.6.0.txt.
+//   * dto.globaluserrecord.UntenantedLinkedAccountLookupRequest, new (CU-1k5g91bqbk7, SSO1: the gateway's sign-in with
+//     Microsoft): POST /global-user-records/lookups/untenanted/by-linked-account from 6.9.0, the (issuer, sub) of an
+//     ID token in, the GlobalUserRecordResponse out (its reseller is the account's restriction, as data) or a 404. At
+//     no tenant, as the 6.4.0 untenanted username lookup: every account carrying the identity resolves. Declared in
+//     config/class-set/new-in-6.6.0.txt.
+// A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_9_0), deployed, then the gateway asking 6.9.0
+// (which negotiates, so a gateway ahead of web-global lists the per-row way meanwhile, and refuses single sign-on).
+// 6.10.0 lets the gateway's Console list organizations with what a tenant record lacks (CU-1k5g91bqguc, S1: the
+// organizations directory). ADDITIVE, source-compatible:
+//   * dto.consoledirectory (ConsoleDirectoryResponse, ConsoleDirectoryTenant, ConsoleDirectoryReseller), new: the
+//     answer of GET /console-directory from 6.10.0, every reseller by name plus, per tenant, its host names, the newest
+//     levels of the db and file_logical storage meters, and the start of its newest usage window with traffic. A level
+//     or a last activity nothing is held for is absent, never zero. Declared in config/class-set/new-in-6.6.0.txt.
+// A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_10_0), deployed, then the gateway asking 6.10.0
+// (which negotiates, so a gateway ahead of web-global lists organizations without those fields meanwhile).
+// 6.11.0 gives a global knowledge base its access (CU-1k5g91bqhxa, for web-global's public knowledge bases,
+// CU-1k5g91bqgvg): who may read it.
+//   * dto.knowledgebase.Access, new: a sealed interface, Access.Public (anyone may read the live branch, signed out),
+//     Access.Private (the signed-in readers its access rules admit, as before) and Access.Unknown (a kind this release
+//     does not know), kind-tagged {"kind":"public"}. A member carrying permissions comes later as another kind. READ BY
+//     HAND (its own creator and @JsonValue, annotations only), so no mapper setting changes it: only exactly
+//     {"kind":"public"} is Public and exactly {"kind":"private"} Private; any other object with one string kind is
+//     Unknown, never public and written back as read; a second kind, a non-string kind or none fails to bind. A create
+//     or patch request refuses an Unknown. Access, Access$Public, $Private, $Unknown and $Wire (the binding helper) are
+//     declared in config/class-set/new-in-6.6.0.txt.
+//   * `access` on GlobalKnowledgeBase and GlobalKnowledgeBaseListEntry (last member; absent on the wire, an older
+//     peer's, reads as Private), and optional on GlobalKnowledgeBaseCreateRequest (absent: Private) and
+//     GlobalKnowledgeBasePatchRequest (absent: unchanged). Each keeps its pre-6.11.0 constructor, so this is
+//     source-compatible; on the wire a response member is added to a shipped shape, which web-global's snapshot rule
+//     governs (it writes `access` only from 6.11.0).
+// A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_11_0), deployed, then the gateway.
+// 6.12.0 lets the gateway's Console show an organization's usage and storage tabs (CU-1k5g91bqj8j, S2). ADDITIVE,
+// source-compatible:
+//   * dto.consoleusage.ConsoleUsageResponse(UsageSeriesResponse usage, StorageUsageResponse storage), new: the answer
+//     of GET /console-usage/{tenantId}?days=N from 6.12.0, one tenant's day-grain request series (http, file) and its
+//     tenant-visible storage levels and dailies over the same N complete UTC days ending yesterday. Both halves are
+//     existing shapes, unchanged. Declared in config/class-set/new-in-6.6.0.txt.
+// A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_12_0), deployed, then the gateway asking 6.12.0
+// (which negotiates, so a gateway ahead of web-global answers the usage and storage tabs null meanwhile).
+// 6.13.0 lets the gateway's Console list and read global users, read only, for fleet supers (CU-1k5g91bqjda, U1).
+// ADDITIVE, source-compatible:
+//   * dto.consoleglobaluser, new: ConsoleGlobalUserPage (GET /console-global-users?first&after&search&includeDisabled)
+//     of ConsoleGlobalUser accounts, and ConsoleGlobalUserDetail (GET /console-global-users/{classid}/{seqnum}): the
+//     account plus ConsoleAccessToken metadata (by row id, never a secret or hash), ConsoleTenantAccess grants, its
+//     standing ConsoleHistoryManagerGrant and its ConsoleCatalogScope; ConsoleActor and ConsoleReseller name a key;
+//     ConsoleLinkedAccount is an issuer, a LinkedAccountProvider and the subject's last four characters, never the
+//     subject. No credential, stored form or attribs ciphertext is in any of them. Declared in
+//     config/class-set/new-in-6.6.0.txt.
+// A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_13_0), deployed, then the gateway asking 6.13.0
+// (which negotiates, so a gateway ahead of web-global answers the global-user roots null meanwhile).
+// 6.14.0 lets every signed-in global user read their own account and revoke their own tokens through the gateway's
+// Console (CU-1k5g91bqje9, ME1). ADDITIVE, source-compatible:
+//   * dto.myaccount, new: MyAccountResponse (GET /my-account): the acting account's names, e-mail, password-expiry
+//     start, linked accounts (ConsoleLinkedAccount, a hint of the subject), ConsoleAccessToken metadata (by row id),
+//     MyTenantAccess grants with the tenant's name, its history-manager grant's date, its MyCatalogScope (no reason)
+//     and the scopes a mint for it could hold; MyAccountRefusal (403 ACCOUNT_DISABLED, forward-binding reason);
+//     MyAccountHeaders.ACTING_GLOBAL_USER_HEADER ("B6P-Acting-Global-User", classid:seqnum), which the gateway sets
+//     from the browser session alone and which is the only thing that names the account. No credential, token secret
+//     or hash, attribs ciphertext, full subject, other person's key or name, version or super/disabled flag is in any
+//     of them. Declared in config/class-set/new-in-6.6.0.txt.
+// A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_14_0), deployed, then the gateway asking 6.14.0
+// (which negotiates, so a gateway ahead of web-global answers Query.me UNAVAILABLE not-served meanwhile).
+// 6.15.0 lets a signed-in global user mint their own token from the browser, behind a fresh factor web-global verified
+// itself (CU-1k5g91bqje9, ME2). ADDITIVE, source-compatible:
+//   * dto.stepup, new: StepUpAuthenticationResponse (POST /step-up-tickets/password: the 6.4.0 password check's answer,
+//     unchanged, plus a StepUpTicketResponse on a MATCH), SsoStepUpRequest (POST /step-up-tickets/sso: a provider's ID
+//     token, which web-global verifies itself) and StepUpTicketResponse (its 201), StepUpRefusal (forward-binding
+//     reason), StepUpHeaders.STEP_UP_TICKET_HEADER ("B6P-Step-Up-Ticket", 43 base64url characters). The ticket is
+//     never in a toString. Declared in config/class-set/new-in-6.6.0.txt.
+//   * SelfTokenRefusal.Reason gains STEP_UP_REQUIRED and EXPIRY_TOO_FAR, sent only on the new browser mint
+//     (POST /my-account/access-tokens, SelfTokenMintRequest -> SelfTokenMinted); an older reader binds both as UNKNOWN.
+// A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_15_0), deployed, then the gateway asking 6.15.0
+// (which negotiates, so a gateway ahead of web-global keeps the 6.4.0 password check and answers the mint 503 meanwhile).
+// 6.16.0 lets the gateway's Console read a global user's platform endorsements (CU-1k5g91bqmtw, U2), which web-global
+// decrypts itself (ruling 2026-11-18 U-PLAN Q1 "(A) web-global holds the seed"). ADDITIVE, source-compatible:
+//   * dto.endorsement, new: PlatformEndorsement, one constant per constant of web's myassn.security.Endorsement (23
+//     ids; the constant name is the stored id, matched exactly), each with a label, an EndorsementGroup (STAFF_TIER,
+//     ADMINISTRATION, CAPABILITIES, MARKERS), a description and the endorsements that also open its gate (a hint).
+//     Declaration order is the catalog order and is stable. Declared in config/class-set/new-in-6.6.0.txt.
+//   * dto.consoleglobaluser.ConsoleEndorsements(State state, List<String> held, List<String> unrecognized), new: held
+//     catalog ids in catalog order, every other stored token in stored order, each once; State UNAVAILABLE (nothing
+//     listed) when web-global could not read them, never read as "none"; a state a newer app adds binds UNKNOWN.
+//     Declared in config/class-set/new-in-6.6.0.txt.
+//   * `endorsements` on ConsoleGlobalUserDetail (last member, @Nullable, @JsonInclude(NON_NULL)): absent, and so not on
+//     the wire, from a web-global answering a tag before 6.16.0, which keeps the 6.13.0 shape byte for byte for the tags
+//     that shipped it. The 7-member constructor stays, so this is source-compatible.
+// A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_16_0), deployed, then the gateway asking 6.16.0
+// (which negotiates, so a gateway ahead of web-global answers GlobalUser.endorsements null meanwhile).
+// 6.17.0 lets the Console narrow the global-user directory on the server (CU-1k5g91bqn07, U1b). ADDITIVE,
+// source-compatible: dto.consoleglobaluser gains GlobalUserKind (FLEET_SUPER / RESELLER_SUPER / USER, the one rule that
+// the filter and the gateway's resellerRestricted both use) and GlobalUserFilter (kind, reseller, noReseller,
+// linkedProvider, noLinkedAccount, catalogScope, noCatalogScope: the query parameters of GET /console-global-users,
+// refusing "X and no X" at construction). Declared in config/class-set/new-in-6.6.0.txt. No wire body changes.
+// A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_17_0), deployed, then the gateway sending the
+// filter (which negotiates: a gateway ahead of web-global answers a filtered globalUsers null with filter-unsupported).
+// 6.18.0 gives the Console its first global-user writes, for fleet supers (CU-1k5g91bqx44, U3). ADDITIVE,
+// source-compatible: dto.consoleglobaluser gains ConsoleGlobalUserDisabledRequest (PUT
+// /console-global-users/{classid}/{seqnum}/disabled: expectedVersion, the detail's opaque version, and disabled; the
+// acting fleet super in B6P-Acting-Global-User and their step-up ticket in B6P-Step-Up-Ticket; answers the
+// ConsoleGlobalUserDetail as it now stands) and ConsoleGlobalUserWriteRefusal (forward-binding reason: NOT_PERMITTED,
+// SELF_MODIFICATION, LAST_HOLDER, STEP_UP_REQUIRED, VERSION_MISMATCH, WRITES_DISABLED), also the refusal of DELETE
+// /console-global-users/{classid}/{seqnum}/access-tokens/{id} (no body; 204 whether it deleted or found nothing).
+// Declared in config/class-set/new-in-6.6.0.txt. No existing wire body changes.
+// A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_18_0), deployed, then the gateway sending the
+// writes (which negotiates: a gateway ahead of web-global answers both mutations null with write-unsupported).
+// 6.19.0 IS SKIPPED ON PURPOSE: web-global's #123 (CU-1k5g91bqumn) took contract tag 6.19.0 for a web-global-only
+// change with no web-shared 6.19.0 (its DTO change is tracked by CU-1k5g91bqxnr), so the library's number moves past it
+// to stay equal to the contract tag web-global serves.
+// 6.20.0 lets a fleet super who holds ENDORSE change another global user's platform endorsements from the Console
+// (CU-1k5g91bqy12, U4). ADDITIVE, source-compatible: dto.consoleglobaluser gains ConsoleGlobalUserEndorsementsRequest
+// (PUT /console-global-users/{classid}/{seqnum}/endorsements: expectedVersion, the detail's opaque version; endorsements,
+// the complete set of catalog ids to hold; keepUnrecognized, absent or null for "keep every unrecognized token now
+// stored", else the subset of them to keep; the acting fleet super in B6P-Acting-Global-User and their step-up ticket
+// in B6P-Step-Up-Ticket; answers the ConsoleGlobalUserDetail as it now stands). ConsoleGlobalUserWriteRefusal.Reason
+// gains ENDORSE_REQUIRED (403), UNKNOWN_ENDORSEMENT, KEEP_NOT_STORED and TOO_LONG (422) and ENDORSEMENTS_UNAVAILABLE
+// (503), sent only on the new route; an older reader binds them UNKNOWN. LAST_HOLDER (409) also answers removing ENDORSE
+// from its last enabled fleet-super holder. Declared in config/class-set/new-in-6.6.0.txt. No existing wire body changes.
+// A MINOR. RELEASE ORDER: this artifact, then web-global's app on it (V6_20_0), deployed, then the gateway sending the
+// write (which negotiates: a gateway ahead of web-global answers it null with write-unsupported).
+version = '6.20.0'
 
 repositories {
-    mavenCentral()
     mavenLocal()
 }
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(25)
-    }
-}
+// NullAway runs from bluestep.library, with `OnlyNullMarked`: a package is analysed only once its package-info
+// opts in. Every dto package is already marked.
 
-// NullAway in JSpecify mode. `OnlyNullMarked` makes @NullMarked the single source of
-// truth: a package is analysed only once its package-info opts in, so new packages can
-// be adopted one at a time instead of all at once. Every dto package is already marked.
-//
-// Tests are deliberately excluded — test code legitimately passes null to exercise the
-// guards, and NullAway would flag each of those as an error.
-tasks.withType(JavaCompile).configureEach {
-    options.errorprone {
-        // NullAway is the only check we opt into; the rest of Error Prone's catalogue is
-        // a separate decision with its own remediation cost.
-        disableAllChecks = true
-        option('NullAway:OnlyNullMarked', 'true')
-        option('NullAway:JSpecifyMode', 'true')
-        error('NullAway')
-    }
-}
-
-tasks.named('compileTestJava') {
-    options.errorprone.enabled = false
-}
-
-test {
-    useJUnitPlatform()
-}
+apply from: 'gradle/dto-dependencies.gradle'
 
 dependencies {
-    errorprone 'com.google.errorprone:error_prone_core:2.50.0'
-    errorprone 'com.uber.nullaway:nullaway:0.13.8'
+    api project(':web-shared-identity')
+    api project(':web-shared-ai')
+    api project(':web-shared-usage')
+    api project(':web-shared-lookup')
 
-    // `api`, not `compileOnly`: the annotations are part of this module's published
-    // contract, so consumers compiling against these DTOs see the same nullness.
-    api 'org.jspecify:jspecify:1.0.1'
-
-    // A BOM rather than three hand-pinned versions: the Jackson 2 artifacts have to move as
-    // a family, and pinning them individually is how they drift apart. 2.22.1 is the floor
-    // web-global runs (Boot 4 overrides its own managed version to reach it, for
-    // CVE-2026-54515) — matching it here means this module never publishes a POM asking for
-    // a version below what its consumers were deliberately raised to.
-    //
-    // Note this RAISES a consumer rather than only setting a floor: Gradle resolves
-    // highest-wins, so a consumer declaring an older Jackson BOM is pulled up to 2.22.1
-    // rather than winning. That is the intent for a security floor, but it means a consumer
-    // that deliberately pins Jackson 2 down for a compatibility reason cannot do so while
-    // depending on this module — they would need an explicit `resolutionStrategy.force`.
-    api platform('com.fasterxml.jackson:jackson-bom:2.22.1')
-    api 'com.fasterxml.jackson.core:jackson-annotations'
-    // Optional<T> record components only bind correctly when this module is registered on
-    // the ObjectMapper, and almost nothing guards that at runtime: a mapper without the module
-    // binds literal null into components the type system says can never be null.
-    // AiCompletionRequest's compact constructor catches it for that one record's vector; every
-    // other record here has no such guard. OptionalWireContractTest pins both halves of the
-    // failure. Declaring it `api` means a consumer cannot end up with these DTOs and no
-    // Optional support.
-    //
-    // Do not rely on Boot auto-configuration to supply it: Boot 4 has no Jackson 2
-    // ObjectMapper auto-configuration at all (spring-boot-jackson auto-configures
-    // tools.jackson only), which is why web-global's MessagePackConfig registers the module
-    // by hand. Jackson 3 consumers do not need it — see OptionalWireContractJackson3Test.
-    api 'com.fasterxml.jackson.datatype:jackson-datatype-jdk8'
-    api 'jakarta.validation:jakarta.validation-api:3.1.1'
-    // NOT declared here. This module's source never references msgpack — it was a
-    // pass-through `api` dependency, which meant a DTO library both forced a wire format
-    // onto every consumer and silently owned its version in services that never declared
-    // it. It now belongs to the module that configures the converter (web-global's app).
-    // A consumer of these DTOs that speaks msgpack must declare the dataformat itself.
-
-    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
-    // The constraint annotations ARE part of this module's published contract now — @Size derived
-    // from column widths, and two @AssertTrue guards over opaque columns — so "the annotation is
-    // present in the source" is not evidence that it fires. Without a provider on the test
-    // classpath, swapping two @Size values or moving one somewhere Bean Validation never reads it
-    // leaves the whole suite green. This is the provider the consumers run (Boot's starter-validation
-    // pulls the same family), so what fires here is what fires there.
-    testImplementation 'org.hibernate.validator:hibernate-validator:9.0.1.Final'
-    // 1.5.0+: earlier ArchUnit bundles an ASM that cannot read Java 25 class files (major
-    // 69). It fails silently — the import yields zero classes and every rule passes
-    // vacuously — which is what scanFoundTheDtoRecords() exists to catch.
-    testImplementation 'com.tngtech.archunit:archunit-junit5:1.5.0'
-    // Unversioned so the jackson-bom above governs: the wire-contract tests are only worth
-    // anything if they exercise the same Jackson the consumers actually run.
-    testImplementation 'com.fasterxml.jackson.core:jackson-databind'
-    // Jackson 3 (tools.jackson.*) is a separate family from the above, not an upgrade of it.
-    // web-global on Spring Boot 4 auto-configures a Jackson 3 mapper as its *primary* mapper
-    // while keeping a Jackson 2 island for msgpack, so these DTOs are serialized by both.
-    // OptionalWireContractJackson3Test pins that they produce an identical wire.
-    testImplementation 'tools.jackson.core:jackson-databind:3.1.5'
-    // Test-only, like msgpack below: UsageWireContractTest round-trips the usage DTOs through CBOR,
-    // the format producers push them in.
-    testImplementation 'tools.jackson.dataformat:jackson-dataformat-cbor:3.1.5'
-    // Test-only: web-global's Jackson 2 msgpack converter registers JavaTimeModule, and the storage
-    // read shapes carry java.time components, so the family-parity check needs it too.
-    testImplementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
-    // Test-only: LegacyWireCompatTest pins the msgpack bytes the monolith exchanges with
-    // the AI gate. Proving that contract is this module's job even though shipping the
-    // dataformat is not.
-    testImplementation 'org.msgpack:jackson-dataformat-msgpack:0.9.12'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    // The test fixtures this coordinate has always had (Argon2idVectors, consumed as
+    // testFixtures('dev.bluestep:web-shared:<v>')) now live in web-shared-identity; the umbrella re-exports them.
+    testFixturesApi testFixtures(project(':web-shared-identity'))
 }
+
+// The umbrella is published after the four groups, whatever order the tasks are named in: web-shared:6.6.0 must never be
+// live without the artifacts it depends on. A same-named task of each group (publish, publishMavenJava...To...) comes first.
+tasks.matching { it.name.startsWith('publish') }.configureEach { task ->
+    task.mustRunAfter(['web-shared-identity', 'web-shared-ai', 'web-shared-usage', 'web-shared-lookup'].collect {
+        ":${it}:${task.name}"
+    })
+}
+
+apply from: 'gradle/class-set.gradle'
+

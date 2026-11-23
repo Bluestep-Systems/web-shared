@@ -1,0 +1,41 @@
+plugins {
+    // The repository's library conventions (build-logic/src/main/groovy/bluestep.library.gradle). Released by a
+    // `harness-contract-<version>` tag.
+    id 'bluestep.library'
+}
+
+// This artifact's own version line, and web's harness contract tag: a harness tag is the version of the release that
+// introduced that wire (tag = DTO artifact version, as web-global's ContractVersion tags are web-shared versions). So
+// the number a tag carries moves only for the harness's wire. A patch release that changes only fixtures or docs adds
+// no tag: published versions are not all tags, and a client resolving a tag web does not serve is the trap
+// web-global's contract CLAUDE.md names.
+//
+// Independent of the contract line on purpose: plain Strings with @Size/@Pattern and JDK types, never web-shared's
+// dto types, so neither line drags the other.
+//
+// 1.0.0 (CU-86bd2g5jc, H2 design §4.1): the first harness operation, GET /harness/tenant-knowledge-base-rows/{tenantId}
+// with B6P-Contract: 1.0.0 on web's harness port. One tenant per call. HarnessTenantKnowledgeBaseRows (tenant, state
+// FOUND/ABSENT/UNKNOWN, rows), HarnessKnowledgeBaseRow (web's KB uuid, name, title, live branch), HarnessPaths.
+// Test fixtures: HarnessWireSamples, JSON both sides' tests read (web's controller answers them, web-global's client
+// is served them by a stub).
+//
+// 1.0.1 (CU-86bd2g5jc): the test fixtures' tenant ids are fictional (U9000000000001, U9000000000002), where 1.0.0
+// shipped two real tenant schemas in the published jar. Same wire, same shapes; only the sample ids differ. Adds no
+// tag: 1.0.1 serves tag 1.0.0, and web's HarnessContract stays at V1_0_0.
+version = '1.0.1'
+
+dependencies {
+    // `api`, as the root DTO library: the annotations are part of the published contract.
+    api 'org.jspecify:jspecify:1.0.1'
+    api 'com.fasterxml.jackson.core:jackson-annotations:2.21'
+    api 'jakarta.validation:jakarta.validation-api:3.1.1'
+
+    testFixturesCompileOnly 'org.jspecify:jspecify:1.0.1'
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    testImplementation 'org.assertj:assertj-core:3.27.7'
+    testImplementation 'org.hibernate.validator:hibernate-validator:9.0.1.Final'
+    testImplementation 'tools.jackson.core:jackson-databind:3.1.6'
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.5.0'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}

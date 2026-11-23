@@ -1,0 +1,70 @@
+dev/bluestep/global/dto/tenantknowledgebase/TenantKnowledgeBaseRow.class
+dev/bluestep/global/dto/tenantknowledgebase/TenantKnowledgeBaseRowsResponse.class
+dev/bluestep/global/dto/tenantknowledgebase/TenantKnowledgeBaseRowsState.class
+dev/bluestep/global/dto/tenantknowledgebase/package-info.class
+# 6.7.0 (CU-1k5g91bq58m): who wrote a tenant-access grant
+dev/bluestep/global/dto/tenantaccess/TenantAccessGrantSource.class
+# 6.8.0 (CU-86bcz7ruc): who deletes a global knowledge base or disconnects a tenant
+dev/bluestep/global/dto/knowledgebase/KnowledgeBaseActorRequest.class
+# 6.9.0 (CU-1k5g91bqaj7): the global knowledge-base list row, with its version and connections
+dev/bluestep/global/dto/knowledgebase/GlobalKnowledgeBaseListEntry.class
+# 6.9.0 (CU-1k5g91bqbk7): the gateway's single sign-on, resolved at no tenant
+dev/bluestep/global/dto/globaluserrecord/UntenantedLinkedAccountLookupRequest.class
+# 6.10.0 (CU-1k5g91bqguc): the Console's organization directory, in one fetch
+dev/bluestep/global/dto/consoledirectory/ConsoleDirectoryReseller.class
+dev/bluestep/global/dto/consoledirectory/ConsoleDirectoryResponse.class
+dev/bluestep/global/dto/consoledirectory/ConsoleDirectoryTenant.class
+dev/bluestep/global/dto/consoledirectory/package-info.class
+# 6.11.0 (CU-1k5g91bqhxa): who may read a global knowledge base
+dev/bluestep/global/dto/knowledgebase/Access.class
+dev/bluestep/global/dto/knowledgebase/Access$Private.class
+dev/bluestep/global/dto/knowledgebase/Access$Public.class
+dev/bluestep/global/dto/knowledgebase/Access$Unknown.class
+dev/bluestep/global/dto/knowledgebase/Access$Wire.class
+# 6.12.0 (CU-1k5g91bqj8j): the Console's per-organization usage and storage read
+dev/bluestep/global/dto/consoleusage/ConsoleUsageResponse.class
+dev/bluestep/global/dto/consoleusage/package-info.class
+# 6.13.0 (CU-1k5g91bqjda): the Console's global-user directory, read only
+dev/bluestep/global/dto/consoleglobaluser/ConsoleAccessToken.class
+dev/bluestep/global/dto/consoleglobaluser/ConsoleActor.class
+dev/bluestep/global/dto/consoleglobaluser/ConsoleCatalogScope.class
+dev/bluestep/global/dto/consoleglobaluser/ConsoleGlobalUser.class
+dev/bluestep/global/dto/consoleglobaluser/ConsoleGlobalUserDetail.class
+dev/bluestep/global/dto/consoleglobaluser/ConsoleGlobalUserPage.class
+dev/bluestep/global/dto/consoleglobaluser/ConsoleHistoryManagerGrant.class
+dev/bluestep/global/dto/consoleglobaluser/ConsoleLinkedAccount.class
+dev/bluestep/global/dto/consoleglobaluser/ConsoleReseller.class
+dev/bluestep/global/dto/consoleglobaluser/ConsoleTenantAccess.class
+dev/bluestep/global/dto/consoleglobaluser/LinkedAccountProvider.class
+dev/bluestep/global/dto/consoleglobaluser/package-info.class
+# 6.14.0 (CU-1k5g91bqje9): the signed-in account's own view, and the revoke of its own tokens
+dev/bluestep/global/dto/myaccount/MyAccountHeaders.class
+dev/bluestep/global/dto/myaccount/MyAccountRefusal.class
+dev/bluestep/global/dto/myaccount/MyAccountRefusal$Reason.class
+dev/bluestep/global/dto/myaccount/MyAccountResponse.class
+dev/bluestep/global/dto/myaccount/MyCatalogScope.class
+dev/bluestep/global/dto/myaccount/MyTenantAccess.class
+dev/bluestep/global/dto/myaccount/package-info.class
+# 6.15.0 (CU-1k5g91bqje9): step-up tickets for the browser token mint
+dev/bluestep/global/dto/stepup/SsoStepUpRequest.class
+dev/bluestep/global/dto/stepup/StepUpAuthenticationResponse.class
+dev/bluestep/global/dto/stepup/StepUpHeaders.class
+dev/bluestep/global/dto/stepup/StepUpRefusal.class
+dev/bluestep/global/dto/stepup/StepUpRefusal$Reason.class
+dev/bluestep/global/dto/stepup/StepUpTicketResponse.class
+dev/bluestep/global/dto/stepup/package-info.class
+# 6.16.0 (CU-1k5g91bqmtw): the platform endorsement catalog and a global user's endorsements as read
+dev/bluestep/global/dto/consoleglobaluser/ConsoleEndorsements.class
+dev/bluestep/global/dto/consoleglobaluser/ConsoleEndorsements$State.class
+dev/bluestep/global/dto/endorsement/EndorsementGroup.class
+dev/bluestep/global/dto/endorsement/PlatformEndorsement.class
+dev/bluestep/global/dto/endorsement/package-info.class
+# 6.17.0 (CU-1k5g91bqn07): the global-user directory's filters
+dev/bluestep/global/dto/consoleglobaluser/GlobalUserFilter.class
+dev/bluestep/global/dto/consoleglobaluser/GlobalUserKind.class
+# 6.18.0 (CU-1k5g91bqx44): the Console's global-user disable/enable and token revoke
+dev/bluestep/global/dto/consoleglobaluser/ConsoleGlobalUserDisabledRequest.class
+dev/bluestep/global/dto/consoleglobaluser/ConsoleGlobalUserWriteRefusal.class
+dev/bluestep/global/dto/consoleglobaluser/ConsoleGlobalUserWriteRefusal$Reason.class
+# 6.20.0 (CU-1k5g91bqy12): the Console's endorsement write
+dev/bluestep/global/dto/consoleglobaluser/ConsoleGlobalUserEndorsementsRequest.class
