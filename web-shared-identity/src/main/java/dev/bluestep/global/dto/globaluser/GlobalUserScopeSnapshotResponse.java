@@ -12,7 +12,8 @@ package dev.bluestep.global.dto.globaluser;
  * @param added   users that were not classified before
  * @param updated users already classified whose scope, reseller or reason changed; an identical
  *                classification counts as neither and leaves {@code recordedAt} alone
- * @param removed users that were classified and are absent from this push, so revert to the default
+ * @param removed users that were classified and are absent from this push, so revert to the default,
+ *                {@code VOUCHED}
  */
 public record GlobalUserScopeSnapshotResponse(int held, int added, int updated, int removed) {
 }
